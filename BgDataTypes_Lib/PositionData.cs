@@ -14,6 +14,9 @@ public class PositionData
     public int OnRollNeeds { get; init; }
     public int OpponentNeeds { get; init; }
 
+    public int OnRollPipCount { get; init; }
+    public int OpponentPipCount { get; init; }
+
     public int CubeSize { get; init; } = 1;
     public CubeOwner CubeOwner { get; init; }
     public bool IsCrawford { get; init; }
