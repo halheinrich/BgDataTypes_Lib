@@ -7,7 +7,7 @@ Part of the Backgammon tools ecosystem: https://github.com/halheinrich/backgammo
 
 https://github.com/halheinrich/BgDataTypes_Lib
 **Branch:** main
-**Current commit:** `16c26c6`
+**Current commit:** `bcffabf`
 
 ## Stack
 
@@ -24,38 +24,36 @@ data categories — Position, Decision, and Descriptive. No parsing logic, no re
 All subprojects that need position/decision types depend on this library.
 
 ## Repo directory tree
-```
 BgDataTypes_Lib/
-  BgDataTypes_Lib/
-    AnalysisDepthEntry.cs
-    BgDecisionData.cs
-    BgDataTypes_Lib.csproj
-    CubeOwner.cs
-    DecisionData.cs
-    DescriptiveData.cs
-    PlayCandidate.cs
-    PositionData.cs
-  BgDataTypes_Lib.Tests/
-    BgDataTypes_Lib.Tests.csproj
-    BgDecisionDataSerializationTests.cs
-  BgDataTypes_Lib.slnx
-  .gitignore
-  INSTRUCTIONS.md
-```
+BgDataTypes_Lib/
+AnalysisDepthEntry.cs
+BgDecisionData.cs
+BgDataTypes_Lib.csproj
+CubeOwner.cs
+DecisionData.cs
+DescriptiveData.cs
+PlayCandidate.cs
+PositionData.cs
+BgDataTypes_Lib.Tests/
+BgDataTypes_Lib.Tests.csproj
+BgDecisionDataSerializationTests.cs
+BgDataTypes_Lib.slnx
+.gitignore
+INSTRUCTIONS.md
 
 ## Key files
 
 | File | URL |
 |---|---|
-| BgDataTypes_Lib.csproj | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib/BgDataTypes_Lib.csproj |
-| BgDecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib/BgDecisionData.cs |
-| PositionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib/PositionData.cs |
-| DecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib/DecisionData.cs |
-| DescriptiveData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib/DescriptiveData.cs |
-| PlayCandidate.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib/PlayCandidate.cs |
-| AnalysisDepthEntry.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib/AnalysisDepthEntry.cs |
-| CubeOwner.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib/CubeOwner.cs |
-| BgDecisionDataSerializationTests.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/16c26c6/BgDataTypes_Lib.Tests/BgDecisionDataSerializationTests.cs |
+| BgDataTypes_Lib.csproj | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib/BgDataTypes_Lib.csproj |
+| BgDecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib/BgDecisionData.cs |
+| PositionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib/PositionData.cs |
+| DecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib/DecisionData.cs |
+| DescriptiveData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib/DescriptiveData.cs |
+| PlayCandidate.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib/PlayCandidate.cs |
+| AnalysisDepthEntry.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib/AnalysisDepthEntry.cs |
+| CubeOwner.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib/CubeOwner.cs |
+| BgDecisionDataSerializationTests.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/bcffabf/BgDataTypes_Lib.Tests/BgDecisionDataSerializationTests.cs |
 
 ## Dependency files
 
@@ -67,8 +65,8 @@ BgDataTypes_Lib has no dependencies on other subprojects.
 
 | Type | Kind | Fields |
 |---|---|---|
-| `PositionData` | class | Mop, OnRollNeeds, OpponentNeeds, CubeSize, CubeOwner, IsCrawford |
-| `DecisionData` | class | Dice, Plays, AnalysisDepths, IsCube, cube equity/percentage fields |
+| `PositionData` | class | Mop, OnRollNeeds, OpponentNeeds, OnRollPipCount, OpponentPipCount, CubeSize, CubeOwner, IsCrawford |
+| `DecisionData` | class | Dice, Plays, AnalysisDepths, BestPlayIndex, UserPlayIndex, IsCube, cube equity/percentage fields |
 | `DescriptiveData` | class | MatchLength, OnRollName, OpponentName, Title, Date, Event |
 
 ### Shared types
@@ -89,14 +87,12 @@ Serializes cleanly with `System.Text.Json` + `JsonStringEnumConverter`.
 ### DecisionData — cube equity fields
 
 When `IsCube` is true, `Dice` is `[0, 0]` and the following fields are populated:
-```
 NoDoubleEquity, DoubleTakeEquity
 WinPctAfterNoDouble, GammonPctAfterNoDouble, BgPctAfterNoDouble
 LosePctAfterNoDouble, LoseGammonPctAfterNoDouble, LoseBgPctAfterNoDouble
 WinPctAfterDoubleTake, GammonPctAfterDoubleTake, BgPctAfterDoubleTake
 LosePctAfterDoubleTake, LoseGammonPctAfterDoubleTake, LoseBgPctAfterDoubleTake
 ProbOfOpponentErrorJustifyingDouble
-```
 
 ### Mop format
 
@@ -111,17 +107,15 @@ ProbOfOpponentErrorJustifyingDouble
 | Project | Role |
 |---|---|
 | `ConvertXgToJson_Lib` | Produces `BgDecisionData` from raw .xg/.xgp parse records |
-| `BackgammonDiagram_Lib` | Consumes `BgDecisionData`; combines with rendering options to produce `DiagramRequest` |
+| `BackgammonDiagram_Lib` | References `BgDataTypes_Lib`; `DiagramRequest.Builder` exposes flat properties; `Build()` constructs nested `PositionData`/`DecisionData`/`DescriptiveData` internally |
 | `BgPositionRouter` | Consumes Position data fields from `BgDecisionData` |
 | `BgInference` | Consumes `BgDecisionData` |
 
 ## Current status
 
 ✅ Core types implemented and tested. All serialization round-trip tests pass.
-
-Pending: `BackgammonDiagram_Lib` refactor — `DiagramRequest` currently duplicates
-`PlayCandidate`, `AnalysisDepthEntry`, and `CubeOwner`. Once that lib takes a project
-reference to `BgDataTypes_Lib`, those duplicates will be removed.
+✅ `BackgammonDiagram_Lib` refactor complete — `DiagramRequest` now uses `PositionData`,
+   `DecisionData`, `DescriptiveData` from this library. Duplicates removed.
 
 ## Key decisions
 
@@ -129,12 +123,12 @@ reference to `BgDataTypes_Lib`, those duplicates will be removed.
 - All types use `class` with `init`-only properties for consistency with `BackgammonDiagram_Lib`
 - `DiagramRequest` stays in `BackgammonDiagram_Lib` — it composes data fields from `BgDecisionData`
   plus rendering-specific options (`DiagramMode`, `PanelPosition`, `HomeBoardOnRight`, etc.)
-- `PlayCandidate` and `AnalysisDepthEntry` live here as top-level files; `BackgammonDiagram_Lib`
-  will reference this lib once the refactor is done
+- `PlayCandidate`, `AnalysisDepthEntry`, and `CubeOwner` live here; `BackgammonDiagram_Lib`
+  references this lib and no longer duplicates these types
 - `CubeOwner` enum lives here; serializes as string via `JsonStringEnumConverter`
 - Cube equity/percentage fields live in `DecisionData` — they are analysis output, not rendering concerns
-- `OnRollPipCount` and `OpponentPipCount` are computed values; they stay in `DiagramRequest`,
-  not in `PositionData`
+- `OnRollPipCount` and `OpponentPipCount` added to `PositionData` (commit `df6bd3a`) — display values, required by `BackgammonDiagram_Lib`
+- `BestPlayIndex` and `UserPlayIndex` added to `DecisionData` (commit `bcffabf`) — moved from `DiagramRequest`
 - Both `DecisionRow` and `BgDecisionData` are sibling outputs of `ConvertXgToJson_Lib` —
   neither is derived from the other
 - Mop conversion utilities — deferred; no decision made yet
