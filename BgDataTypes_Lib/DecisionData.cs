@@ -7,6 +7,11 @@ public class DecisionData
 
     public IReadOnlyList<PlayCandidate> Plays { get; init; } = [];
     public IReadOnlyList<AnalysisDepthEntry> AnalysisDepths { get; init; } = [];
+    /// <summary>Index into Plays identifying the best play. </summary>
+    public int BestPlayIndex { get; init; }
+
+    /// <summary>Index into Plays identifying the user's play. -1 if not applicable.</summary>
+    public int UserPlayIndex { get; init; } = -1;
     public bool IsCube { get; init; }
 
     // -----------------------------------------------------------------------
