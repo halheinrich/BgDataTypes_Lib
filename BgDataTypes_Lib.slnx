@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="BgDataTypes_Lib.Tests/BgDataTypes_Lib.Tests.csproj" Id="5314738c-3f99-488b-8c6b-1bef401eb3c7" />
   <Project Path="BgDataTypes_Lib/BgDataTypes_Lib.csproj" />
 </Solution>
