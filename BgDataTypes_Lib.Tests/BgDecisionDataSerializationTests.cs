@@ -270,4 +270,69 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.Descriptive.Date, restored.Descriptive.Date);
         Assert.Equal(original.Descriptive.Event, restored.Descriptive.Event);
     }
+    // -----------------------------------------------------------------------
+    //  UserPlayError / UserDoubleError / UserTakeError
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionData_RoundTrip_PlayDecision_WithUserPlayError()
+    {
+        var original = new DecisionData
+        {
+            Dice = [3, 5],
+            Plays =
+            [
+                new PlayCandidate { MoveNotation = "8/5 6/1", Equity = -0.120, IsUserPlay = false },
+                new PlayCandidate { MoveNotation = "8/3 6/1", Equity = -0.165, EquityLoss = 0.045, IsUserPlay = true }
+            ],
+            IsCube = false,
+            UserPlayIndex = 1,
+            UserPlayError = 0.045
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Equal(0.045, restored.UserPlayError);
+        Assert.Null(restored.UserDoubleError);
+        Assert.Null(restored.UserTakeError);
+    }
+
+    [Fact]
+    public void DecisionData_RoundTrip_CubeDecision_WithUserErrors()
+    {
+        var original = new DecisionData
+        {
+            Dice = [0, 0],
+            IsCube = true,
+            NoDoubleEquity = 0.312,
+            DoubleTakeEquity = 0.287,
+            UserDoubleError = 0.025,
+            UserTakeError = 0.011
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Equal(0.025, restored.UserDoubleError);
+        Assert.Equal(0.011, restored.UserTakeError);
+        Assert.Null(restored.UserPlayError);
+    }
+
+    [Fact]
+    public void DecisionData_UserErrors_DefaultToNull()
+    {
+        var original = new DecisionData
+        {
+            Dice = [6, 4],
+            IsCube = false
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Null(restored.UserPlayError);
+        Assert.Null(restored.UserDoubleError);
+        Assert.Null(restored.UserTakeError);
+    }
 }
