@@ -16,4 +16,12 @@ public class PlayCandidate
 
     /// <summary>True if this is the move the user played. Renders a green checkmark.</summary>
     public bool IsUserPlay { get; init; }
+
+    // On-roll player probabilities for this candidate move. Null when not evaluated.
+    public double? WinPct { get; init; }
+    public double? WinGammonPct { get; init; }
+    public double? WinBgPct { get; init; }
+    public double? LosePct { get; init; }
+    public double? LoseGammonPct { get; init; }
+    public double? LoseBgPct { get; init; }
 }

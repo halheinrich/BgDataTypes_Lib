@@ -53,6 +53,72 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
+    public void PlayCandidate_RoundTrip_Probabilities_AllPopulated()
+    {
+        var original = new PlayCandidate
+        {
+            MoveNotation = "8/5(2) 6/3(2)",
+            Equity = -0.142,
+            WinPct = 0.481,
+            WinGammonPct = 0.112,
+            WinBgPct = 0.004,
+            LosePct = 0.519,
+            LoseGammonPct = 0.143,
+            LoseBgPct = 0.006
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Equal(original.WinPct, restored.WinPct);
+        Assert.Equal(original.WinGammonPct, restored.WinGammonPct);
+        Assert.Equal(original.WinBgPct, restored.WinBgPct);
+        Assert.Equal(original.LosePct, restored.LosePct);
+        Assert.Equal(original.LoseGammonPct, restored.LoseGammonPct);
+        Assert.Equal(original.LoseBgPct, restored.LoseBgPct);
+    }
+
+    [Fact]
+    public void PlayCandidate_RoundTrip_Probabilities_AllNull()
+    {
+        var original = new PlayCandidate
+        {
+            MoveNotation = "8/5(2) 6/3(2)",
+            Equity = -0.142
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Null(restored.WinPct);
+        Assert.Null(restored.WinGammonPct);
+        Assert.Null(restored.WinBgPct);
+        Assert.Null(restored.LosePct);
+        Assert.Null(restored.LoseGammonPct);
+        Assert.Null(restored.LoseBgPct);
+    }
+
+    [Fact]
+    public void PlayCandidate_RoundTrip_Probabilities_PartiallyPopulated()
+    {
+        var original = new PlayCandidate
+        {
+            MoveNotation = "13/8 13/11",
+            Equity = -0.187,
+            WinPct = 0.476,
+            LosePct = 0.524
+            // gammon/bg fields left null — partial evaluation
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Equal(original.WinPct, restored.WinPct);
+        Assert.Equal(original.LosePct, restored.LosePct);
+        Assert.Null(restored.WinGammonPct);
+        Assert.Null(restored.WinBgPct);
+        Assert.Null(restored.LoseGammonPct);
+        Assert.Null(restored.LoseBgPct);
+    }
+
+    [Fact]
     public void AnalysisDepthEntry_RoundTrip()
     {
         var original = new AnalysisDepthEntry { Label = "Rollout: 1296 trials. 3-ply" };
