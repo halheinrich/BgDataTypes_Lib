@@ -7,7 +7,7 @@ Part of the Backgammon tools ecosystem: https://github.com/halheinrich/backgammo
 
 https://github.com/halheinrich/BgDataTypes_Lib
 **Branch:** main
-**Source files commit:** `42778d7`
+**Source files commit:** `5d9eff0`
 
 ## Stack
 
@@ -45,15 +45,15 @@ INSTRUCTIONS.md
 
 | File | URL |
 |---|---|
-| BgDataTypes_Lib.csproj | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib/BgDataTypes_Lib.csproj |
-| BgDecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib/BgDecisionData.cs |
-| PositionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib/PositionData.cs |
-| DecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib/DecisionData.cs |
-| DescriptiveData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib/DescriptiveData.cs |
-| PlayCandidate.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib/PlayCandidate.cs |
-| AnalysisDepthEntry.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib/AnalysisDepthEntry.cs |
-| CubeOwner.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib/CubeOwner.cs |
-| BgDecisionDataSerializationTests.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/42778d7/BgDataTypes_Lib.Tests/BgDecisionDataSerializationTests.cs |
+| BgDataTypes_Lib.csproj | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/BgDataTypes_Lib.csproj |
+| BgDecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/BgDecisionData.cs |
+| PositionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/PositionData.cs |
+| DecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/DecisionData.cs |
+| DescriptiveData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/DescriptiveData.cs |
+| PlayCandidate.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/PlayCandidate.cs |
+| AnalysisDepthEntry.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/AnalysisDepthEntry.cs |
+| CubeOwner.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/CubeOwner.cs |
+| BgDecisionDataSerializationTests.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib.Tests/BgDecisionDataSerializationTests.cs |
 
 ## Dependency files
 
@@ -129,8 +129,10 @@ ProbOfOpponentErrorJustifyingDouble
 - Cube equity/percentage fields live in `DecisionData` — they are analysis output, not rendering concerns
 - `OnRollPipCount` and `OpponentPipCount` added to `PositionData` (commit `df6bd3a`) — display values, required by `BackgammonDiagram_Lib`
 - `BestPlayIndex` and `UserPlayIndex` added to `DecisionData` (commit `bcffabf`) — moved from `DiagramRequest`
-- `UserPlayError`, `UserDoubleError`, `UserTakeError` added to `DecisionData` (commit `42778d7`) — nullable double, ≥ 0, null when not applicable
+- `UserPlayError`, `UserDoubleError`, `UserTakeError` added to `DecisionData` (commit `5d9eff0`) — nullable double, ≥ 0, null when not applicable
 - Both `DecisionRow` and `BgDecisionData` are sibling outputs of `ConvertXgToJson_Lib` —
   neither is derived from the other
 - Mop conversion utilities — deferred; no decision made yet
 - Reference library of interesting positions as JSON collections of `BgDecisionData` — deferred
+- `WinPct`, `WinGammonPct`, `WinBgPct`, `LosePct`, `LoseGammonPct`, `LoseBgPct` added to
+  `PlayCandidate` as `double?` (commit `5d9eff0`) — null when not evaluated, mirrors `EquityLoss` pattern
