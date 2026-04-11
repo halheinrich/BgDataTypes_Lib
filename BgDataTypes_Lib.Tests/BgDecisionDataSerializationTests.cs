@@ -401,4 +401,68 @@ public class BgDecisionDataSerializationTests
         Assert.Null(restored.UserDoubleError);
         Assert.Null(restored.UserTakeError);
     }
+    // -----------------------------------------------------------------------
+    //  MatchScore parsed properties
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_ParseMatchScore_Money()
+    {
+        var row = new DecisionRow { MatchScore = "money" };
+        Assert.Equal(0, row.OnRollNeeds);
+        Assert.Equal(0, row.OpponentNeeds);
+        Assert.False(row.IsCrawford);
+    }
+
+    [Fact]
+    public void DecisionRow_ParseMatchScore_Standard()
+    {
+        var row = new DecisionRow { MatchScore = "3a5a" };
+        Assert.Equal(3, row.OnRollNeeds);
+        Assert.Equal(5, row.OpponentNeeds);
+        Assert.False(row.IsCrawford);
+    }
+
+    [Fact]
+    public void DecisionRow_ParseMatchScore_Crawford()
+    {
+        var row = new DecisionRow { MatchScore = "1a1aC" };
+        Assert.Equal(1, row.OnRollNeeds);
+        Assert.Equal(1, row.OpponentNeeds);
+        Assert.True(row.IsCrawford);
+    }
+
+    [Fact]
+    public void DecisionRow_ParseMatchScore_CrawfordLowercase()
+    {
+        var row = new DecisionRow { MatchScore = "1a1ac" };
+        Assert.True(row.IsCrawford);
+    }
+
+    [Fact]
+    public void DecisionRow_ParseMatchScore_Empty()
+    {
+        var row = new DecisionRow { MatchScore = string.Empty };
+        Assert.Equal(0, row.OnRollNeeds);
+        Assert.Equal(0, row.OpponentNeeds);
+        Assert.False(row.IsCrawford);
+    }
+
+    [Fact]
+    public void DecisionRow_RoundTrip_ComputedPropertiesNotSerialized()
+    {
+        var original = new DecisionRow { MatchScore = "3a5a" };
+        var json = JsonSerializer.Serialize(original, Options);
+
+        // Computed properties are not in JSON — they are not serialized
+        Assert.DoesNotContain("OnRollNeeds", json);
+        Assert.DoesNotContain("OpponentNeeds", json);
+        Assert.DoesNotContain("IsCrawford", json);
+
+        // But they are correctly derived after round-trip via MatchScore
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        Assert.Equal(3, restored.OnRollNeeds);
+        Assert.Equal(5, restored.OpponentNeeds);
+        Assert.False(restored.IsCrawford);
+    }
 }

@@ -1,4 +1,6 @@
-﻿namespace BgDataTypes_Lib;
+﻿using System.Text.Json.Serialization;
+
+namespace BgDataTypes_Lib;
 
 /// <summary>
 /// A single analysed checker-play or cube decision, ready for CSV/JSON export.
@@ -39,8 +41,37 @@ public sealed class DecisionRow
     public double Equity { get; init; }
 
     /// <summary>True if this is a cube decision (Roll == 0); false if a checker play.</summary>
+    [JsonIgnore]
     public bool IsCube => Roll == 0;
 
+    /// <summary>Away score for the player on roll, parsed from <see cref="MatchScore"/>. 0 for money games.</summary>
+    [JsonIgnore]
+    public int OnRollNeeds => ParseMatchScore().onRoll;
+
+    /// <summary>Away score for the opponent, parsed from <see cref="MatchScore"/>. 0 for money games.</summary>
+    [JsonIgnore]
+    public int OpponentNeeds => ParseMatchScore().opponent;
+
+    /// <summary>True if this is a Crawford game, parsed from <see cref="MatchScore"/>.</summary>
+    [JsonIgnore]
+    public bool IsCrawford => ParseMatchScore().crawford;
+
+    private (int onRoll, int opponent, bool crawford) ParseMatchScore()
+    {
+        if (string.IsNullOrEmpty(MatchScore) || MatchScore == "money")
+            return (0, 0, false);
+
+        var parts = MatchScore.Split('a');
+        if (parts.Length < 2
+            || !int.TryParse(parts[0], out int onRoll)
+            || !int.TryParse(parts[1], out int opponent))
+            return (0, 0, false);
+
+        bool crawford = parts.Length >= 3
+            && parts[2].Trim().Equals("C", StringComparison.OrdinalIgnoreCase);
+
+        return (onRoll, opponent, crawford);
+    }
     /// <summary>
     /// Checker counts normalized to the player on roll.
     /// board[0]    = opponent's bar (never positive)
