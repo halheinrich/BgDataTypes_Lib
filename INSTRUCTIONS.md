@@ -30,6 +30,7 @@ AnalysisDepthEntry.cs
 BgDecisionData.cs
 BgDataTypes_Lib.csproj
 CubeOwner.cs
+DecisionRow.cs
 DecisionData.cs
 DescriptiveData.cs
 PlayCandidate.cs
@@ -46,6 +47,7 @@ INSTRUCTIONS.md
 | File | URL |
 |---|---|
 | BgDataTypes_Lib.csproj | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/BgDataTypes_Lib.csproj |
+| DecisionRow.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/DecisionRow.cs |
 | BgDecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/BgDecisionData.cs |
 | PositionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/PositionData.cs |
 | DecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/5d9eff0/BgDataTypes_Lib/DecisionData.cs |
@@ -110,6 +112,7 @@ ProbOfOpponentErrorJustifyingDouble
 | `BackgammonDiagram_Lib` | References `BgDataTypes_Lib`; `DiagramRequest.Builder` exposes flat properties; `Build()` constructs nested `PositionData`/`DecisionData`/`DescriptiveData` internally |
 | `BgPositionRouter` | Consumes Position data fields from `BgDecisionData` |
 | `BgInference` | Consumes `BgDecisionData` |
++| `XgFilter_Lib` | Will depend on `BgDataTypes_Lib` for `DecisionRow` — not yet wired |
 
 ## Current status
 
@@ -136,3 +139,9 @@ ProbOfOpponentErrorJustifyingDouble
 - Reference library of interesting positions as JSON collections of `BgDecisionData` — deferred
 - `WinPct`, `WinGammonPct`, `WinBgPct`, `LosePct`, `LoseGammonPct`, `LoseBgPct` added to
   `PlayCandidate` as `double?` (commit `5d9eff0`) — null when not evaluated, mirrors `EquityLoss` pattern
+- `DecisionRow` moved from `ConvertXgToJson_Lib.Models` — namespace change only. CSV methods
+  (`ToCsvLine`, `CsvHeader`, `CsvEscape`) travel with the type — accepted deviation from the
+  pure-data principle. Rationale: CSV format is intrinsic to `DecisionRow`'s identity as a
+  flat export record; it is not parsing or rendering logic in the library's sense.
+- `Board` in `DecisionRow` is `int[]`, not `IReadOnlyList<int>` (unlike `Mop` in `PositionData`).
+  Moved as-is to preserve source fidelity. Asymmetry noted; cleanup deferred.
