@@ -20,6 +20,11 @@ public interface IDecisionFilterData
     /// <summary>True if this is the Crawford game.</summary>
     bool IsCrawford { get; }
 
+    /// <summary>Match length (0 = unlimited/money).</summary>
+    int MatchLength { get; }
+
+     /// <summary>
+     /// Error magnitude for this decision (≥ 0).
     /// <summary>
     /// Error magnitude for this decision (≥ 0).
     /// For checker plays: equity loss vs best play.

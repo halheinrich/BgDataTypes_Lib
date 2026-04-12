@@ -484,4 +484,15 @@ public class BgDecisionDataSerializationTests
 
         Assert.Equal(mop, data.Board);
     }
+
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_MatchLength()
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Descriptive = new DescriptiveData { MatchLength = 11 }
+        };
+
+        Assert.Equal(11, data.MatchLength);
+    }
 }

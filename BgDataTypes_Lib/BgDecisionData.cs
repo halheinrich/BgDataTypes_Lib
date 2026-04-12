@@ -15,6 +15,7 @@ public class BgDecisionData : IDecisionFilterData
     public int OnRollNeeds => Position.OnRollNeeds;
     public int OpponentNeeds => Position.OpponentNeeds;
     public bool IsCrawford => Position.IsCrawford;
+    public int MatchLength => Descriptive.MatchLength;
     public double? FilterError => Decision.IsCube
         ? Decision.UserDoubleError ?? Decision.UserTakeError
         : Decision.UserPlayError;
