@@ -5,16 +5,13 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// A single analysed checker-play or cube decision, ready for CSV/JSON export.
 /// </summary>
-public sealed class DecisionRow
+public sealed class DecisionRow : IDecisionFilterData
 {
     /// <summary>XGID position string.</summary>
     public string Xgid { get; init; } = string.Empty;
 
     /// <summary>Absolute error (positive = worse than best).</summary>
     public double Error { get; init; }
-
-    /// <summary>Match score at the time of the decision, e.g. "3a5a" or "money".</summary>
-    public string MatchScore { get; init; } = string.Empty;
 
     /// <summary>Match length (0 = unlimited/money).</summary>
     public int MatchLength { get; init; }
@@ -44,34 +41,26 @@ public sealed class DecisionRow
     [JsonIgnore]
     public bool IsCube => Roll == 0;
 
-    /// <summary>Away score for the player on roll, parsed from <see cref="MatchScore"/>. 0 for money games.</summary>
+    /// <summary>Away score for the player on roll. 0 for money games.</summary>
+    public int OnRollNeeds { get; init; }
+
+    /// <summary>Away score for the opponent. 0 for money games.</summary>
+    public int OpponentNeeds { get; init; }
+
+    /// <summary>True if this is the Crawford game.</summary>
+    public bool IsCrawford { get; init; }
+
+    /// <summary>
+    /// Match score string derived from <see cref="OnRollNeeds"/>, <see cref="OpponentNeeds"/>,
+    /// <see cref="IsCrawford"/>, and <see cref="MatchLength"/>. Used for CSV output only.
+    /// </summary>
     [JsonIgnore]
-    public int OnRollNeeds => ParseMatchScore().onRoll;
+    public string MatchScore => MatchLength == 0
+        ? "money"
+        : IsCrawford
+            ? $"{OnRollNeeds}a{OpponentNeeds}aC"
+            : $"{OnRollNeeds}a{OpponentNeeds}a";
 
-    /// <summary>Away score for the opponent, parsed from <see cref="MatchScore"/>. 0 for money games.</summary>
-    [JsonIgnore]
-    public int OpponentNeeds => ParseMatchScore().opponent;
-
-    /// <summary>True if this is a Crawford game, parsed from <see cref="MatchScore"/>.</summary>
-    [JsonIgnore]
-    public bool IsCrawford => ParseMatchScore().crawford;
-
-    private (int onRoll, int opponent, bool crawford) ParseMatchScore()
-    {
-        if (string.IsNullOrEmpty(MatchScore) || MatchScore == "money")
-            return (0, 0, false);
-
-        var parts = MatchScore.Split('a');
-        if (parts.Length < 2
-            || !int.TryParse(parts[0], out int onRoll)
-            || !int.TryParse(parts[1], out int opponent))
-            return (0, 0, false);
-
-        bool crawford = parts.Length >= 3
-            && parts[2].Trim().Equals("C", StringComparison.OrdinalIgnoreCase);
-
-        return (onRoll, opponent, crawford);
-    }
     /// <summary>
     /// Checker counts normalized to the player on roll.
     /// board[0]    = opponent's bar (never positive)
@@ -80,7 +69,18 @@ public sealed class DecisionRow
     /// Positive values = player on roll's checkers; negative = opponent's.
     /// Not included in CSV output.
     /// </summary>
-    public int[] Board { get; init; } = [];
+    public IReadOnlyList<int> Board { get; init; } = [];
+
+    // -----------------------------------------------------------------------
+    //  IDecisionFilterData
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Equity loss for this decision (≥ 0). Maps from <see cref="Error"/>.
+    /// Never null on <see cref="DecisionRow"/> — <see cref="Error"/> is always recorded.
+    /// </summary>
+    [JsonIgnore]
+    public double? FilterError => Error;
 
     // -----------------------------------------------------------------------
     //  CSV support

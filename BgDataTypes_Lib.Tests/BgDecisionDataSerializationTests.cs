@@ -401,68 +401,87 @@ public class BgDecisionDataSerializationTests
         Assert.Null(restored.UserDoubleError);
         Assert.Null(restored.UserTakeError);
     }
+
     // -----------------------------------------------------------------------
-    //  MatchScore parsed properties
+    //  IDecisionFilterData — BgDecisionData
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_ParseMatchScore_Money()
+    public void BgDecisionData_IDecisionFilterData_CheckerPlay()
     {
-        var row = new DecisionRow { MatchScore = "money" };
-        Assert.Equal(0, row.OnRollNeeds);
-        Assert.Equal(0, row.OpponentNeeds);
-        Assert.False(row.IsCrawford);
+        var mop = new int[26];
+        mop[1] = 2; mop[6] = -5;
+
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Position = new PositionData
+            {
+                Mop = mop,
+                OnRollNeeds = 3,
+                OpponentNeeds = 5,
+                IsCrawford = false
+            },
+            Decision = new DecisionData
+            {
+                IsCube = false,
+                UserPlayError = 0.034
+            },
+            Descriptive = new DescriptiveData { OnRollName = "Hal" }
+        };
+
+        Assert.Equal("Hal", data.Player);
+        Assert.False(data.IsCube);
+        Assert.Equal(3, data.OnRollNeeds);
+        Assert.Equal(5, data.OpponentNeeds);
+        Assert.False(data.IsCrawford);
+        Assert.Equal(0.034, data.FilterError);
+        Assert.Equal(mop, data.Board);
     }
 
     [Fact]
-    public void DecisionRow_ParseMatchScore_Standard()
+    public void BgDecisionData_IDecisionFilterData_CubePlay_UserDoubleError()
     {
-        var row = new DecisionRow { MatchScore = "3a5a" };
-        Assert.Equal(3, row.OnRollNeeds);
-        Assert.Equal(5, row.OpponentNeeds);
-        Assert.False(row.IsCrawford);
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Decision = new DecisionData
+            {
+                IsCube = true,
+                UserDoubleError = 0.025,
+                UserTakeError = 0.011
+            }
+        };
+
+        Assert.True(data.IsCube);
+        Assert.Equal(0.025, data.FilterError);  // UserDoubleError takes precedence
     }
 
     [Fact]
-    public void DecisionRow_ParseMatchScore_Crawford()
+    public void BgDecisionData_IDecisionFilterData_CubePlay_UserTakeError()
     {
-        var row = new DecisionRow { MatchScore = "1a1aC" };
-        Assert.Equal(1, row.OnRollNeeds);
-        Assert.Equal(1, row.OpponentNeeds);
-        Assert.True(row.IsCrawford);
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Decision = new DecisionData
+            {
+                IsCube = true,
+                UserDoubleError = null,
+                UserTakeError = 0.011
+            }
+        };
+
+        Assert.Equal(0.011, data.FilterError);  // Falls through to UserTakeError
     }
 
     [Fact]
-    public void DecisionRow_ParseMatchScore_CrawfordLowercase()
+    public void BgDecisionData_IDecisionFilterData_Board_MatchesMop()
     {
-        var row = new DecisionRow { MatchScore = "1a1ac" };
-        Assert.True(row.IsCrawford);
-    }
+        var mop = new int[26];
+        mop[6] = -5; mop[13] = 5;
 
-    [Fact]
-    public void DecisionRow_ParseMatchScore_Empty()
-    {
-        var row = new DecisionRow { MatchScore = string.Empty };
-        Assert.Equal(0, row.OnRollNeeds);
-        Assert.Equal(0, row.OpponentNeeds);
-        Assert.False(row.IsCrawford);
-    }
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Position = new PositionData { Mop = mop }
+        };
 
-    [Fact]
-    public void DecisionRow_RoundTrip_ComputedPropertiesNotSerialized()
-    {
-        var original = new DecisionRow { MatchScore = "3a5a" };
-        var json = JsonSerializer.Serialize(original, Options);
-
-        // Computed properties are not in JSON — they are not serialized
-        Assert.DoesNotContain("OnRollNeeds", json);
-        Assert.DoesNotContain("OpponentNeeds", json);
-        Assert.DoesNotContain("IsCrawford", json);
-
-        // But they are correctly derived after round-trip via MatchScore
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
-        Assert.Equal(3, restored.OnRollNeeds);
-        Assert.Equal(5, restored.OpponentNeeds);
-        Assert.False(restored.IsCrawford);
+        Assert.Equal(mop, data.Board);
     }
 }
