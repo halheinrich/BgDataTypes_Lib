@@ -7,7 +7,7 @@ Part of the Backgammon tools ecosystem: https://github.com/halheinrich/backgammo
 
 https://github.com/halheinrich/BgDataTypes_Lib
 **Branch:** main
-**Source files commit:** `33bf31d`
+**Source files commit:** `ae06120`
 
 ## Stack
 
@@ -33,6 +33,7 @@ CubeOwner.cs
 DecisionRow.cs
 DecisionData.cs
 DescriptiveData.cs
+IDecisionFilterData.cs
 PlayCandidate.cs
 PositionData.cs
 BgDataTypes_Lib.Tests/
@@ -46,16 +47,16 @@ INSTRUCTIONS.md
 
 | File | URL |
 |---|---|
-| BgDataTypes_Lib.csproj | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/BgDataTypes_Lib.csproj |
-| DecisionRow.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/DecisionRow.cs |
-| BgDecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/BgDecisionData.cs |
-| PositionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/PositionData.cs |
-| DecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/DecisionData.cs |
-| DescriptiveData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/DescriptiveData.cs |
-| PlayCandidate.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/PlayCandidate.cs |
-| AnalysisDepthEntry.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/AnalysisDepthEntry.cs |
-| CubeOwner.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib/CubeOwner.cs |
-| BgDecisionDataSerializationTests.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/33bf31d/BgDataTypes_Lib.Tests/BgDecisionDataSerializationTests.cs |
+| BgDataTypes_Lib.csproj | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/BgDataTypes_Lib.csproj |
+| DecisionRow.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/DecisionRow.cs |
+| BgDecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/BgDecisionData.cs |
+| PositionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/PositionData.cs |
+| DecisionData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/DecisionData.cs |
+| DescriptiveData.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/DescriptiveData.cs |
+| PlayCandidate.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/PlayCandidate.cs |
+| AnalysisDepthEntry.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/AnalysisDepthEntry.cs |
+| CubeOwner.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib/CubeOwner.cs |
+| BgDecisionDataSerializationTests.cs | https://raw.githack.com/halheinrich/BgDataTypes_Lib/ae06120/BgDataTypes_Lib.Tests/BgDecisionDataSerializationTests.cs |
 
 ## Dependency files
 
@@ -116,9 +117,11 @@ ProbOfOpponentErrorJustifyingDouble
 
 ## Current status
 
-✅ Core types implemented and tested. All serialization round-trip tests pass.
-✅ `BackgammonDiagram_Lib` refactor complete — `DiagramRequest` now uses `PositionData`,
-   `DecisionData`, `DescriptiveData` from this library. Duplicates removed.
+ ✅ Core types implemented and tested. All serialization round-trip tests pass.
+ ✅ `BackgammonDiagram_Lib` refactor complete.
+ ✅ `DecisionRow` migrated from `ConvertXgToJson_Lib` (commit `b94f762`).
+ ✅ `IDecisionFilterData` added; `MatchScore` inverted; `Board` typed as `IReadOnlyList<int>` (commit `ae06120`).
+ ✅ `ConvertXgToJson_Lib` cleanup (remove source, add project reference) is next session's task.
 
 ## Key decisions
 
@@ -132,13 +135,13 @@ ProbOfOpponentErrorJustifyingDouble
 - Cube equity/percentage fields live in `DecisionData` — they are analysis output, not rendering concerns
 - `OnRollPipCount` and `OpponentPipCount` added to `PositionData` (commit `df6bd3a`) — display values, required by `BackgammonDiagram_Lib`
 - `BestPlayIndex` and `UserPlayIndex` added to `DecisionData` (commit `bcffabf`) — moved from `DiagramRequest`
-- `UserPlayError`, `UserDoubleError`, `UserTakeError` added to `DecisionData` (commit `33bf31d`) — nullable double, ≥ 0, null when not applicable
+- `UserPlayError`, `UserDoubleError`, `UserTakeError` added to `DecisionData` (commit `ae06120`) — nullable double, ≥ 0, null when not applicable
 - Both `DecisionRow` and `BgDecisionData` are sibling outputs of `ConvertXgToJson_Lib` —
   neither is derived from the other
 - Mop conversion utilities — deferred; no decision made yet
 - Reference library of interesting positions as JSON collections of `BgDecisionData` — deferred
 - `WinPct`, `WinGammonPct`, `WinBgPct`, `LosePct`, `LoseGammonPct`, `LoseBgPct` added to
-  `PlayCandidate` as `double?` (commit `33bf31d`) — null when not evaluated, mirrors `EquityLoss` pattern
+  `PlayCandidate` as `double?` (commit `ae06120`) — null when not evaluated, mirrors `EquityLoss` pattern
 - `DecisionRow` moved from `ConvertXgToJson_Lib.Models` — namespace change only. CSV methods
   (`ToCsvLine`, `CsvHeader`, `CsvEscape`) travel with the type — accepted deviation from the
   pure-data principle. Rationale: CSV format is intrinsic to `DecisionRow`'s identity as a
@@ -146,6 +149,18 @@ ProbOfOpponentErrorJustifyingDouble
 - `Board` in `DecisionRow` is `int[]`, not `IReadOnlyList<int>` (unlike `Mop` in `PositionData`).
   Moved as-is to preserve source fidelity. Asymmetry noted; cleanup deferred.
 - `OnRollNeeds`, `OpponentNeeds`, `IsCrawford` added to `DecisionRow` as computed properties
-  (commit `33bf31d`), parsed from `MatchScore`. Decorated with `[JsonIgnore]` — derived from
+  (commit `ae06120`), parsed from `MatchScore`. Decorated with `[JsonIgnore]` — derived from
   `MatchScore` on round-trip. `IsCube` has the same serialization characteristic; `[JsonIgnore]`
   on `IsCube` deferred pending decision.
+- `IDecisionFilterData` added (commit `ae06120`) — common filtering contract implemented by
+  both `DecisionRow` and `BgDecisionData`. Members: `Player`, `IsCube`, `OnRollNeeds`,
+  `OpponentNeeds`, `IsCrawford`, `FilterError`, `Board`.
+- `DecisionRow.MatchScore` inverted (commit `ae06120`) — was `init`-only source string, now
+  `[JsonIgnore]` computed from `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, `MatchLength`.
+  `OnRollNeeds`, `OpponentNeeds`, `IsCrawford` are now the canonical `init`-only fields.
+  `MatchLength == 0` reconstructs `"money"`. Crawford suffix is `"C"`.
+- `DecisionRow.Board` changed from `int[]` to `IReadOnlyList<int>` (commit `ae06120`) —
+  consistent with `PositionData.Mop`. Construction sites unaffected; read sites expecting
+  `int[]` specifically must be updated in `ConvertXgToJson_Lib`.
+- `BgDecisionData.Board` returns `Position.Mop` directly — no allocation. `BgDecisionData`
+  implements `IDecisionFilterData` via seven public forwarding properties.
