@@ -26,7 +26,7 @@ public class DecisionRowSerializationTests
             OpponentNeeds = 5,
             IsCrawford = false,
             Player = "Mochy",
-            Match = "mochy-falafel",
+            SourceFile = "mochy-falafel.xg",
             Game = 2,
             MoveNum = 7,
             Roll = 63,
@@ -45,7 +45,7 @@ public class DecisionRowSerializationTests
         Assert.Equal(original.OpponentNeeds, restored.OpponentNeeds);
         Assert.Equal(original.IsCrawford, restored.IsCrawford);
         Assert.Equal(original.Player, restored.Player);
-        Assert.Equal(original.Match, restored.Match);
+        Assert.Equal(original.SourceFile, restored.SourceFile);
         Assert.Equal(original.Game, restored.Game);
         Assert.Equal(original.MoveNum, restored.MoveNum);
         Assert.Equal(original.Roll, restored.Roll);
@@ -63,7 +63,7 @@ public class DecisionRowSerializationTests
             Roll = 0,
             Equity = 0.312,
             Player = "Falafel",
-            Match = "mochy-falafel",
+            SourceFile = "mochy-falafel.xg",
             Game = 1,
             MoveNum = 3,
             AnalysisDepth = "Rollout: 1296 trials. 3-ply",
@@ -92,7 +92,7 @@ public class DecisionRowSerializationTests
 
         Assert.Equal(string.Empty, restored.Xgid);
         Assert.Equal(string.Empty, restored.Player);
-        Assert.Equal(string.Empty, restored.Match);
+        Assert.Null(restored.SourceFile);
         Assert.Equal(string.Empty, restored.AnalysisDepth);
     }
 
@@ -154,7 +154,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_CsvHeader_ContainsExpectedColumns()
     {
         Assert.Equal(
-            "Xgid,Error,MatchScore,MatchLength,Player,Match,Game,MoveNum,Roll,AnalysisDepth,Equity",
+            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNum,Roll,AnalysisDepth,Equity",
             DecisionRow.CsvHeader);
     }
 
@@ -192,6 +192,64 @@ public class DecisionRowSerializationTests
         };
         var line = row.ToCsvLine();
         Assert.Equal(10, line.Count(c => c == ','));
+    }
+
+    // -----------------------------------------------------------------------
+    //  SourceFile — field and CSV behaviour
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_SourceFile_DefaultsToNull()
+    {
+        var row = new DecisionRow();
+        Assert.Null(row.SourceFile);
+    }
+
+    [Fact]
+    public void DecisionRow_ToCsvLine_SourceFile_EmptyCellWhenNull()
+    {
+        var row = new DecisionRow { Player = "Mochy", SourceFile = null };
+        var line = row.ToCsvLine();
+
+        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNum,Roll,AnalysisDepth,Equity
+        // SourceFile is column index 5 (0-based). Between Player and Game it must appear
+        // as ",," — an empty cell — not the literal "null".
+        Assert.Contains(",Mochy,,", line);
+        Assert.DoesNotContain("null", line);
+    }
+
+    [Fact]
+    public void DecisionRow_ToCsvLine_SourceFile_PlainFilename()
+    {
+        var row = new DecisionRow { SourceFile = "mochy-falafel.xg" };
+        var line = row.ToCsvLine();
+        Assert.Contains(",mochy-falafel.xg,", line);
+    }
+
+    [Fact]
+    public void DecisionRow_ToCsvLine_SourceFile_FilenameWithSpaces_Unquoted()
+    {
+        var row = new DecisionRow { SourceFile = "Mochy vs Falafel.xgp" };
+        var line = row.ToCsvLine();
+        // RFC 4180 does not require quoting on spaces; value passes through literally.
+        Assert.Contains(",Mochy vs Falafel.xgp,", line);
+    }
+
+    [Fact]
+    public void DecisionRow_ToCsvLine_SourceFile_FilenameWithComma_Quoted()
+    {
+        var row = new DecisionRow { SourceFile = "file,with,commas.xg" };
+        var line = row.ToCsvLine();
+        Assert.Contains("\"file,with,commas.xg\"", line);
+    }
+
+    [Fact]
+    public void DecisionRow_RoundTrip_SourceFile()
+    {
+        var original = new DecisionRow { SourceFile = "mochy-falafel.xg" };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        Assert.Equal("mochy-falafel.xg", restored.SourceFile);
     }
 
     // -----------------------------------------------------------------------

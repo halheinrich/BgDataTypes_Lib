@@ -8,4 +8,5 @@ public class DescriptiveData
     public string? Title { get; init; }
     public DateOnly? Date { get; init; }
     public string? Event { get; init; }
+    public string? SourceFile { get; init; }
 }

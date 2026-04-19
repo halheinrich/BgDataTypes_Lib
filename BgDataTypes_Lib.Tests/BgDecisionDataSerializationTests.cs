@@ -248,7 +248,8 @@ public class BgDecisionDataSerializationTests
             OpponentName = "Falafel",
             Title = null,
             Date = null,
-            Event = null
+            Event = null,
+            SourceFile = null
         };
 
         var json = JsonSerializer.Serialize(original, Options);
@@ -260,6 +261,7 @@ public class BgDecisionDataSerializationTests
         Assert.Null(restored.Title);
         Assert.Null(restored.Date);
         Assert.Null(restored.Event);
+        Assert.Null(restored.SourceFile);
     }
 
     [Fact]
@@ -279,6 +281,30 @@ public class BgDecisionDataSerializationTests
 
         Assert.Equal(original.Date, restored.Date);
         Assert.Equal(original.Event, restored.Event);
+    }
+
+    [Fact]
+    public void DescriptiveData_RoundTrip_WithSourceFile()
+    {
+        var original = new DescriptiveData
+        {
+            MatchLength = 7,
+            OnRollName = "Mochy",
+            OpponentName = "Falafel",
+            SourceFile = "mochy-falafel.xg"
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DescriptiveData>(json, Options)!;
+
+        Assert.Equal("mochy-falafel.xg", restored.SourceFile);
+    }
+
+    [Fact]
+    public void DescriptiveData_SourceFile_DefaultsToNull()
+    {
+        var d = new DescriptiveData { OnRollName = "A", OpponentName = "B" };
+        Assert.Null(d.SourceFile);
     }
 
     // -----------------------------------------------------------------------
@@ -320,7 +346,8 @@ public class BgDecisionDataSerializationTests
                 OpponentName = "Bot",
                 Title = "Opening Run",
                 Date = new DateOnly(2025, 3, 1),
-                Event = "Test Match"
+                Event = "Test Match",
+                SourceFile = "hal-bot.xg"
             }
         };
 
@@ -335,6 +362,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.Descriptive.OnRollName, restored.Descriptive.OnRollName);
         Assert.Equal(original.Descriptive.Date, restored.Descriptive.Date);
         Assert.Equal(original.Descriptive.Event, restored.Descriptive.Event);
+        Assert.Equal(original.Descriptive.SourceFile, restored.Descriptive.SourceFile);
     }
     // -----------------------------------------------------------------------
     //  UserPlayError / UserDoubleError / UserTakeError

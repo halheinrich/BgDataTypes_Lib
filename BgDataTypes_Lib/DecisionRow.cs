@@ -19,8 +19,8 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <summary>Name of the player who made the decision.</summary>
     public string Player { get; init; } = string.Empty;
 
-    /// <summary>Match identifier (file name without extension).</summary>
-    public string Match { get; init; } = string.Empty;
+    /// <summary>Originating file name including extension (e.g. "match.xg", "session.xgp"). No directory.</summary>
+    public string? SourceFile { get; init; }
 
     /// <summary>Game number within the match (1-based).</summary>
     public int Game { get; init; }
@@ -88,7 +88,7 @@ public sealed class DecisionRow : IDecisionFilterData
 
     /// <summary>CSV header row matching the column order of <see cref="ToCsvLine"/>.</summary>
     public static string CsvHeader =>
-        "Xgid,Error,MatchScore,MatchLength,Player,Match,Game,MoveNum,Roll,AnalysisDepth,Equity";
+        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNum,Roll,AnalysisDepth,Equity";
 
     /// <summary>Formats this row as a CSV line (no trailing newline).</summary>
     public string ToCsvLine()
@@ -99,7 +99,7 @@ public sealed class DecisionRow : IDecisionFilterData
             CsvEscape(MatchScore),
             MatchLength,
             CsvEscape(Player),
-            CsvEscape(Match),
+            CsvEscape(SourceFile ?? string.Empty),
             Game,
             MoveNum,
             Roll,
