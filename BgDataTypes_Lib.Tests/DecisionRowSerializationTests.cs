@@ -306,4 +306,96 @@ public class DecisionRowSerializationTests
         Assert.NotNull(fe);
         Assert.Equal(0.045, fe!.Value);
     }
+
+    // -----------------------------------------------------------------------
+    //  After-boards — JSON only, excluded from CSV (matches Board)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_AfterBoards_DefaultToEmpty()
+    {
+        var row = new DecisionRow();
+        Assert.Empty(row.AfterBestBoard);
+        Assert.Empty(row.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void DecisionRow_RoundTrip_AfterBoards()
+    {
+        var best = new int[26];
+        best[1] = 2; best[6] = -5; best[20] = -2;
+        var player = new int[26];
+        player[1] = 2; player[6] = -5; player[19] = -2;
+
+        var original = new DecisionRow
+        {
+            Xgid = "XGID=-b----E-C---eE---c-e----B-:0:0:1:63:0:0:3:0:10",
+            Error = 0.018,
+            Roll = 63,
+            Player = "Mochy",
+            AfterBestBoard = best,
+            AfterPlayerBoard = player
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+
+        Assert.Equal(original.AfterBestBoard, restored.AfterBestBoard);
+        Assert.Equal(original.AfterPlayerBoard, restored.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void DecisionRow_ToCsvLine_AfterBoardsNotInCsv()
+    {
+        var best = new int[26];
+        best[1] = 2; best[6] = -5;
+
+        var row = new DecisionRow
+        {
+            Board = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1],
+            AfterBestBoard = best,
+            AfterPlayerBoard = best
+        };
+
+        var line = row.ToCsvLine();
+        // Column count unchanged: 11 columns → 10 commas.
+        Assert.Equal(10, line.Count(c => c == ','));
+    }
+
+    [Fact]
+    public void DecisionRow_CsvHeader_DoesNotMentionAfterBoards()
+    {
+        Assert.DoesNotContain("AfterBestBoard", DecisionRow.CsvHeader);
+        Assert.DoesNotContain("AfterPlayerBoard", DecisionRow.CsvHeader);
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_AfterBoards_CheckerPlay()
+    {
+        var best = new int[26];
+        best[1] = 2; best[20] = -2;
+        var player = new int[26];
+        player[1] = 2; player[19] = -2;
+
+        IDecisionFilterData row = new DecisionRow
+        {
+            Roll = 63,
+            AfterBestBoard = best,
+            AfterPlayerBoard = player
+        };
+
+        Assert.False(row.IsCube);
+        Assert.Equal(best, row.AfterBestBoard);
+        Assert.Equal(player, row.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_AfterBoards_EmptyByDefault_CubeDecision()
+    {
+        IDecisionFilterData row = new DecisionRow { Roll = 0, Error = 0.025 };
+
+        Assert.True(row.IsCube);
+        Assert.Empty(row.AfterBestBoard);
+        Assert.Empty(row.AfterPlayerBoard);
+    }
 }

@@ -523,4 +523,97 @@ public class BgDecisionDataSerializationTests
 
         Assert.Equal(11, data.MatchLength);
     }
+
+    // -----------------------------------------------------------------------
+    //  PlayOutcomeData — after-boards
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void PlayOutcomeData_RoundTrip_Populated()
+    {
+        var best = new int[26];
+        best[1] = 2; best[6] = -5; best[20] = -2;
+        var player = new int[26];
+        player[1] = 2; player[6] = -5; player[19] = -2;
+
+        var original = new PlayOutcomeData
+        {
+            AfterBestBoard = best,
+            AfterPlayerBoard = player
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayOutcomeData>(json, Options)!;
+
+        Assert.Equal(original.AfterBestBoard, restored.AfterBestBoard);
+        Assert.Equal(original.AfterPlayerBoard, restored.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void PlayOutcomeData_DefaultsToEmptyBoards()
+    {
+        var data = new PlayOutcomeData();
+        Assert.Empty(data.AfterBestBoard);
+        Assert.Empty(data.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void BgDecisionData_RoundTrip_Outcome()
+    {
+        var best = new int[26];
+        best[4] = 2; best[6] = -5; best[20] = -2;
+        var player = new int[26];
+        player[5] = 2; player[6] = -5; player[20] = -2;
+
+        var original = new BgDecisionData
+        {
+            Decision = new DecisionData { IsCube = false, UserPlayError = 0.018 },
+            Outcome = new PlayOutcomeData
+            {
+                AfterBestBoard = best,
+                AfterPlayerBoard = player
+            }
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
+
+        Assert.Equal(original.Outcome.AfterBestBoard, restored.Outcome.AfterBestBoard);
+        Assert.Equal(original.Outcome.AfterPlayerBoard, restored.Outcome.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_AfterBoards_ForwardFromOutcome()
+    {
+        var best = new int[26];
+        best[1] = 2; best[20] = -2;
+        var player = new int[26];
+        player[1] = 2; player[19] = -2;
+
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Decision = new DecisionData { IsCube = false },
+            Outcome = new PlayOutcomeData
+            {
+                AfterBestBoard = best,
+                AfterPlayerBoard = player
+            }
+        };
+
+        Assert.Equal(best, data.AfterBestBoard);
+        Assert.Equal(player, data.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_AfterBoards_EmptyByDefault_CubeDecision()
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Decision = new DecisionData { IsCube = true, UserDoubleError = 0.025 }
+        };
+
+        Assert.True(data.IsCube);
+        Assert.Empty(data.AfterBestBoard);
+        Assert.Empty(data.AfterPlayerBoard);
+    }
 }

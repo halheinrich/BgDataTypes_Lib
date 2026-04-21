@@ -71,6 +71,21 @@ public sealed class DecisionRow : IDecisionFilterData
     /// </summary>
     public IReadOnlyList<int> Board { get; init; } = [];
 
+    /// <summary>
+    /// Board after the best play, with POV flipped — opponent is now on roll.
+    /// Same 26-element layout as <see cref="Board"/>; decision-maker's checkers
+    /// are negative here, opponent's are positive. Empty for cube decisions.
+    /// Not included in CSV output.
+    /// </summary>
+    public IReadOnlyList<int> AfterBestBoard { get; init; } = [];
+
+    /// <summary>
+    /// Board after the player's actual play, same layout and sign convention
+    /// as <see cref="AfterBestBoard"/>. Empty for cube decisions.
+    /// Not included in CSV output.
+    /// </summary>
+    public IReadOnlyList<int> AfterPlayerBoard { get; init; } = [];
+
     // -----------------------------------------------------------------------
     //  IDecisionFilterData
     // -----------------------------------------------------------------------

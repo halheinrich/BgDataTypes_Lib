@@ -39,4 +39,27 @@ public interface IDecisionFilterData
     /// Positive = on-roll player's checkers; negative = opponent's.
     /// </summary>
     IReadOnlyList<int> Board { get; }
+
+    /// <summary>
+    /// Board after the best play, with POV flipped — opponent is now on roll.
+    /// Same 26-element layout as <see cref="Board"/>: [0] = on-roll (opponent) bar,
+    /// [1–24] = points, [25] = opponent's (decision-maker's) bar. In this POV the
+    /// decision-maker's checkers are negative and the opponent's are positive.
+    /// <para>
+    /// Empty list for cube decisions (<see cref="IsCube"/> == true); after-boards
+    /// are only meaningful for checker decisions. Consumers must check
+    /// <see cref="IsCube"/> before using.
+    /// </para>
+    /// </summary>
+    IReadOnlyList<int> AfterBestBoard { get; }
+
+    /// <summary>
+    /// Board after the player's actual play, with POV flipped — opponent is now on
+    /// roll. Same layout and sign convention as <see cref="AfterBestBoard"/>.
+    /// <para>
+    /// Empty list for cube decisions (<see cref="IsCube"/> == true). Consumers
+    /// must check <see cref="IsCube"/> before using.
+    /// </para>
+    /// </summary>
+    IReadOnlyList<int> AfterPlayerBoard { get; }
 }

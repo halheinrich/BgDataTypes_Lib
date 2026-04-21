@@ -2,9 +2,10 @@
 
 public class BgDecisionData : IDecisionFilterData
 {
-    public PositionData Position { get; init; } = new();
-    public DecisionData Decision { get; init; } = new();
+    public PositionData    Position    { get; init; } = new();
+    public DecisionData    Decision    { get; init; } = new();
     public DescriptiveData Descriptive { get; init; } = new();
+    public PlayOutcomeData Outcome     { get; init; } = new();
 
     // -----------------------------------------------------------------------
     //  IDecisionFilterData
@@ -20,4 +21,6 @@ public class BgDecisionData : IDecisionFilterData
         ? Decision.UserDoubleError ?? Decision.UserTakeError
         : Decision.UserPlayError;
     public IReadOnlyList<int> Board => Position.Mop;
+    public IReadOnlyList<int> AfterBestBoard => Outcome.AfterBestBoard;
+    public IReadOnlyList<int> AfterPlayerBoard => Outcome.AfterPlayerBoard;
 }
