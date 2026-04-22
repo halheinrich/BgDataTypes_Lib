@@ -26,7 +26,6 @@ Standalone. No subproject dependencies. `System.Text.Json` (+ `JsonStringEnumCon
 BgDataTypes_Lib.slnx
 BgDataTypes_Lib/
   BgDataTypes_Lib.csproj
-  AnalysisDepthEntry.cs
   BgDecisionData.cs         — composite: Position + Decision + Descriptive + Outcome
   CubeOwner.cs              — enum (string-serialized)
   DecisionData.cs
@@ -54,7 +53,7 @@ All types are `class` with `init`-only properties. Serialization uses
 | Type | Fields |
 |---|---|
 | `PositionData` | `Mop`, `OnRollNeeds`, `OpponentNeeds`, `OnRollPipCount`, `OpponentPipCount`, `CubeSize`, `CubeOwner`, `IsCrawford` |
-| `DecisionData` | `Dice`, `Plays`, `AnalysisDepths`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?` |
+| `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?` |
 | `DescriptiveData` | `MatchLength`, `OnRollName`, `OpponentName`, `Title`, `Date`, `Event` |
 | `PlayOutcomeData` | `AfterBestBoard`, `AfterPlayerBoard` |
 
@@ -63,8 +62,7 @@ All types are `class` with `init`-only properties. Serialization uses
 | Type | Notes |
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
-| `PlayCandidate` | `MoveNotation`, `Equity`, `EquityLoss?`, `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?` |
-| `AnalysisDepthEntry` | `Label` |
+| `PlayCandidate` | `MoveNotation`, `Depth`, `Equity`, `EquityLoss?`, `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?` |
 
 ### Composite type
 
@@ -150,7 +148,6 @@ public class PositionData    { /* init-only properties per Architecture table */
 public class DecisionData    { /* init-only properties per Architecture table */ }
 public class DescriptiveData { /* init-only properties per Architecture table */ }
 public class PlayCandidate   { /* init-only properties per Architecture table */ }
-public class AnalysisDepthEntry { public string Label { get; init; } }
 
 public enum CubeOwner { OnRoll, Opponent, Centered }
 ```

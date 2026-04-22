@@ -5,6 +5,11 @@ public class PlayCandidate
     /// <summary>Move notation, e.g. "8/5(2) 6/3(2)".</summary>
     public string MoveNotation { get; init; } = string.Empty;
 
+    /// <summary>Analysis depth label for this candidate, e.g. "3-ply",
+    /// "XG Roller++", "Rollout: 1296 trials. 3-ply". Rendered in the
+    /// Depth column of the move-decision play panel. Empty when not set.</summary>
+    public string Depth { get; init; } = string.Empty;
+
     /// <summary>Primary equity value, displayed top-right in the analysis panel.</summary>
     public double Equity { get; init; }
 

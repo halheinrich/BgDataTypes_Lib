@@ -6,7 +6,6 @@ public class DecisionData
     public IReadOnlyList<int> Dice { get; init; } = new int[2];
 
     public IReadOnlyList<PlayCandidate> Plays { get; init; } = [];
-    public IReadOnlyList<AnalysisDepthEntry> AnalysisDepths { get; init; } = [];
     /// <summary>Index into Plays identifying the best play. </summary>
     public int BestPlayIndex { get; init; }
     /// <summary>
@@ -21,6 +20,9 @@ public class DecisionData
     // -----------------------------------------------------------------------
     //  Cube decision equity fields
     // -----------------------------------------------------------------------
+    /// <summary>Analysis depth label for a cube decision, e.g. "3-ply",
+    /// "Rollout: 1296 trials. 3-ply". Empty when IsCube is false.</summary>
+    public string CubeDepth { get; init; } = string.Empty;
     public double NoDoubleEquity { get; init; }
     public double DoubleTakeEquity { get; init; }
 

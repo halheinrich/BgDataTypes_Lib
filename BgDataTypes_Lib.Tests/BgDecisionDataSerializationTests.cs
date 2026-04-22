@@ -119,13 +119,53 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void AnalysisDepthEntry_RoundTrip()
+    public void PlayCandidate_RoundTripWithDepth()
     {
-        var original = new AnalysisDepthEntry { Label = "Rollout: 1296 trials. 3-ply" };
+        var original = new PlayCandidate
+        {
+            MoveNotation = "8/5(2) 6/3(2)",
+            Depth = "Rollout: 1296 trials. 3-ply",
+            Equity = -0.142
+        };
         var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<AnalysisDepthEntry>(json, Options)!;
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
-        Assert.Equal(original.Label, restored.Label);
+        Assert.Equal(original.Depth, restored.Depth);
+        Assert.Equal(original.MoveNotation, restored.MoveNotation);
+        Assert.Equal(original.Equity, restored.Equity);
+    }
+
+    [Fact]
+    public void PlayCandidate_Depth_DefaultsToEmpty()
+    {
+        var p = new PlayCandidate { MoveNotation = "8/5 6/1" };
+        Assert.Equal(string.Empty, p.Depth);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepth_RoundTrip()
+    {
+        var original = new DecisionData
+        {
+            Dice = [0, 0],
+            IsCube = true,
+            CubeDepth = "Rollout: 1296 trials. 3-ply",
+            NoDoubleEquity = 0.312,
+            DoubleTakeEquity = 0.287
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Equal("Rollout: 1296 trials. 3-ply", restored.CubeDepth);
+        Assert.True(restored.IsCube);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepth_DefaultsToEmpty()
+    {
+        var d = new DecisionData();
+        Assert.Equal(string.Empty, d.CubeDepth);
     }
 
     [Fact]
@@ -180,10 +220,9 @@ public class BgDecisionDataSerializationTests
             Dice = [3, 5],
             Plays =
             [
-                new PlayCandidate { MoveNotation = "8/5 6/1", Equity = -0.120, IsUserPlay = true },
-                new PlayCandidate { MoveNotation = "8/3 6/1", Equity = -0.165, EquityLoss = 0.045 }
+                new PlayCandidate { MoveNotation = "8/5 6/1", Depth = "3-ply", Equity = -0.120, IsUserPlay = true },
+                new PlayCandidate { MoveNotation = "8/3 6/1", Depth = "3-ply", Equity = -0.165, EquityLoss = 0.045 }
             ],
-            AnalysisDepths = [new AnalysisDepthEntry { Label = "3-ply" }],
             IsCube = false
         };
 
@@ -193,8 +232,9 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.Dice, restored.Dice);
         Assert.Equal(2, restored.Plays.Count);
         Assert.Equal("8/5 6/1", restored.Plays[0].MoveNotation);
+        Assert.Equal("3-ply", restored.Plays[0].Depth);
+        Assert.Equal("3-ply", restored.Plays[1].Depth);
         Assert.Equal(0.045, restored.Plays[1].EquityLoss);
-        Assert.Single(restored.AnalysisDepths);
         Assert.False(restored.IsCube);
     }
 
@@ -333,10 +373,9 @@ public class BgDecisionDataSerializationTests
                 Dice = [6, 4],
                 Plays =
                 [
-                    new PlayCandidate { MoveNotation = "24/18 24/20", Equity = 0.211, IsUserPlay = false },
-                    new PlayCandidate { MoveNotation = "24/18 13/9",  Equity = 0.198, EquityLoss = 0.013 }
+                    new PlayCandidate { MoveNotation = "24/18 24/20", Depth = "3-ply", Equity = 0.211, IsUserPlay = false },
+                    new PlayCandidate { MoveNotation = "24/18 13/9",  Depth = "3-ply", Equity = 0.198, EquityLoss = 0.013 }
                 ],
-                AnalysisDepths = [new AnalysisDepthEntry { Label = "3-ply" }],
                 IsCube = false
             },
             Descriptive = new DescriptiveData
