@@ -10,6 +10,19 @@ public class PlayCandidate
     /// Depth column of the move-decision play panel. Empty when not set.</summary>
     public string Depth { get; init; } = string.Empty;
 
+    /// <summary>Compact display form of the analysis depth, e.g.
+    /// "3-ply", "R++", "3p1296". Rendered in the Depth column of the
+    /// move-decision play panel. Empty when not set.</summary>
+    public string DepthAbbreviation { get; init; } = string.Empty;
+
+    /// <summary>Ordinal ranking of the analysis depth; higher = deeper /
+    /// more rigorous. Semantics (category boundaries, rollout-vs-static
+    /// ordering) are defined by the producer — see ConvertXgToJson_Lib's
+    /// depth-resolution logic. Used by BackgammonDiagram_Lib to flag
+    /// out-of-order analysis depths across sorted-by-equity plays.
+    /// Defaults to 0 (treated as lowest).</summary>
+    public int DepthRank { get; init; }
+
     /// <summary>Primary equity value, displayed top-right in the analysis panel.</summary>
     public double Equity { get; init; }
 

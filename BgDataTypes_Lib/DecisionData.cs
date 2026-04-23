@@ -23,6 +23,13 @@ public class DecisionData
     /// <summary>Analysis depth label for a cube decision, e.g. "3-ply",
     /// "Rollout: 1296 trials. 3-ply". Empty when IsCube is false.</summary>
     public string CubeDepth { get; init; } = string.Empty;
+
+    /// <summary>Compact display form of CubeDepth. Empty when IsCube is false.</summary>
+    public string CubeDepthAbbreviation { get; init; } = string.Empty;
+
+    /// <summary>Ordinal ranking of CubeDepth; see PlayCandidate.DepthRank
+    /// for semantics. Defaults to 0.</summary>
+    public int CubeDepthRank { get; init; }
     public double NoDoubleEquity { get; init; }
     public double DoubleTakeEquity { get; init; }
 

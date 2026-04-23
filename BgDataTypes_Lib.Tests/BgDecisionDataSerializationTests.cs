@@ -143,6 +143,53 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
+    public void PlayCandidate_DepthAbbreviation_RoundTrip()
+    {
+        var original = new PlayCandidate
+        {
+            MoveNotation = "8/5(2) 6/3(2)",
+            DepthAbbreviation = "3p1296",
+            Equity = -0.142
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Equal(original.DepthAbbreviation, restored.DepthAbbreviation);
+        Assert.Equal(original.MoveNotation, restored.MoveNotation);
+        Assert.Equal(original.Equity, restored.Equity);
+    }
+
+    [Fact]
+    public void PlayCandidate_DepthAbbreviation_DefaultsToEmpty()
+    {
+        var p = new PlayCandidate { MoveNotation = "8/5 6/1" };
+        Assert.Equal(string.Empty, p.DepthAbbreviation);
+    }
+
+    [Fact]
+    public void PlayCandidate_DepthRank_RoundTrip()
+    {
+        var original = new PlayCandidate
+        {
+            MoveNotation = "8/5(2) 6/3(2)",
+            DepthRank = 7,
+            Equity = -0.142
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Equal(7, restored.DepthRank);
+        Assert.Equal(original.MoveNotation, restored.MoveNotation);
+    }
+
+    [Fact]
+    public void PlayCandidate_DepthRank_DefaultsToZero()
+    {
+        var p = new PlayCandidate { MoveNotation = "8/5 6/1" };
+        Assert.Equal(0, p.DepthRank);
+    }
+
+    [Fact]
     public void DecisionData_CubeDepth_RoundTrip()
     {
         var original = new DecisionData
@@ -166,6 +213,57 @@ public class BgDecisionDataSerializationTests
     {
         var d = new DecisionData();
         Assert.Equal(string.Empty, d.CubeDepth);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepthAbbreviation_RoundTrip()
+    {
+        var original = new DecisionData
+        {
+            Dice = [0, 0],
+            IsCube = true,
+            CubeDepthAbbreviation = "3p1296",
+            NoDoubleEquity = 0.312,
+            DoubleTakeEquity = 0.287
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Equal("3p1296", restored.CubeDepthAbbreviation);
+        Assert.True(restored.IsCube);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepthAbbreviation_DefaultsToEmpty()
+    {
+        var d = new DecisionData();
+        Assert.Equal(string.Empty, d.CubeDepthAbbreviation);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepthRank_RoundTrip()
+    {
+        var original = new DecisionData
+        {
+            Dice = [0, 0],
+            IsCube = true,
+            CubeDepthRank = 7,
+            NoDoubleEquity = 0.312
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Equal(7, restored.CubeDepthRank);
+        Assert.True(restored.IsCube);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepthRank_DefaultsToZero()
+    {
+        var d = new DecisionData();
+        Assert.Equal(0, d.CubeDepthRank);
     }
 
     [Fact]

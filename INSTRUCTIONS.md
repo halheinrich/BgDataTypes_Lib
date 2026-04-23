@@ -53,7 +53,7 @@ All types are `class` with `init`-only properties. Serialization uses
 | Type | Fields |
 |---|---|
 | `PositionData` | `Mop`, `OnRollNeeds`, `OpponentNeeds`, `OnRollPipCount`, `OpponentPipCount`, `CubeSize`, `CubeOwner`, `IsCrawford` |
-| `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?` |
+| `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, `CubeDepthAbbreviation`, `CubeDepthRank`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?` |
 | `DescriptiveData` | `MatchLength`, `OnRollName`, `OpponentName`, `Title`, `Date`, `Event` |
 | `PlayOutcomeData` | `AfterBestBoard`, `AfterPlayerBoard` |
 
@@ -62,7 +62,7 @@ All types are `class` with `init`-only properties. Serialization uses
 | Type | Notes |
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
-| `PlayCandidate` | `MoveNotation`, `Depth`, `Equity`, `EquityLoss?`, `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?` |
+| `PlayCandidate` | `MoveNotation`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss?`, `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?` |
 
 ### Composite type
 
