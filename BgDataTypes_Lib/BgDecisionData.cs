@@ -17,6 +17,8 @@ public class BgDecisionData : IDecisionFilterData
     public int OpponentNeeds => Position.OpponentNeeds;
     public bool IsCrawford => Position.IsCrawford;
     public int MatchLength => Descriptive.MatchLength;
+    public int MoveNumber => Descriptive.MoveNumber;
+    public bool IsStandardStart => Descriptive.IsStandardStart;
     public double? FilterError => Decision.IsCube
         ? Decision.UserDoubleError ?? Decision.UserTakeError
         : Decision.UserPlayError;

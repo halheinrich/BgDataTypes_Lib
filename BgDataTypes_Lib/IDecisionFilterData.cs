@@ -23,6 +23,14 @@ public interface IDecisionFilterData
     /// <summary>Match length (0 = unlimited/money).</summary>
     int MatchLength { get; }
 
+    /// <summary>1-based move number within the game.</summary>
+    int MoveNumber { get; }
+
+    /// <summary>True if the game started from the canonical opening position.
+    /// Move-number filtering is only meaningful when this is true; non-standard starts
+    /// (custom problem positions, Bg960, etc.) automatically fail move-number filters.</summary>
+    bool IsStandardStart { get; }
+
     /// <summary>
     /// Error magnitude for this decision (≥ 0).
     /// For checker plays: equity loss vs best play.

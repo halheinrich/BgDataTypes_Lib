@@ -753,4 +753,76 @@ public class BgDecisionDataSerializationTests
         Assert.Empty(data.AfterBestBoard);
         Assert.Empty(data.AfterPlayerBoard);
     }
+
+    // -----------------------------------------------------------------------
+    //  MoveNumber and IsStandardStart — DescriptiveData and BgDecisionData
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DescriptiveData_MoveNumber_RoundTrip()
+    {
+        var original = new DescriptiveData
+        {
+            OnRollName = "Mochy",
+            OpponentName = "Falafel",
+            MoveNumber = 17
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DescriptiveData>(json, Options)!;
+        Assert.Equal(17, restored.MoveNumber);
+    }
+
+    [Fact]
+    public void DescriptiveData_MoveNumber_DefaultsToZero()
+    {
+        var d = new DescriptiveData();
+        Assert.Equal(0, d.MoveNumber);
+    }
+
+    [Fact]
+    public void DescriptiveData_IsStandardStart_RoundTrip()
+    {
+        var original = new DescriptiveData
+        {
+            OnRollName = "Mochy",
+            OpponentName = "Falafel",
+            IsStandardStart = true
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DescriptiveData>(json, Options)!;
+        Assert.True(restored.IsStandardStart);
+    }
+
+    [Fact]
+    public void DescriptiveData_IsStandardStart_DefaultsToFalse()
+    {
+        var d = new DescriptiveData();
+        Assert.False(d.IsStandardStart);
+    }
+
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_MoveNumberAndIsStandardStart()
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Descriptive = new DescriptiveData
+            {
+                OnRollName = "Hal",
+                MoveNumber = 12,
+                IsStandardStart = true
+            }
+        };
+
+        Assert.Equal(12, data.MoveNumber);
+        Assert.True(data.IsStandardStart);
+    }
+
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_MoveNumberAndIsStandardStart_Defaults()
+    {
+        IDecisionFilterData data = new BgDecisionData();
+
+        Assert.Equal(0, data.MoveNumber);
+        Assert.False(data.IsStandardStart);
+    }
 }

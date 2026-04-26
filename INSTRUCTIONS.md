@@ -54,7 +54,7 @@ All types are `class` with `init`-only properties. Serialization uses
 |---|---|
 | `PositionData` | `Mop`, `OnRollNeeds`, `OpponentNeeds`, `OnRollPipCount`, `OpponentPipCount`, `CubeSize`, `CubeOwner`, `IsCrawford` |
 | `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, `CubeDepthAbbreviation`, `CubeDepthRank`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?` |
-| `DescriptiveData` | `MatchLength`, `OnRollName`, `OpponentName`, `Title`, `Date`, `Event` |
+| `DescriptiveData` | `MatchLength`, `OnRollName`, `OpponentName`, `Title`, `Date`, `Event`, `MoveNumber`, `IsStandardStart` |
 | `PlayOutcomeData` | `AfterBestBoard`, `AfterPlayerBoard` |
 
 ### Shared types
@@ -119,6 +119,8 @@ public interface IDecisionFilterData
     int OpponentNeeds { get; }
     bool IsCrawford { get; }
     int MatchLength { get; }
+    int MoveNumber { get; }                       // 1-based within the game
+    bool IsStandardStart { get; }                 // false for non-standard openings
     double? FilterError { get; }                  // ≥ 0 or null
     IReadOnlyList<int> Board { get; }             // 26 elements, see Mop format
     IReadOnlyList<int> AfterBestBoard { get; }    // POV flipped; empty for cubes

@@ -28,7 +28,7 @@ public class DecisionRowSerializationTests
             Player = "Mochy",
             SourceFile = "mochy-falafel.xg",
             Game = 2,
-            MoveNum = 7,
+            MoveNumber = 7,
             Roll = 63,
             AnalysisDepth = "3-ply",
             Equity = -0.142,
@@ -47,7 +47,7 @@ public class DecisionRowSerializationTests
         Assert.Equal(original.Player, restored.Player);
         Assert.Equal(original.SourceFile, restored.SourceFile);
         Assert.Equal(original.Game, restored.Game);
-        Assert.Equal(original.MoveNum, restored.MoveNum);
+        Assert.Equal(original.MoveNumber, restored.MoveNumber);
         Assert.Equal(original.Roll, restored.Roll);
         Assert.Equal(original.AnalysisDepth, restored.AnalysisDepth);
         Assert.Equal(original.Equity, restored.Equity);
@@ -65,7 +65,7 @@ public class DecisionRowSerializationTests
             Player = "Falafel",
             SourceFile = "mochy-falafel.xg",
             Game = 1,
-            MoveNum = 3,
+            MoveNumber = 3,
             AnalysisDepth = "Rollout: 1296 trials. 3-ply",
             MatchLength = 9,
             OnRollNeeds = 1,
@@ -154,7 +154,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_CsvHeader_ContainsExpectedColumns()
     {
         Assert.Equal(
-            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNum,Roll,AnalysisDepth,Equity",
+            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Roll,AnalysisDepth,Equity",
             DecisionRow.CsvHeader);
     }
 
@@ -211,7 +211,7 @@ public class DecisionRowSerializationTests
         var row = new DecisionRow { Player = "Mochy", SourceFile = null };
         var line = row.ToCsvLine();
 
-        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNum,Roll,AnalysisDepth,Equity
+        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Roll,AnalysisDepth,Equity
         // SourceFile is column index 5 (0-based). Between Player and Game it must appear
         // as ",," — an empty cell — not the literal "null".
         Assert.Contains(",Mochy,,", line);
@@ -397,5 +397,79 @@ public class DecisionRowSerializationTests
         Assert.True(row.IsCube);
         Assert.Empty(row.AfterBestBoard);
         Assert.Empty(row.AfterPlayerBoard);
+    }
+
+    // -----------------------------------------------------------------------
+    //  MoveNumber and IsStandardStart
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_MoveNumber_RoundTrip()
+    {
+        var original = new DecisionRow { MoveNumber = 17 };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        Assert.Equal(17, restored.MoveNumber);
+    }
+
+    [Fact]
+    public void DecisionRow_MoveNumber_DefaultsToZero()
+    {
+        var row = new DecisionRow();
+        Assert.Equal(0, row.MoveNumber);
+    }
+
+    [Fact]
+    public void DecisionRow_IsStandardStart_RoundTrip()
+    {
+        var original = new DecisionRow { IsStandardStart = true };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        Assert.True(restored.IsStandardStart);
+    }
+
+    [Fact]
+    public void DecisionRow_IsStandardStart_DefaultsToFalse()
+    {
+        var row = new DecisionRow();
+        Assert.False(row.IsStandardStart);
+    }
+
+    [Fact]
+    public void DecisionRow_ToCsvLine_MoveNumberInColumnOrder()
+    {
+        var row = new DecisionRow
+        {
+            Player = "Mochy",
+            Game = 2,
+            MoveNumber = 17,
+            Roll = 63
+        };
+        var line = row.ToCsvLine();
+        // CSV header is: ...Player,SourceFile,Game,MoveNumber,Roll,...
+        // SourceFile is null → empty cell. Expect "Mochy,,2,17,63,"
+        Assert.Contains(",Mochy,,2,17,63,", line);
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_MoveNumberAndIsStandardStart()
+    {
+        IDecisionFilterData row = new DecisionRow
+        {
+            MoveNumber = 12,
+            IsStandardStart = true
+        };
+
+        Assert.Equal(12, row.MoveNumber);
+        Assert.True(row.IsStandardStart);
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_MoveNumberAndIsStandardStart_Defaults()
+    {
+        IDecisionFilterData row = new DecisionRow();
+
+        Assert.Equal(0, row.MoveNumber);
+        Assert.False(row.IsStandardStart);
     }
 }

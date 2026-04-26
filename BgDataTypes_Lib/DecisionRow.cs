@@ -26,7 +26,10 @@ public sealed class DecisionRow : IDecisionFilterData
     public int Game { get; init; }
 
     /// <summary>Move number within the game (1-based).</summary>
-    public int MoveNum { get; init; }
+    public int MoveNumber { get; init; }
+
+    /// <summary>True if the game started from the canonical opening position.</summary>
+    public bool IsStandardStart { get; init; }
 
     /// <summary>Dice roll as a two-digit integer, e.g. 63, 11. 0 for cube decisions.</summary>
     public int Roll { get; init; }
@@ -103,7 +106,7 @@ public sealed class DecisionRow : IDecisionFilterData
 
     /// <summary>CSV header row matching the column order of <see cref="ToCsvLine"/>.</summary>
     public static string CsvHeader =>
-        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNum,Roll,AnalysisDepth,Equity";
+        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Roll,AnalysisDepth,Equity";
 
     /// <summary>Formats this row as a CSV line (no trailing newline).</summary>
     public string ToCsvLine()
@@ -116,7 +119,7 @@ public sealed class DecisionRow : IDecisionFilterData
             CsvEscape(Player),
             CsvEscape(SourceFile ?? string.Empty),
             Game,
-            MoveNum,
+            MoveNumber,
             Roll,
             CsvEscape(AnalysisDepth),
             Equity.ToString("G6"));
