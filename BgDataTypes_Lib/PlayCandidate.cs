@@ -5,6 +5,15 @@ public class PlayCandidate
     /// <summary>Move notation, e.g. "8/5(2) 6/3(2)".</summary>
     public string MoveNotation { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Structural play — the sequence of (FrPt, ToPt) moves that produces
+    /// this candidate. Complements <see cref="MoveNotation"/>: the notation
+    /// is for display, the <see cref="Play"/> for structural comparison and
+    /// downstream consumers (e.g. submitted-play grading). Empty
+    /// (<c>Count == 0</c>) when not populated.
+    /// </summary>
+    public Play Play { get; init; }
+
     /// <summary>Analysis depth label for this candidate, e.g. "3-ply",
     /// "XG Roller++", "Rollout: 1296 trials. 3-ply". Rendered in the
     /// Depth column of the move-decision play panel. Empty when not set.</summary>

@@ -190,6 +190,104 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
+    public void PlayCandidate_Play_DefaultsToEmpty()
+    {
+        var p = new PlayCandidate { MoveNotation = "8/5 6/1" };
+        Assert.Equal(0, p.Play.Count);
+    }
+
+    [Fact]
+    public void PlayCandidate_Play_RoundTrip_Empty()
+    {
+        var original = new PlayCandidate
+        {
+            MoveNotation = "8/5 6/1",
+            Equity = -0.142
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Equal(0, restored.Play.Count);
+        Assert.Contains("\"Play\":[]", json);
+    }
+
+    [Fact]
+    public void PlayCandidate_Play_RoundTrip_Populated()
+    {
+        var play = new Play();
+        play.Add(new Move(13, 7));
+        play.Add(new Move(8, 5));
+
+        var original = new PlayCandidate
+        {
+            MoveNotation = "13/7 8/5",
+            Equity = -0.118,
+            Play = play
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Equal(2, restored.Play.Count);
+        Assert.Equal(new Move(13, 7), restored.Play[0]);
+        Assert.Equal(new Move(8, 5), restored.Play[1]);
+        Assert.True(restored.Play.Equals(original.Play));
+    }
+
+    [Fact]
+    public void PlayCandidate_Play_RoundTrip_PreservesHitEncoding()
+    {
+        var play = new Play();
+        play.Add(new Move(13, -7));   // hit on the 7-point
+
+        var original = new PlayCandidate
+        {
+            MoveNotation = "13/7*",
+            Equity = 0.05,
+            Play = play
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Equal(1, restored.Play.Count);
+        Assert.Equal(13, restored.Play[0].FrPt);
+        Assert.Equal(-7, restored.Play[0].ToPt);
+    }
+
+    [Fact]
+    public void PlayCandidate_Play_NestedInBgDecisionData_RoundTrip()
+    {
+        var play = new Play();
+        play.Add(new Move(24, 18));
+        play.Add(new Move(13, 9));
+
+        var original = new BgDecisionData
+        {
+            Decision = new DecisionData
+            {
+                Dice = [6, 4],
+                Plays =
+                [
+                    new PlayCandidate
+                    {
+                        MoveNotation = "24/18 13/9",
+                        Equity = 0.211,
+                        Play = play
+                    }
+                ],
+                IsCube = false
+            }
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
+
+        var restoredPlay = restored.Decision.Plays[0].Play;
+        Assert.Equal(2, restoredPlay.Count);
+        Assert.Equal(new Move(24, 18), restoredPlay[0]);
+        Assert.Equal(new Move(13, 9), restoredPlay[1]);
+    }
+
+    [Fact]
     public void DecisionData_CubeDepth_RoundTrip()
     {
         var original = new DecisionData

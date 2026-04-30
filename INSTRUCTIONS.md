@@ -18,7 +18,12 @@ https://github.com/halheinrich/BgDataTypes_Lib — branch `main`.
 
 ## Depends on
 
-Standalone. No subproject dependencies. `System.Text.Json` (+ `JsonStringEnumConverter`) is the only runtime dependency.
+Atomic by design. BgDataTypes_Lib has no subproject dependencies and must
+not gain any. The shared-data layer is the foundation other subprojects
+rest on; introducing a subproject dependency here would either create a
+circular reference or force the dependency on every consumer transitively.
+`System.Text.Json` (+ `JsonStringEnumConverter`) is the only runtime
+dependency.
 
 ## Directory tree
 
@@ -32,19 +37,28 @@ BgDataTypes_Lib/
   DecisionRow.cs            — flat CSV export record
   DescriptiveData.cs
   IDecisionFilterData.cs    — shared filter contract
+  Move.cs                   — (FrPt, ToPt) record struct
+  Play.cs                   — fixed 4-slot Move buffer
   PlayCandidate.cs
+  PlayJsonConverter.cs      — JSON-array converter for Play
   PlayOutcomeData.cs        — after-boards derived from play choices
   PositionData.cs
 BgDataTypes_Lib.Tests/
   BgDataTypes_Lib.Tests.csproj
   BgDecisionDataSerializationTests.cs
   DecisionRowSerializationTests.cs
+  MoveTests.cs
+  PlayTests.cs
 ```
 
 ## Architecture
 
-All types are `class` with `init`-only properties. Serialization uses
-`System.Text.Json` with `JsonStringEnumConverter` for `CubeOwner`.
+Composite and category types are `class` with `init`-only properties; the
+move primitives `Move` (`readonly record struct`) and `Play` (mutable
+`struct`) are value types for hot-path zero-alloc reasons inherited from
+their move-generation origins. Serialization uses `System.Text.Json` with
+`JsonStringEnumConverter` for `CubeOwner` and a bundled `PlayJsonConverter`
+attached to `Play` via attribute.
 
 ### Data categories
 
@@ -62,7 +76,23 @@ All types are `class` with `init`-only properties. Serialization uses
 | Type | Notes |
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
-| `PlayCandidate` | `MoveNotation`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss?`, `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?` |
+| `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
+| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash via order-invariant `DeduplicationKey()`. Serialised as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialisation). |
+| `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss?`, `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). |
+
+### Move encoding
+
+`Move(FrPt, ToPt)` stores everything callers need to interpret or undo a
+move:
+
+- `FrPt`: source point. `1`–`24` is a board point; `25` is bar entry.
+- `ToPt`: destination, sign-encoded.
+  - `> 0`: regular move — land on `ToPt` (1–24).
+  - `== 0`: bear off — checker leaves the board.
+  - `< 0`: hit — land on `|ToPt|` and send opponent blot to bar.
+
+Move-generation rules (which `FrPt`/`ToPt` combinations are legal, bearing-off
+overshoot, etc.) live in `BgMoveGen` — `Move` here is just the encoding.
 
 ### Composite type
 
@@ -151,6 +181,18 @@ public class DecisionData    { /* init-only properties per Architecture table */
 public class DescriptiveData { /* init-only properties per Architecture table */ }
 public class PlayCandidate   { /* init-only properties per Architecture table */ }
 
+public readonly record struct Move(int FrPt, int ToPt);
+
+public struct Play : IEquatable<Play>
+{
+    public int Count { get; }
+    public Move this[int index] { get; }
+    public void Add(Move move);
+    public void RemoveLast();
+    public Play Snapshot();
+    public (int, int, int, int, int, int, int, int) DeduplicationKey();
+}
+
 public enum CubeOwner { OnRoll, Opponent, Centered }
 ```
 
@@ -183,6 +225,28 @@ Serialization contract: round-trips cleanly through `System.Text.Json` with
   `BgDecisionData`). Consumers of the interface must check `IsCube` before
   interpreting these boards. Producers must leave `PlayOutcomeData` at its
   default for cube decisions.
+- **`Move.ToPt` sign-encoding.** `0` is bear off (not "stay on point 0"),
+  negative is a hit landing on `|ToPt|` (not a backward move — players
+  cannot move backward), positive is a regular move. Code that compares
+  `ToPt` numerically without understanding the encoding will silently
+  misinterpret hits and bear-offs.
+- **`Play` is a mutable value type.** `Add` / `RemoveLast` mutate in place,
+  but assigning a `Play` to another variable copies the buffer. Code that
+  retains a reference into a `List<Play>` slot and mutates it later is
+  modifying the local copy, not the list element. Use `Snapshot()` when
+  the intent is an explicit independent copy, and re-assign back to the
+  list slot when mutation is intended.
+- **`Play.DeduplicationKey` is order- and hit-invariant.** Two plays with
+  the same `(FrPt, |ToPt|)` multiset hash and compare equal even if their
+  `Move` order differs and even if one hits while the other does not.
+  This matches the move-generation dedup contract; do not rely on `Equals`
+  to discriminate hit vs non-hit or to compare move ordering.
+- **`Play` requires its bundled `JsonConverter`.** Default property-based
+  serialisation only sees `Count`, losing every move. The
+  `[JsonConverter(typeof(PlayJsonConverter))]` attribute is intrinsic to
+  the type — do not strip it, and do not register a different converter
+  for `Play` in consumer-side options without understanding the
+  consequence.
 
 ## Subproject-internal next steps
 
