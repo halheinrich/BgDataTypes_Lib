@@ -32,6 +32,7 @@ BgDataTypes_Lib.slnx
 BgDataTypes_Lib/
   BgDataTypes_Lib.csproj
   BgDecisionData.cs         — composite: Position + Decision + Descriptive + Outcome
+  BoardState.cs             — mutable int[26] + HighPointOccupied + apply/undo/ApplyPlay
   CubeOwner.cs              — enum (string-serialized)
   DecisionData.cs
   DecisionRow.cs            — flat CSV export record
@@ -46,9 +47,12 @@ BgDataTypes_Lib/
 BgDataTypes_Lib.Tests/
   BgDataTypes_Lib.Tests.csproj
   BgDecisionDataSerializationTests.cs
+  BoardStateTests.cs
   DecisionRowSerializationTests.cs
   MoveTests.cs
+  PipCountTests.cs
   PlayTests.cs
+  RaceTests.cs
 ```
 
 ## Architecture
@@ -56,9 +60,23 @@ BgDataTypes_Lib.Tests/
 Composite and category types are `class` with `init`-only properties; the
 move primitives `Move` (`readonly record struct`) and `Play` (mutable
 `struct`) are value types for hot-path zero-alloc reasons inherited from
-their move-generation origins. Serialization uses `System.Text.Json` with
-`JsonStringEnumConverter` for `CubeOwner` and a bundled `PlayJsonConverter`
-attached to `Play` via attribute.
+their move-generation origins. `BoardState` is a `class` but mutable —
+the one deliberate exception (see "Mutability exception" below).
+Serialization uses `System.Text.Json` with `JsonStringEnumConverter` for
+`CubeOwner` and a bundled `PlayJsonConverter` attached to `Play` via
+attribute.
+
+### Mutability exception
+
+All composite and category types in this library are `class` with
+`init`-only properties — except `BoardState`, which is mutable for
+hot-path move-generation efficiency. The type encapsulates its own
+state-management logic (`ApplyMove` / `UndoMove` / `ApplyPlay` maintain
+`HighPointOccupied` incrementally), and external mutation of `Points`
+is supported but desyncs `HighPointOccupied` unless the caller calls
+`RecalcHighPoint`. Hot-path consumers (BgMoveGen's move generator) use
+the apply/undo primitives; non-hot-path consumers should advance state
+via `ApplyPlay`, never via raw point-array mutation.
 
 ### Data categories
 
@@ -78,7 +96,7 @@ attached to `Play` via attribute.
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash via order-invariant `DeduplicationKey()`. Serialised as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialisation). |
-| `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss?`, `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). |
+| `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
 
 ### Move encoding
 
@@ -93,6 +111,60 @@ move:
 
 Move-generation rules (which `FrPt`/`ToPt` combinations are legal, bearing-off
 overshoot, etc.) live in `BgMoveGen` — `Move` here is just the encoding.
+
+### BoardState
+
+Mutable backgammon position. `int[26] Points` plus `int HighPointOccupied`.
+Layout matches `PositionData.Mop` / `IDecisionFilterData.Board`:
+`Points[0]` = opponent bar, `Points[1..24]` = playing surface, `Points[25]` =
+on-roll bar; positive = on-roll, negative = opponent. On-roll moves
+high index → low; opponent moves low → high. Borne-off counts are not
+tracked — checkers leaving the board simply disappear.
+
+Three layers of mutation, in increasing scope:
+
+- **`ApplyMove(Move)` / `UndoMove(Move)`** — hot-path primitives, zero
+  allocation, used by `BgMoveGen`'s move generator to recurse through
+  candidate plays. Maintain `HighPointOccupied` incrementally: apply
+  scans down only when emptying the highest point; undo raises
+  `HighPointOccupied` when a move's `FrPt` exceeds the current high.
+  No legality validation — that's the move generator's job.
+
+- **`ApplyPlay(Play)`** — turn-boundary primitive. Applies every move
+  in the play (using `play.Count`) then flips perspective so the state
+  is re-expressed from the next mover's POV. Empty plays still flip —
+  they represent a forced pass. This is the only public way to advance
+  past a turn boundary; callers reasoning in on-roll POV never need to
+  flip explicitly.
+
+- **`Flip()`** — `private`. Implementation mechanic for `ApplyPlay`.
+  Negates and reverses the array (point `i` ↔ point `25-i`, swapping
+  the bars in the process), then recomputes `HighPointOccupied` from
+  scratch. Not exposed: the design intent is that on-roll POV reasoning
+  is the only POV consumers ever see.
+
+Factories: `Standard()`, `Nackgammon()`, `Bg960(int? seed = null)` for
+the three starting variants. `FromMop(IReadOnlyList<int>)` and `ToMop()`
+bridge to/from the 26-element on-roll-relative point array used by
+`PositionData.Mop`. `Copy()` is a deep copy. `RecalcHighPoint()` is
+public for callers that mutate `Points` directly.
+
+Derived properties:
+
+- `PipCount` — on-roll's pip count: `sum over i ∈ [1..25] of i × max(Points[i], 0)`.
+  Bar (index 25) contributes 25 pips per checker.
+- `OpponentPipCount` — opponent's pip count: `sum over i ∈ [0..24] of (25 - i) × max(-Points[i], 0)`.
+  Bar (index 0) contributes 25 pips per checker.
+- `IsRace` — true iff no on-roll/opponent collision is possible:
+  `max(i where Points[i] > 0) < min(i where Points[i] < 0)`. Vacuously
+  true when one side is fully borne off. Bar checkers prevent races
+  (on-roll bar at 25 → max = 25; opponent bar at 0 → min = 0).
+
+These are pure derivations from `Points`. They are *distinct from*
+`PositionData.OnRollPipCount` / `OpponentPipCount`, which carry
+XG-parser-supplied values and may differ if XG ever rounds. Use the
+`PositionData` ones when reading parsed decisions; use the `BoardState`
+ones when computing from a live state.
 
 ### Composite type
 
@@ -193,6 +265,37 @@ public struct Play : IEquatable<Play>
     public (int, int, int, int, int, int, int, int) DeduplicationKey();
 }
 
+public class BoardState
+{
+    public readonly int[] Points;            // 26 elements; layout matches PositionData.Mop
+    public int HighPointOccupied;            // 1–25, or 0 if no on-roll checkers
+
+    // Factories
+    public static BoardState Standard();
+    public static BoardState Nackgammon();
+    public static BoardState Bg960(int? seed = null);
+
+    // Mop bridge
+    public static BoardState FromMop(IReadOnlyList<int> mop);
+    public IReadOnlyList<int> ToMop();
+
+    // Maintenance
+    public BoardState Copy();
+    public void RecalcHighPoint();
+
+    // Apply / undo (hot-path primitives)
+    public void ApplyMove(Move move);
+    public void UndoMove(Move move);
+
+    // Turn boundary (apply-all + flip, atomic)
+    public void ApplyPlay(Play play);
+
+    // Derived
+    public int PipCount { get; }
+    public int OpponentPipCount { get; }
+    public bool IsRace { get; }
+}
+
 public enum CubeOwner { OnRoll, Opponent, Centered }
 ```
 
@@ -247,6 +350,37 @@ Serialization contract: round-trips cleanly through `System.Text.Json` with
   the type — do not strip it, and do not register a different converter
   for `Play` in consumer-side options without understanding the
   consequence.
+- **`BoardState` is mutable; `HighPointOccupied` desyncs on raw
+  mutation.** The apply/undo helpers maintain `HighPointOccupied`
+  incrementally; raw `Points[i] = …` writes do not. Call
+  `RecalcHighPoint()` after any direct point-array mutation, or use
+  `FromMop` (which recomputes for you). The contract is intentional —
+  hot-path move generation needs zero-overhead apply/undo, so the
+  per-write maintenance lives in the helpers, not in property setters.
+- **Bearing-off overshoot is a property of the data shape.** Bear-off
+  legal only from `HighPointOccupied` when `HighPointOccupied <= 6`
+  *and* the die exceeds `FrPt`. The `BoardState` data primitive does
+  not enforce this — `Move(FrPt, 0)` is encodable for any `FrPt` —
+  but `BgMoveGen.MoveGenerator.NextMove` does. Code that hand-builds
+  bear-off moves outside the move generator must respect the rule.
+- **`Bg960` mirror conflicts.** Point `i` and point `25 - i` can never
+  both be made (they'd collide under symmetry). `Bg960` blocks the
+  mirror as it picks each quadrant representative.
+- **Pip-count integer width.** Per-product max is `15 × 25 = 375`, total
+  fits comfortably in `int`. Do not narrow to `byte` / `short` if you
+  copy this logic elsewhere.
+- **`ApplyPlay` flips perspective; the bare flip is private.** After
+  `ApplyPlay`, positive values represent the *next* mover's checkers,
+  not the previous on-roll's. There is no public `Flip()` — callers
+  reasoning in on-roll POV never need to flip explicitly. Code that
+  expects to inspect a state "from the original mover's POV" after a
+  turn must take a `Copy()` *before* calling `ApplyPlay`.
+- **`PlayCandidate.EquityLoss` is non-nullable; `0.0` means no loss
+  vs. best.** Identifying the best candidate uses
+  `DecisionData.BestPlayIndex`; testing membership in the best-equity
+  equivalence class uses `EquityLoss == 0.0`. Pre-relocation code that
+  filtered by `EquityLoss == null` is no longer correct — that
+  convention does not apply post-flip.
 
 ## Subproject-internal next steps
 

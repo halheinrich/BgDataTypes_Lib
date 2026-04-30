@@ -17,13 +17,15 @@ public class BgDecisionDataSerializationTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void PlayCandidate_RoundTrip_NullEquityLoss()
+    public void PlayCandidate_EquityLoss_DefaultsToZero()
     {
+        // Best plays carry EquityLoss = 0.0; the test for "is this a best play"
+        // is EquityLoss == 0.0 (or membership-by-equity equivalence). Identifying
+        // a canonical best uses DecisionData.BestPlayIndex.
         var original = new PlayCandidate
         {
             MoveNotation = "8/5(2) 6/3(2)",
             Equity = -0.142,
-            EquityLoss = null,
             IsUserPlay = false
         };
         var json = JsonSerializer.Serialize(original, Options);
@@ -31,7 +33,7 @@ public class BgDecisionDataSerializationTests
 
         Assert.Equal(original.MoveNotation, restored.MoveNotation);
         Assert.Equal(original.Equity, restored.Equity);
-        Assert.Null(restored.EquityLoss);
+        Assert.Equal(0.0, restored.EquityLoss);
         Assert.Equal(original.IsUserPlay, restored.IsUserPlay);
     }
 

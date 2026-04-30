@@ -36,10 +36,15 @@ public class PlayCandidate
     public double Equity { get; init; }
 
     /// <summary>
-    /// Equity loss relative to best play, stacked below primary equity.
-    /// Null for the best play itself.
+    /// Equity loss vs. best-equity play, in match-equity units. <c>0.0</c> means
+    /// this candidate is itself a best play — multiple candidates may share zero
+    /// loss when they produce structurally equivalent (or tied-equity) positions.
+    /// <see cref="DecisionData.BestPlayIndex"/> names a canonical single best
+    /// when one representative is needed; <c>EquityLoss == 0.0</c> is the valid
+    /// test for "is this a best play" / membership in the best-equity equivalence
+    /// class. Defaults to <c>0.0</c>.
     /// </summary>
-    public double? EquityLoss { get; init; }
+    public double EquityLoss { get; init; }
 
     /// <summary>True if this is the move the user played. Renders a green checkmark.</summary>
     public bool IsUserPlay { get; init; }
