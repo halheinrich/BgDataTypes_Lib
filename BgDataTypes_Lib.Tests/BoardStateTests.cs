@@ -83,6 +83,73 @@ public class BoardStateTests
         Assert.Equal(15, opp);
     }
 
+    [Fact]
+    public void Bg960_PlayerOpponentSymmetry()
+    {
+        for (int seed = 1; seed <= 50; seed++)
+        {
+            var s = BoardState.Bg960(seed: seed);
+            for (int i = 1; i <= 24; i++)
+            {
+                int mirror = 25 - i;
+                int playerHere = Math.Max(0, s.Points[i]);
+                int opponentMirror = Math.Max(0, -s.Points[mirror]);
+                Assert.True(
+                    playerHere == opponentMirror,
+                    $"Seed {seed}: asymmetry at point {i}: player={playerHere}, opponent at mirror {mirror}={opponentMirror}");
+            }
+        }
+    }
+
+    [Fact]
+    public void Bg960_AllOccupiedPointsHaveAtLeast2Checkers()
+    {
+        for (int seed = 1; seed <= 50; seed++)
+        {
+            var s = BoardState.Bg960(seed: seed);
+            for (int i = 1; i <= 24; i++)
+            {
+                if (s.Points[i] > 0)
+                {
+                    Assert.True(
+                        s.Points[i] >= 2,
+                        $"Seed {seed}: blot at point {i} (count={s.Points[i]})");
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void Bg960_AllQuadrantsHaveAtLeastOneOccupiedPoint()
+    {
+        var quadrants = new[]
+        {
+            (from: 1,  to: 6),
+            (from: 7,  to: 12),
+            (from: 13, to: 18),
+            (from: 19, to: 24),
+        };
+        for (int seed = 1; seed <= 50; seed++)
+        {
+            var s = BoardState.Bg960(seed: seed);
+            foreach (var (from, to) in quadrants)
+            {
+                bool hasOccupied = false;
+                for (int i = from; i <= to; i++)
+                {
+                    if (s.Points[i] > 0)
+                    {
+                        hasOccupied = true;
+                        break;
+                    }
+                }
+                Assert.True(
+                    hasOccupied,
+                    $"Seed {seed}: quadrant {from}-{to} has no player checkers");
+            }
+        }
+    }
+
     // ── Mop bridge ────────────────────────────────────────────────
 
     [Fact]
