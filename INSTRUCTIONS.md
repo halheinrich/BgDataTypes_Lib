@@ -22,8 +22,9 @@ Atomic by design. BgDataTypes_Lib has no subproject dependencies and must
 not gain any. The shared-data layer is the foundation other subprojects
 rest on; introducing a subproject dependency here would either create a
 circular reference or force the dependency on every consumer transitively.
-`System.Text.Json` (+ `JsonStringEnumConverter`) is the only runtime
-dependency.
+`System.Text.Json` is the only runtime dependency; `CubeOwner` and `Play`
+each bundle their own `[JsonConverter]` attribute so consumers do not have
+to register converters on their `JsonSerializerOptions`.
 
 ## Directory tree
 
@@ -62,9 +63,11 @@ move primitives `Move` (`readonly record struct`) and `Play` (mutable
 `struct`) are value types for hot-path zero-alloc reasons inherited from
 their move-generation origins. `BoardState` is a `class` but mutable —
 the one deliberate exception (see "Mutability exception" below).
-Serialization uses `System.Text.Json` with `JsonStringEnumConverter` for
-`CubeOwner` and a bundled `PlayJsonConverter` attached to `Play` via
-attribute.
+Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
+attributes: `JsonStringEnumConverter` on `CubeOwner` and `PlayJsonConverter`
+on `Play`. Consumers do not need to register either converter on their
+`JsonSerializerOptions` — the attributes carry the contract on the types
+themselves.
 
 ### Mutability exception
 
@@ -246,6 +249,9 @@ public sealed class DecisionRow : IDecisionFilterData
     public string MatchScore { get; }   // computed from needs/Crawford/length
     public static string CsvHeader { get; }
     public string ToCsvLine();
+    // IsCube, MatchScore, and FilterError are [JsonIgnore]d (computed /
+    // derived). The three board lists (Board, AfterBestBoard,
+    // AfterPlayerBoard) serialise to JSON but are excluded from CSV output.
 }
 
 public class PositionData    { /* init-only properties per Architecture table */ }
@@ -257,18 +263,22 @@ public readonly record struct Move(int FrPt, int ToPt);
 
 public struct Play : IEquatable<Play>
 {
-    public int Count { get; }
+    public int Count { get; private set; }
     public Move this[int index] { get; }
     public void Add(Move move);
     public void RemoveLast();
     public Play Snapshot();
     public (int, int, int, int, int, int, int, int) DeduplicationKey();
+    public override bool Equals(object? obj);
+    public override int GetHashCode();
 }
 
 public class BoardState
 {
-    public readonly int[] Points;            // 26 elements; layout matches PositionData.Mop
-    public int HighPointOccupied;            // 1–25, or 0 if no on-roll checkers
+    public readonly int[] Points = new int[26];   // layout matches PositionData.Mop
+    public int HighPointOccupied;                 // 1–25, or 0 if no on-roll checkers
+
+    public BoardState();                          // empty board (all zeros, HighPointOccupied = 0)
 
     // Factories
     public static BoardState Standard();
@@ -299,9 +309,12 @@ public class BoardState
 public enum CubeOwner { OnRoll, Opponent, Centered }
 ```
 
-Serialization contract: round-trips cleanly through `System.Text.Json` with
-`JsonStringEnumConverter` registered. Tested in
-`BgDecisionDataSerializationTests` and `DecisionRowSerializationTests`.
+Serialization contract: round-trips cleanly through `System.Text.Json` out
+of the box — no consumer-side converter registration required. `CubeOwner`
+bundles `JsonStringEnumConverter` via attribute; `Play` bundles
+`PlayJsonConverter` via attribute. Tested without any options-level
+registration in `BgDecisionDataSerializationTests` and
+`DecisionRowSerializationTests`.
 
 ## Pitfalls
 
