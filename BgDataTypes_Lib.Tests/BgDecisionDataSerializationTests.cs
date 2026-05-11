@@ -1,15 +1,18 @@
 ﻿using System.Text.Json;
-using System.Text.Json.Serialization;
 using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
 
 public class BgDecisionDataSerializationTests
 {
+    // No explicit JsonStringEnumConverter registration: CubeOwner bundles its
+    // own [JsonConverter(typeof(JsonStringEnumConverter))] attribute. The test
+    // relies on the attribute alone so that removing it from the type would
+    // fail this suite loudly (rather than silently passing because an
+    // option-level registration covered for it).
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = false,
-        Converters = { new JsonStringEnumConverter() }
     };
 
     // -----------------------------------------------------------------------
