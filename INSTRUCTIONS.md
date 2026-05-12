@@ -98,7 +98,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
-| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash via order-invariant `DeduplicationKey()`. Serialised as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialisation). |
+| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash via order-invariant `DeduplicationKey()`. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
 
 ### Move encoding
@@ -154,9 +154,9 @@ public for callers that mutate `Points` directly.
 
 Derived properties:
 
-- `PipCount` — on-roll's pip count: `sum over i ∈ [1..25] of i × max(Points[i], 0)`.
+- `PipCount` — on-roll's pip count: `Σ i·max(Points[i], 0) for i ∈ [1..25]`.
   Bar (index 25) contributes 25 pips per checker.
-- `OpponentPipCount` — opponent's pip count: `sum over i ∈ [0..24] of (25 - i) × max(-Points[i], 0)`.
+- `OpponentPipCount` — opponent's pip count: `Σ (25−i)·max(−Points[i], 0) for i ∈ [0..24]`.
   Bar (index 0) contributes 25 pips per checker.
 - `IsRace` — true iff no on-roll/opponent collision is possible:
   `max(i where Points[i] > 0) < min(i where Points[i] < 0)`. Vacuously
@@ -176,9 +176,9 @@ Implements `IDecisionFilterData` via forwarding properties. `Board` returns
 `Position.Mop` directly. `AfterBestBoard` / `AfterPlayerBoard` forward to
 `Outcome.AfterBestBoard` / `Outcome.AfterPlayerBoard` — raw, with no conditional
 on `IsCube`. The "empty for cube decisions" invariant is producer-enforced:
-whoever constructs `BgDecisionData` leaves `Outcome` at its default (empty lists)
-for cube decisions. `FilterError` routes to `UserDoubleError ?? UserTakeError`
-for cube decisions, otherwise `UserPlayError`.
+whoever constructs `BgDecisionData` leaves `Outcome` at its default (empty lists).
+`FilterError` routes to `UserDoubleError ?? UserTakeError` for cube decisions,
+otherwise `UserPlayError`.
 
 ### After-boards (PlayOutcomeData)
 
@@ -201,7 +201,7 @@ by the XG → JSON conversion pipeline, for different consumers. Implements
 same layout as `PositionData.Mop` — with flipped POV on the after-boards).
 All three board fields serialize to JSON but are **excluded from CSV output**.
 
-### Mop / Board format
+### Mop layout
 
 26-element `IReadOnlyList<int>` from the on-roll player's perspective:
 
@@ -227,7 +227,7 @@ public interface IDecisionFilterData
     int MoveNumber { get; }                       // 1-based within the game
     bool IsStandardStart { get; }                 // false for non-standard openings
     double? FilterError { get; }                  // ≥ 0 or null
-    IReadOnlyList<int> Board { get; }             // 26 elements, see Mop format
+    IReadOnlyList<int> Board { get; }             // 26 elements, see Mop layout
     IReadOnlyList<int> AfterBestBoard { get; }    // POV flipped; empty for cubes
     IReadOnlyList<int> AfterPlayerBoard { get; }  // POV flipped; empty for cubes
 }
@@ -251,7 +251,7 @@ public sealed class DecisionRow : IDecisionFilterData
     public string ToCsvLine();
     // IsCube, MatchScore, and FilterError are [JsonIgnore]d (computed /
     // derived). The three board lists (Board, AfterBestBoard,
-    // AfterPlayerBoard) serialise to JSON but are excluded from CSV output.
+    // AfterPlayerBoard) serialize to JSON but are excluded from CSV output.
 }
 
 public class PositionData    { /* init-only properties per Architecture table */ }
@@ -309,8 +309,8 @@ public class BoardState
 public enum CubeOwner { OnRoll, Opponent, Centered }
 ```
 
-Serialization contract: round-trips cleanly through `System.Text.Json` out
-of the box — no consumer-side converter registration required. `CubeOwner`
+Serialization contract: round-trips cleanly through `System.Text.Json` —
+no consumer-side converter registration required. `CubeOwner`
 bundles `JsonStringEnumConverter` via attribute; `Play` bundles
 `PlayJsonConverter` via attribute. Tested without any options-level
 registration in `BgDecisionDataSerializationTests` and
@@ -353,12 +353,13 @@ registration in `BgDecisionDataSerializationTests` and
   the intent is an explicit independent copy, and re-assign back to the
   list slot when mutation is intended.
 - **`Play.DeduplicationKey` is order- and hit-invariant.** Two plays with
-  the same `(FrPt, |ToPt|)` multiset hash and compare equal even if their
-  `Move` order differs and even if one hits while the other does not.
+  the same `(FrPt, |ToPt|)` multiset have equal hashes and compare equal
+  even if their `Move` order differs and even if one hits while the other
+  does not.
   This matches the move-generation dedup contract; do not rely on `Equals`
   to discriminate hit vs non-hit or to compare move ordering.
 - **`Play` requires its bundled `JsonConverter`.** Default property-based
-  serialisation only sees `Count`, losing every move. The
+  serialization only sees `Count`, losing every move. The
   `[JsonConverter(typeof(PlayJsonConverter))]` attribute is intrinsic to
   the type — do not strip it, and do not register a different converter
   for `Play` in consumer-side options without understanding the
@@ -377,8 +378,8 @@ registration in `BgDecisionDataSerializationTests` and
   but `BgMoveGen.MoveGenerator.NextMove` does. Code that hand-builds
   bear-off moves outside the move generator must respect the rule.
 - **`Bg960` mirror conflicts.** Point `i` and point `25 - i` can never
-  both be made (they'd collide under symmetry). `Bg960` blocks the
-  mirror as it picks each quadrant representative.
+  both be made (they'd collide under symmetry). `Bg960` rejects the
+  mirror partner as it picks each quadrant representative.
 - **Pip-count integer width.** Per-product max is `15 × 25 = 375`, total
   fits comfortably in `int`. Do not narrow to `byte` / `short` if you
   copy this logic elsewhere.
@@ -391,9 +392,8 @@ registration in `BgDecisionDataSerializationTests` and
 - **`PlayCandidate.EquityLoss` is non-nullable; `0.0` means no loss
   vs. best.** Identifying the best candidate uses
   `DecisionData.BestPlayIndex`; testing membership in the best-equity
-  equivalence class uses `EquityLoss == 0.0`. Pre-relocation code that
-  filtered by `EquityLoss == null` is no longer correct — that
-  convention does not apply post-flip.
+  equivalence class uses `EquityLoss == 0.0`. Do not filter by
+  `EquityLoss == null` — `EquityLoss` is non-nullable.
 
 ## Subproject-internal next steps
 
