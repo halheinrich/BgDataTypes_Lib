@@ -10,6 +10,9 @@ public class DescriptiveData
     public string? Event { get; init; }
     public string? SourceFile { get; init; }
 
+    /// <summary>Game number within the match (1-based).</summary>
+    public int Game { get; init; }
+
     /// <summary>1-based move number within the game.</summary>
     public int MoveNumber { get; init; }
 

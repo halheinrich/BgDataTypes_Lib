@@ -858,8 +858,29 @@ public class BgDecisionDataSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  MoveNumber and IsStandardStart — DescriptiveData and BgDecisionData
+    //  Game, MoveNumber and IsStandardStart — DescriptiveData and BgDecisionData
     // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DescriptiveData_Game_RoundTrip()
+    {
+        var original = new DescriptiveData
+        {
+            OnRollName = "Mochy",
+            OpponentName = "Falafel",
+            Game = 4
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DescriptiveData>(json, Options)!;
+        Assert.Equal(4, restored.Game);
+    }
+
+    [Fact]
+    public void DescriptiveData_Game_DefaultsToZero()
+    {
+        var d = new DescriptiveData();
+        Assert.Equal(0, d.Game);
+    }
 
     [Fact]
     public void DescriptiveData_MoveNumber_RoundTrip()
