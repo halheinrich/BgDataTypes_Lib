@@ -36,6 +36,8 @@ BgDataTypes_Lib/
   BoardState.cs             — mutable int[26] + HighPointOccupied + apply/undo/ApplyPlay
   CubeOwner.cs              — enum (string-serialized)
   DecisionData.cs
+  DecisionId.cs             — abstract record + XgpDecisionId / XgDecisionId, IParsable + ISpanParsable
+  DecisionIdJsonConverter.cs — canonical-string JSON converter for DecisionId
   DecisionRow.cs            — flat CSV export record
   DescriptiveData.cs
   IDecisionFilterData.cs    — shared filter contract
@@ -49,6 +51,7 @@ BgDataTypes_Lib.Tests/
   BgDataTypes_Lib.Tests.csproj
   BgDecisionDataSerializationTests.cs
   BoardStateTests.cs
+  DecisionIdTests.cs
   DecisionRowSerializationTests.cs
   MoveTests.cs
   PipCountTests.cs
@@ -100,6 +103,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash via order-invariant `DeduplicationKey()`. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
+| `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 
 ### Move encoding
 
@@ -169,6 +173,36 @@ XG-parser-supplied values and may differ if XG ever rounds. Use the
 `PositionData` ones when reading parsed decisions; use the `BoardState`
 ones when computing from a live state.
 
+### DecisionId
+
+Two-shape carrier for the stable, persistent reference to a single decision
+within an XG-family source file:
+
+- `XgpDecisionId(Filename)` — bare filename for `.xgp` single-decision files.
+- `XgDecisionId(Filename, Game, MoveNumber, IsCube)` — colon-separated tuple
+  for `.xg` multi-game files. `IsCube` disambiguates the cube row from the
+  checker-play row XG emits at the same `MoveNumber`.
+
+Both records expose `Filename` via the abstract base; both reject `':'` in
+`Filename` with `ArgumentException` (symmetric — the parse dispatcher
+discriminates the two shapes by the presence of `':'`). Equality follows
+record-default semantics: case-sensitive on `Filename`; tuple-equal on
+the Xg form. `ToString` emits the canonical string form; `Parse` /
+`TryParse` (string and `ReadOnlySpan<char>` overloads) read it back.
+
+Stamping is producer-side — `ConvertXgToJson_Lib` sets `Id` at the four
+`Build*` sites. `Id` is `required` on both `BgDecisionData` and
+`DecisionRow`, so missing-id cases surface as compile errors at any
+construction site that omits the property.
+
+JSON shape: round-trips as the canonical string via the bundled
+`DecisionIdJsonConverter` (type-level `[JsonConverter]` attribute on
+`DecisionId`) — parallel to the `CubeOwner` / `Play` pattern in this lib.
+
+Not added to `IDecisionFilterData`: the filter passes records through
+unchanged and never needs to see the id; adding it would force every
+test-fake implementation to construct one.
+
 ### Composite type
 
 `BgDecisionData = PositionData + DecisionData + DescriptiveData + PlayOutcomeData`.
@@ -234,6 +268,7 @@ public interface IDecisionFilterData
 
 public class BgDecisionData : IDecisionFilterData
 {
+    public required DecisionId Id { get; init; }    // producer-stamped; throws at ctor if omitted
     public PositionData    Position    { get; init; }
     public DecisionData    Decision    { get; init; }
     public DescriptiveData Descriptive { get; init; }
@@ -245,6 +280,7 @@ public class PlayOutcomeData { /* AfterBestBoard, AfterPlayerBoard (each IReadOn
 
 public sealed class DecisionRow : IDecisionFilterData
 {
+    public required DecisionId Id { get; init; }    // producer-stamped; throws at ctor if omitted
     // Flat init-only properties — see DecisionRow.cs for the full set.
     public string MatchScore { get; }   // computed from needs/Crawford/length
     public static string CsvHeader { get; }
@@ -252,6 +288,8 @@ public sealed class DecisionRow : IDecisionFilterData
     // IsCube, MatchScore, and FilterError are [JsonIgnore]d (computed /
     // derived). The three board lists (Board, AfterBestBoard,
     // AfterPlayerBoard) serialize to JSON but are excluded from CSV output.
+    // Id is JSON-serialized (as canonical string) but excluded from CSV
+    // output — CSV columns are listed explicitly.
 }
 
 public class PositionData    { /* init-only properties per Architecture table */ }
@@ -307,6 +345,18 @@ public class BoardState
 }
 
 public enum CubeOwner { OnRoll, Opponent, Centered }
+
+public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<DecisionId>
+{
+    public abstract string Filename { get; init; }
+    public static DecisionId Parse(string s, IFormatProvider? provider = null);
+    public static DecisionId Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null);
+    public static bool TryParse(string? s, IFormatProvider? provider, out DecisionId result);
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out DecisionId result);
+}
+public sealed record XgpDecisionId(string Filename) : DecisionId;
+public sealed record XgDecisionId(
+    string Filename, int Game, int MoveNumber, bool IsCube) : DecisionId;
 ```
 
 Serialization contract: round-trips cleanly through `System.Text.Json` —
@@ -318,6 +368,19 @@ registration in `BgDecisionDataSerializationTests` and
 
 ## Pitfalls
 
+- **`DecisionId.Filename` must not contain `':'`.** The canonical-form
+  separator is the same character used to discriminate the two shapes at
+  parse time. The guard is **symmetric** on both subtypes — without it
+  on `XgpDecisionId`, a `.xgp` filename containing `':'` would parse back
+  as a (malformed) `XgDecisionId`. Both ctors throw `ArgumentException`;
+  `TryParse` returns false on the same input. Documented once on the
+  base; enforced by each derived ctor via a shared private-protected
+  helper.
+- **`Id` is `required` on `BgDecisionData` and `DecisionRow`.** Omitting
+  it at construction is a compile error, not a runtime null. Producers
+  (`ConvertXgToJson_Lib`'s `Build*` sites) must stamp it; tests that
+  construct decision records directly must set it. Aligns with the
+  "producer-supplied identity" contract — no silent default IDs.
 - **`DecisionRow.MatchScore` is computed, not stored.** It is derived from
   `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, and `MatchLength` on every
   access. Do not try to set it, and do not cache it across mutations of

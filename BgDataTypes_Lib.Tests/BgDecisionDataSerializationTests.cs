@@ -267,6 +267,7 @@ public class BgDecisionDataSerializationTests
 
         var original = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Decision = new DecisionData
             {
                 Dice = [6, 4],
@@ -560,6 +561,7 @@ public class BgDecisionDataSerializationTests
 
         var original = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Position = new PositionData
             {
                 Mop = mop,
@@ -682,6 +684,7 @@ public class BgDecisionDataSerializationTests
 
         IDecisionFilterData data = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Position = new PositionData
             {
                 Mop = mop,
@@ -711,6 +714,7 @@ public class BgDecisionDataSerializationTests
     {
         IDecisionFilterData data = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Decision = new DecisionData
             {
                 IsCube = true,
@@ -728,6 +732,7 @@ public class BgDecisionDataSerializationTests
     {
         IDecisionFilterData data = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Decision = new DecisionData
             {
                 IsCube = true,
@@ -747,6 +752,7 @@ public class BgDecisionDataSerializationTests
 
         IDecisionFilterData data = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Position = new PositionData { Mop = mop }
         };
 
@@ -758,6 +764,7 @@ public class BgDecisionDataSerializationTests
     {
         IDecisionFilterData data = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Descriptive = new DescriptiveData { MatchLength = 11 }
         };
 
@@ -807,6 +814,7 @@ public class BgDecisionDataSerializationTests
 
         var original = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Decision = new DecisionData { IsCube = false, UserPlayError = 0.018 },
             Outcome = new PlayOutcomeData
             {
@@ -832,6 +840,7 @@ public class BgDecisionDataSerializationTests
 
         IDecisionFilterData data = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Decision = new DecisionData { IsCube = false },
             Outcome = new PlayOutcomeData
             {
@@ -849,6 +858,7 @@ public class BgDecisionDataSerializationTests
     {
         IDecisionFilterData data = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Decision = new DecisionData { IsCube = true, UserDoubleError = 0.025 }
         };
 
@@ -929,6 +939,7 @@ public class BgDecisionDataSerializationTests
     {
         IDecisionFilterData data = new BgDecisionData
         {
+            Id = new XgpDecisionId("test.xgp"),
             Descriptive = new DescriptiveData
             {
                 OnRollName = "Hal",
@@ -944,9 +955,40 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void BgDecisionData_IDecisionFilterData_MoveNumberAndIsStandardStart_Defaults()
     {
-        IDecisionFilterData data = new BgDecisionData();
+        IDecisionFilterData data = new BgDecisionData { Id = new XgpDecisionId("test.xgp") };
 
         Assert.Equal(0, data.MoveNumber);
         Assert.False(data.IsStandardStart);
+    }
+
+    // -----------------------------------------------------------------------
+    //  Id — persistent decision identifier
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void BgDecisionData_Id_RoundTrip_Xgp()
+    {
+        var original = new BgDecisionData { Id = new XgpDecisionId("match.xgp") };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
+
+        Assert.Equal(new XgpDecisionId("match.xgp"), restored.Id);
+        Assert.Contains("\"Id\":\"match.xgp\"", json);
+    }
+
+    [Fact]
+    public void BgDecisionData_Id_RoundTrip_Xg()
+    {
+        var original = new BgDecisionData
+        {
+            Id = new XgDecisionId("match.xg", Game: 4, MoveNumber: 22, IsCube: true)
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
+
+        Assert.Equal(
+            new XgDecisionId("match.xg", 4, 22, IsCube: true),
+            restored.Id);
+        Assert.Contains("\"Id\":\"match.xg:g4:m22:cube\"", json);
     }
 }

@@ -7,6 +7,17 @@ namespace BgDataTypes_Lib;
 /// </summary>
 public sealed class DecisionRow : IDecisionFilterData
 {
+    /// <summary>
+    /// Stable, persistent identifier for this decision within its source file.
+    /// Producer-supplied at the build site (see <c>ConvertXgToJson_Lib</c>) —
+    /// required so that uninitialized cases surface at construction rather than
+    /// later as silent null reads. Serialized to JSON via
+    /// <see cref="DecisionIdJsonConverter"/>; excluded from CSV (the column set
+    /// is explicit and the ID derives from existing CSV columns at read time
+    /// if a consumer wants it).
+    /// </summary>
+    public required DecisionId Id { get; init; }
+
     /// <summary>XGID position string.</summary>
     public string Xgid { get; init; } = string.Empty;
 

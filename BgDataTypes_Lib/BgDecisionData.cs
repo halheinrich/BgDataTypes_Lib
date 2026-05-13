@@ -2,6 +2,16 @@
 
 public class BgDecisionData : IDecisionFilterData
 {
+    /// <summary>
+    /// Stable, persistent identifier for this decision within its source file.
+    /// Producer-supplied at the build site (see <c>ConvertXgToJson_Lib</c>) —
+    /// required so that uninitialized cases surface at construction rather than
+    /// later as silent null reads. Not part of <see cref="IDecisionFilterData"/>
+    /// (the filter passes records through unchanged and never needs to see the
+    /// ID).
+    /// </summary>
+    public required DecisionId Id { get; init; }
+
     public PositionData    Position    { get; init; } = new();
     public DecisionData    Decision    { get; init; } = new();
     public DescriptiveData Descriptive { get; init; } = new();
