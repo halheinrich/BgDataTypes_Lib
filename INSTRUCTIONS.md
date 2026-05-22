@@ -34,6 +34,7 @@ BgDataTypes_Lib/
   BgDataTypes_Lib.csproj
   BgDecisionData.cs         — composite: Position + Decision + Descriptive + Outcome
   BoardState.cs             — mutable int[26] + HighPointOccupied + apply/undo/ApplyPlay
+  CubeAction.cs             — enum (string-serialized)
   CubeOwner.cs              — enum (string-serialized)
   DecisionData.cs
   DecisionId.cs             — abstract record + XgpDecisionId / XgDecisionId, IParsable + ISpanParsable
@@ -51,6 +52,7 @@ BgDataTypes_Lib.Tests/
   BgDataTypes_Lib.Tests.csproj
   BgDecisionDataSerializationTests.cs
   BoardStateTests.cs
+  CubeActionTests.cs
   DecisionIdTests.cs
   DecisionRowSerializationTests.cs
   MoveTests.cs
@@ -67,10 +69,10 @@ move primitives `Move` (`readonly record struct`) and `Play` (mutable
 their move-generation origins. `BoardState` is a `class` but mutable —
 the one deliberate exception (see "Mutability exception" below).
 Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
-attributes: `JsonStringEnumConverter` on `CubeOwner` and `PlayJsonConverter`
-on `Play`. Consumers do not need to register either converter on their
-`JsonSerializerOptions` — the attributes carry the contract on the types
-themselves.
+attributes: `JsonStringEnumConverter` on `CubeOwner` and `CubeAction`, and
+`PlayJsonConverter` on `Play`. Consumers do not need to register any of these
+converters on their `JsonSerializerOptions` — the attributes carry the
+contract on the types themselves.
 
 ### Mutability exception
 
@@ -100,6 +102,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | Type | Notes |
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
+| `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash via order-invariant `DeduplicationKey()`. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
@@ -345,6 +348,8 @@ public class BoardState
 }
 
 public enum CubeOwner { OnRoll, Opponent, Centered }
+
+public enum CubeAction { NoDouble, Double, Take, Pass }
 
 public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<DecisionId>
 {
