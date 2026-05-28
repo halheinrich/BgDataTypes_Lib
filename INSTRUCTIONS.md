@@ -212,6 +212,44 @@ Not added to `IDecisionFilterData`: the filter passes records through
 unchanged and never needs to see the id; adding it would force every
 test-fake implementation to construct one.
 
+### Cube-decision scoring on DecisionData
+
+`DecisionData` carries the cube-decision scoring policy as computed members
+that derive from `NoDoubleEquity` and `DoubleTakeEquity` (the pass-equity
+constant `1.0` is intrinsic to cube-equity normalisation). Two parallel views,
+chosen by the consumer:
+
+- **Verdict-level helpers** (quiz scoring; aggregate): `BestVerdict`,
+  `VerdictEquityLoss(v)`, and its components `DoublerDecisionEquityLoss(v)`
+  / `TakeDecisionEquityLoss(v)`. Encode the **NoDouble↔TooGood
+  strategic-confusion override**: when the user's verdict matches the
+  correct atomic doubler action but differs strategically (plays `NoDouble`
+  when `TooGood` is correct, or vice versa), the DDE is bumped from `0`
+  to the TDE so the total penalty reflects both halves of the
+  misjudgement. The DoubleTake↔DoublePass pair does *not* trigger the
+  override — its atomic-baseline DDE of `0` stands.
+
+- **Atomic-action helpers** (stats; "two decisions evaluated separately";
+  no overrides): `BestDoublerAction`, `BestResponderAction`,
+  `DoublerActionError(action)`, `ResponderActionError(action)`. Pure
+  equity-loss between two cube actions, no strategic-confusion overrides.
+
+All eight throw `InvalidOperationException` when `IsCube` is false — they
+are only meaningful on cube decisions, and silent zero / default returns
+on play decisions would mask misuse. The two atomic-error methods further
+throw `ArgumentOutOfRangeException` when the action argument is from the
+wrong half (e.g. `Take` or `Pass` passed to `DoublerActionError`).
+
+Tie-breaking follows the renderer's existing convention so a downstream
+consumer that collapses the inline cube derivation into calls to these
+helpers preserves behaviour: `TooGood` on `NoDoubleEquity == 1`,
+`NoDouble` on the doubler-equity tie, `Pass` on `DoubleTakeEquity == 1`.
+
+The three computed properties (`BestVerdict`, `BestDoublerAction`,
+`BestResponderAction`) carry `[JsonIgnore]` so `System.Text.Json` does
+not invoke their throwing getters when serialising play decisions. The
+methods are intrinsically not serialised because they take parameters.
+
 ### Composite type
 
 `BgDecisionData = PositionData + DecisionData + DescriptiveData + PlayOutcomeData`.
@@ -302,9 +340,30 @@ public sealed class DecisionRow : IDecisionFilterData
 }
 
 public class PositionData    { /* init-only properties per Architecture table */ }
-public class DecisionData    { /* init-only properties per Architecture table */ }
 public class DescriptiveData { /* init-only properties per Architecture table */ }
 public class PlayCandidate   { /* init-only properties per Architecture table */ }
+
+public class DecisionData
+{
+    // Init-only properties per Architecture table (Dice, Plays, BestPlayIndex,
+    // UserPlayIndex, UserPlayError?, IsCube, CubeDepth, CubeDepthAbbreviation,
+    // CubeDepthRank, NoDoubleEquity, DoubleTakeEquity, the pct fields,
+    // ProbOfOpponentErrorJustifyingDouble, UserDoubleError?, UserTakeError?).
+
+    // Cube-decision scoring (computed; throw InvalidOperationException when IsCube is false).
+    [JsonIgnore] public CubeVerdict BestVerdict          { get; }   // four-way aggregate
+    [JsonIgnore] public CubeAction  BestDoublerAction    { get; }   // Double or NoDouble
+    [JsonIgnore] public CubeAction  BestResponderAction  { get; }   // Take or Pass
+
+    public double DoublerActionError(CubeAction action);            // 0 if action == BestDoublerAction;
+                                                                    // throws ArgumentOutOfRangeException on Take/Pass.
+    public double ResponderActionError(CubeAction action);          // 0 if action == BestResponderAction;
+                                                                    // throws ArgumentOutOfRangeException on Double/NoDouble.
+
+    public double VerdictEquityLoss(CubeVerdict verdict);           // DDE + TDE; includes NoDouble↔TooGood override.
+    public double DoublerDecisionEquityLoss(CubeVerdict verdict);   // DDE: atomic baseline, with NoDouble↔TooGood override.
+    public double TakeDecisionEquityLoss(CubeVerdict verdict);      // TDE: ResponderActionError on verdict's responder action.
+}
 
 public readonly record struct Move(int FrPt, int ToPt);
 
@@ -477,6 +536,20 @@ registration in `BgDecisionDataSerializationTests` and
   `DecisionData.BestPlayIndex`; testing membership in the best-equity
   equivalence class uses `EquityLoss == 0.0`. Do not filter by
   `EquityLoss == null` — `EquityLoss` is non-nullable.
+- **`DecisionData` cube-scoring helpers throw when `IsCube` is false.**
+  All eight (three properties + five methods) guard on `IsCube` and
+  throw `InvalidOperationException` on play decisions — they encode a
+  cube-only policy and silent zeros would mask misuse. Callers in
+  mixed-decision contexts must check `IsCube` first. The three
+  computed properties carry `[JsonIgnore]` so `System.Text.Json` does
+  not invoke their throwing getters during serialisation; do not strip
+  those attributes.
+- **Cube-scoring atomic-action methods reject the wrong half.**
+  `DoublerActionError(CubeAction)` accepts only `Double` / `NoDouble`;
+  `ResponderActionError(CubeAction)` accepts only `Take` / `Pass`. The
+  other half throws `ArgumentOutOfRangeException`. The verdict-level
+  methods route via `CubeActionPair.FromVerdict`, so they cannot
+  produce a wrong-half action from a defined `CubeVerdict`.
 
 ## Subproject-internal next steps
 
