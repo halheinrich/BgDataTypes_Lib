@@ -35,6 +35,7 @@ BgDataTypes_Lib/
   BgDecisionData.cs         — composite: Position + Decision + Descriptive + Outcome
   BoardState.cs             — mutable int[26] + HighPointOccupied + apply/undo/ApplyPlay
   CubeAction.cs             — enum (string-serialized)
+  CubeDecisionPair.cs       — readonly record struct (Doubler, Taker), validated halves
   CubeOwner.cs              — enum (string-serialized)
   DecisionData.cs
   DecisionId.cs             — abstract record + XgpDecisionId / XgDecisionId, IParsable + ISpanParsable
@@ -53,6 +54,7 @@ BgDataTypes_Lib.Tests/
   BgDecisionDataSerializationTests.cs
   BoardStateTests.cs
   CubeActionTests.cs
+  CubeDecisionPairTests.cs
   DecisionIdTests.cs
   DecisionRowSerializationTests.cs
   MoveTests.cs
@@ -103,6 +105,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
+| `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash via order-invariant `DeduplicationKey()`. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
@@ -219,9 +222,9 @@ cross-decision override:
   `min(DoubleTakeEquity, 1) > NoDoubleEquity`; the error is the equity gap
   between the chosen action and that best.
 
-- **Responder's take / pass decision**: `BestResponderAction` and
-  `ResponderActionError(action)`. `BestResponderAction` is `Take` iff
-  `DoubleTakeEquity < 1`; the error is the equity gap (responder
+- **Taker's take / pass decision**: `BestTakerAction` and
+  `TakerActionError(action)`. `BestTakerAction` is `Take` iff
+  `DoubleTakeEquity < 1`; the error is the equity gap (taker
   perspective) between the chosen action and that best.
 
 All four throw `InvalidOperationException` when `IsCube` is false — they
@@ -235,7 +238,7 @@ consumer that collapses the inline cube derivation into calls to these
 helpers preserves behaviour: `NoDouble` on the doubler-equity tie, `Pass`
 on `DoubleTakeEquity == 1`.
 
-The two computed properties (`BestDoublerAction`, `BestResponderAction`)
+The two computed properties (`BestDoublerAction`, `BestTakerAction`)
 carry `[JsonIgnore]` so `System.Text.Json` does not invoke their throwing
 getters when serialising play decisions. The error methods are
 intrinsically not serialised because they take parameters.
@@ -345,13 +348,13 @@ public class DecisionData
     // ProbOfOpponentErrorJustifyingDouble, UserDoubleError?, UserTakeError?).
 
     // Cube-decision scoring (computed; throw InvalidOperationException when IsCube is false).
-    [JsonIgnore] public CubeAction  BestDoublerAction    { get; }   // Double or NoDouble
-    [JsonIgnore] public CubeAction  BestResponderAction  { get; }   // Take or Pass
+    [JsonIgnore] public CubeAction  BestDoublerAction { get; }   // Double or NoDouble
+    [JsonIgnore] public CubeAction  BestTakerAction   { get; }   // Take or Pass
 
-    public double DoublerActionError(CubeAction action);            // 0 if action == BestDoublerAction;
-                                                                    // throws ArgumentOutOfRangeException on Take/Pass.
-    public double ResponderActionError(CubeAction action);          // 0 if action == BestResponderAction;
-                                                                    // throws ArgumentOutOfRangeException on Double/NoDouble.
+    public double DoublerActionError(CubeAction action);          // 0 if action == BestDoublerAction;
+                                                                  // throws ArgumentOutOfRangeException on Take/Pass.
+    public double TakerActionError(CubeAction action);            // 0 if action == BestTakerAction;
+                                                                  // throws ArgumentOutOfRangeException on Double/NoDouble.
 }
 
 public readonly record struct Move(int FrPt, int ToPt);
@@ -404,6 +407,11 @@ public class BoardState
 public enum CubeOwner { OnRoll, Opponent, Centered }
 
 public enum CubeAction { NoDouble, Double, Take, Pass }
+
+// Validated halves: Doubler ∈ {NoDouble, Double}, Taker ∈ {Take, Pass};
+// a cross-half value throws ArgumentOutOfRangeException. default is
+// non-meaningful (see Pitfalls).
+public readonly record struct CubeDecisionPair(CubeAction Doubler, CubeAction Taker);
 
 public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<DecisionId>
 {
@@ -526,8 +534,13 @@ registration in `BgDecisionDataSerializationTests` and
   those attributes.
 - **Cube-scoring atomic-action methods reject the wrong half.**
   `DoublerActionError(CubeAction)` accepts only `Double` / `NoDouble`;
-  `ResponderActionError(CubeAction)` accepts only `Take` / `Pass`. The
+  `TakerActionError(CubeAction)` accepts only `Take` / `Pass`. The
   other half throws `ArgumentOutOfRangeException`.
+- **`default(CubeDecisionPair)` is non-meaningful.** A `record struct`
+  cannot run its half-guards on `default`, so `default(CubeDecisionPair)`
+  is `(NoDouble, NoDouble)` — whose `Taker` is not a valid taker action.
+  Construct pairs explicitly; do not treat `default` as a "no decision"
+  sentinel. This is the standard value-type caveat, shared with `Play`.
 
 ## Subproject-internal next steps
 

@@ -70,8 +70,8 @@ public class DecisionData
     //
     //    * The doubler's double / no-double decision —
     //      BestDoublerAction, DoublerActionError.
-    //    * The responder's take / pass decision —
-    //      BestResponderAction, ResponderActionError.
+    //    * The taker's take / pass decision —
+    //      BestTakerAction, TakerActionError.
     //
     //  Pure equity-loss between two cube actions, evaluated separately, with
     //  no cross-decision overrides. All four throw InvalidOperationException
@@ -111,13 +111,13 @@ public class DecisionData
     }
 
     /// <summary>
-    /// The correct atomic responder action — <see cref="CubeAction.Take"/>
-    /// when taking yields better responder equity than passing,
+    /// The correct atomic taker action — <see cref="CubeAction.Take"/>
+    /// when taking yields better taker equity than passing,
     /// <see cref="CubeAction.Pass"/> otherwise.
     /// </summary>
     /// <remarks>
     /// Determined from the doubler's <see cref="DoubleTakeEquity"/>: the
-    /// responder's take equity is its negation, and pass equity is
+    /// taker's take equity is its negation, and pass equity is
     /// <c>-1</c>. Tie (<c>DoubleTakeEquity == 1</c>) favours
     /// <see cref="CubeAction.Pass"/>.
     /// </remarks>
@@ -125,7 +125,7 @@ public class DecisionData
     /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
     /// </exception>
     [JsonIgnore]
-    public CubeAction BestResponderAction
+    public CubeAction BestTakerAction
     {
         get
         {
@@ -169,14 +169,14 @@ public class DecisionData
     }
 
     /// <summary>
-    /// Equity loss the responder incurs by choosing <paramref name="action"/>
-    /// rather than the optimal responder action — <c>0</c> if
-    /// <paramref name="action"/> matches <see cref="BestResponderAction"/>,
-    /// otherwise the positive equity gap (measured from the responder's
+    /// Equity loss the taker incurs by choosing <paramref name="action"/>
+    /// rather than the optimal taker action — <c>0</c> if
+    /// <paramref name="action"/> matches <see cref="BestTakerAction"/>,
+    /// otherwise the positive equity gap (measured from the taker's
     /// perspective).
     /// </summary>
     /// <remarks>
-    /// Responder equities are the doubler's negated: <c>Take</c> ⇒
+    /// Taker equities are the doubler's negated: <c>Take</c> ⇒
     /// <c>-DoubleTakeEquity</c>; <c>Pass</c> ⇒ <c>-1</c>.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
@@ -186,7 +186,7 @@ public class DecisionData
     /// Thrown when <paramref name="action"/> is not
     /// <see cref="CubeAction.Take"/> or <see cref="CubeAction.Pass"/>.
     /// </exception>
-    public double ResponderActionError(CubeAction action)
+    public double TakerActionError(CubeAction action)
     {
         RequireCube();
         double actionEquity = action switch
@@ -194,7 +194,7 @@ public class DecisionData
             CubeAction.Take => -DoubleTakeEquity,
             CubeAction.Pass => -PassEquity,
             _ => throw new ArgumentOutOfRangeException(nameof(action), action,
-                "ResponderActionError requires a responder-half action (Take or Pass).")
+                "TakerActionError requires a taker-half action (Take or Pass).")
         };
         double bestEquity = Math.Max(-DoubleTakeEquity, -PassEquity);
         return Math.Max(0.0, bestEquity - actionEquity);

@@ -9,7 +9,7 @@ public class DecisionDataCubeScoringTests
     //
     //   * the doubler's double / no-double decision, which depends on
     //     NoDoubleEquity vs. min(DoubleTakeEquity, 1); and
-    //   * the responder's take / pass decision, which depends on
+    //   * the taker's take / pass decision, which depends on
     //     DoubleTakeEquity vs. 1.
     //
     // Each test drives the helper under test directly from the equities its
@@ -41,20 +41,20 @@ public class DecisionDataCubeScoringTests
     }
 
     // ---------------------------------------------------------------------
-    //  Responder decision: BestResponderAction
+    //  Taker decision: BestTakerAction
     // ---------------------------------------------------------------------
 
     [Theory]
     // (DoubleTakeEquity, expected) — Take iff E_DT < 1. NoDoubleEquity is
-    // irrelevant to the responder half, so it is held at a neutral 0.50.
+    // irrelevant to the taker half, so it is held at a neutral 0.50.
     [InlineData(0.10, CubeAction.Take)]
     [InlineData(0.60, CubeAction.Take)]
     [InlineData(1.20, CubeAction.Pass)]
     [InlineData(1.50, CubeAction.Pass)]
-    public void BestResponderAction_ReturnsExpected(
+    public void BestTakerAction_ReturnsExpected(
         double doubleTakeEquity, CubeAction expected)
     {
-        Assert.Equal(expected, MakeCube(0.50, doubleTakeEquity).BestResponderAction);
+        Assert.Equal(expected, MakeCube(0.50, doubleTakeEquity).BestTakerAction);
     }
 
     // ---------------------------------------------------------------------
@@ -81,11 +81,11 @@ public class DecisionDataCubeScoringTests
     }
 
     // ---------------------------------------------------------------------
-    //  Responder decision: ResponderActionError
+    //  Taker decision: TakerActionError
     // ---------------------------------------------------------------------
 
     [Theory]
-    // (DoubleTakeEquity, action, expectedError). Responder equities are the
+    // (DoubleTakeEquity, action, expectedError). Taker equities are the
     // doubler's negated: Take = -E_DT, Pass = -1; best = max(-E_DT, -1).
     [InlineData(0.10, CubeAction.Take, 0.0)]    // best = Take
     [InlineData(0.10, CubeAction.Pass, 0.90)]   // 1 - 0.10
@@ -95,11 +95,11 @@ public class DecisionDataCubeScoringTests
     [InlineData(1.20, CubeAction.Take, 0.20)]   // 1.20 - 1
     [InlineData(1.50, CubeAction.Pass, 0.0)]    // best = Pass
     [InlineData(1.50, CubeAction.Take, 0.50)]   // 1.50 - 1
-    public void ResponderActionError_ZeroForBest_PositiveForOther(
+    public void TakerActionError_ZeroForBest_PositiveForOther(
         double doubleTakeEquity, CubeAction action, double expectedError)
     {
         Assert.Equal(expectedError,
-            MakeCube(0.50, doubleTakeEquity).ResponderActionError(action),
+            MakeCube(0.50, doubleTakeEquity).TakerActionError(action),
             precision: 10);
     }
 
@@ -113,9 +113,9 @@ public class DecisionDataCubeScoringTests
         var play = new DecisionData();   // IsCube defaults to false
 
         Assert.Throws<InvalidOperationException>(() => _ = play.BestDoublerAction);
-        Assert.Throws<InvalidOperationException>(() => _ = play.BestResponderAction);
+        Assert.Throws<InvalidOperationException>(() => _ = play.BestTakerAction);
         Assert.Throws<InvalidOperationException>(() => play.DoublerActionError(CubeAction.Double));
-        Assert.Throws<InvalidOperationException>(() => play.ResponderActionError(CubeAction.Take));
+        Assert.Throws<InvalidOperationException>(() => play.TakerActionError(CubeAction.Take));
     }
 
     // ---------------------------------------------------------------------
@@ -125,19 +125,19 @@ public class DecisionDataCubeScoringTests
     [Theory]
     [InlineData(CubeAction.Take)]
     [InlineData(CubeAction.Pass)]
-    public void DoublerActionError_OnNonDoublerAction_Throws(CubeAction responderAction)
+    public void DoublerActionError_OnNonDoublerAction_Throws(CubeAction takerAction)
     {
         var d = MakeCube(0.30, 0.60);
-        Assert.Throws<ArgumentOutOfRangeException>(() => d.DoublerActionError(responderAction));
+        Assert.Throws<ArgumentOutOfRangeException>(() => d.DoublerActionError(takerAction));
     }
 
     [Theory]
     [InlineData(CubeAction.Double)]
     [InlineData(CubeAction.NoDouble)]
-    public void ResponderActionError_OnNonResponderAction_Throws(CubeAction doublerAction)
+    public void TakerActionError_OnNonTakerAction_Throws(CubeAction doublerAction)
     {
         var d = MakeCube(0.30, 0.60);
-        Assert.Throws<ArgumentOutOfRangeException>(() => d.ResponderActionError(doublerAction));
+        Assert.Throws<ArgumentOutOfRangeException>(() => d.TakerActionError(doublerAction));
     }
 
     // ---------------------------------------------------------------------
@@ -163,7 +163,7 @@ public class DecisionDataCubeScoringTests
 
         string json = JsonSerializer.Serialize(d);
 
-        Assert.DoesNotContain("\"BestDoublerAction\"",   json);
-        Assert.DoesNotContain("\"BestResponderAction\"", json);
+        Assert.DoesNotContain("\"BestDoublerAction\"", json);
+        Assert.DoesNotContain("\"BestTakerAction\"",   json);
     }
 }
