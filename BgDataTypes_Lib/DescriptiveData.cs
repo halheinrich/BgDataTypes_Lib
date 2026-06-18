@@ -19,4 +19,10 @@ public class DescriptiveData
     /// <summary>True if the game started from the canonical opening position.
     /// False for non-standard starts (custom positions, problem setups, Bg960 variants).</summary>
     public bool IsStandardStart { get; init; }
+
+    /// <summary>XG's per-decision comment text. Empty when none was recorded.</summary>
+    public string Comment { get; init; } = string.Empty;
+
+    /// <summary>True if the user flagged this decision in XG (the "flag" marker).</summary>
+    public bool Flagged { get; init; }
 }

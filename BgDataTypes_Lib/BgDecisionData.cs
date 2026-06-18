@@ -12,6 +12,15 @@ public class BgDecisionData : IDecisionFilterData
     /// </summary>
     public required DecisionId Id { get; init; }
 
+    /// <summary>
+    /// XGID position string. Lives at the top level rather than inside
+    /// <see cref="Position"/> because it is a digest of the whole decision
+    /// context (position, cube/match state, and the decision itself), not a
+    /// property of the minimal derived <see cref="PositionData"/>. Mirrors
+    /// <see cref="DecisionRow.Xgid"/>.
+    /// </summary>
+    public string Xgid { get; init; } = string.Empty;
+
     public PositionData    Position    { get; init; } = new();
     public DecisionData    Decision    { get; init; } = new();
     public DescriptiveData Descriptive { get; init; } = new();

@@ -35,6 +35,12 @@ public class DecisionData
     public double NoDoubleEquity { get; init; }
     public double DoubleTakeEquity { get; init; }
 
+    /// <summary>Cubeless equity of the no-double evaluation. Defaults to 0.0.</summary>
+    public double CubelessNoDoubleEquity { get; init; }
+
+    /// <summary>Cubeless equity of the double/take evaluation. Defaults to 0.0.</summary>
+    public double CubelessDoubleTakeEquity { get; init; }
+
     public double WinPctAfterNoDouble { get; init; }
     public double GammonPctAfterNoDouble { get; init; }
     public double BgPctAfterNoDouble { get; init; }

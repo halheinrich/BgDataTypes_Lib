@@ -991,4 +991,59 @@ public class BgDecisionDataSerializationTests
             restored.Id);
         Assert.Contains("\"Id\":\"match.xg:g4:m22:cube\"", json);
     }
+
+    // -----------------------------------------------------------------------
+    //  Xgid / Comment / Flagged / cubeless equities — new decision fields
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void BgDecisionData_NewDecisionFields_DefaultToEmptyAndZero()
+    {
+        var data = new BgDecisionData { Id = new XgpDecisionId("test.xgp") };
+
+        Assert.Equal(string.Empty, data.Xgid);
+        Assert.Equal(string.Empty, data.Descriptive.Comment);
+        Assert.False(data.Descriptive.Flagged);
+        Assert.Equal(0.0, data.Decision.CubelessNoDoubleEquity);
+        Assert.Equal(0.0, data.Decision.CubelessDoubleTakeEquity);
+    }
+
+    [Fact]
+    public void BgDecisionData_NewDecisionFields_RoundTrip()
+    {
+        var original = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Xgid = "XGID=-b----E-C---eE---c-e----B-:0:0:1:00:0:0:0:0:10",
+            Decision = new DecisionData
+            {
+                Dice = [0, 0],
+                IsCube = true,
+                NoDoubleEquity = 0.312,
+                DoubleTakeEquity = 0.287,
+                CubelessNoDoubleEquity = 0.205,
+                CubelessDoubleTakeEquity = 0.198
+            },
+            Descriptive = new DescriptiveData
+            {
+                OnRollName = "Hal",
+                OpponentName = "Bot",
+                Comment = "Tricky double — too good?",
+                Flagged = true
+            }
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
+
+        // Xgid serializes at the top level, not inside Position.
+        Assert.Contains("\"Xgid\":\"XGID=-b----E-C---eE---c-e----B-:0:0:1:00:0:0:0:0:10\"", json);
+        Assert.Equal(original.Xgid, restored.Xgid);
+
+        Assert.Equal(original.Descriptive.Comment, restored.Descriptive.Comment);
+        Assert.True(restored.Descriptive.Flagged);
+
+        Assert.Equal(original.Decision.CubelessNoDoubleEquity, restored.Decision.CubelessNoDoubleEquity);
+        Assert.Equal(original.Decision.CubelessDoubleTakeEquity, restored.Decision.CubelessDoubleTakeEquity);
+    }
 }
