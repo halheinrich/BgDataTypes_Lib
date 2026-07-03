@@ -432,4 +432,130 @@ public class BoardStateTests
         Assert.Equal(-5, s.Points[19]);
         Assert.Equal(24, s.HighPointOccupied);
     }
+
+    // ── FlippedCopy ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Asymmetric position with checkers on both bars:
+    /// on-roll 6(4), 13(3), 24(1), bar[25](2); opponent 3(-2), 20(-3), bar[0](-1).
+    /// Not flip-symmetric (e.g. Points[24] = 1 but -Points[1] = 0), so tests
+    /// built on it cannot pass vacuously the way flip-symmetric positions can.
+    /// </summary>
+    private static BoardState AsymmetricBoard()
+    {
+        var mop = new int[26];
+        mop[25] = 2;
+        mop[24] = 1;
+        mop[13] = 3;
+        mop[6] = 4;
+        mop[0] = -1;
+        mop[3] = -2;
+        mop[20] = -3;
+        return BoardState.FromMop(mop);
+    }
+
+    [Fact]
+    public void FlippedCopy_NegatesAndReversesIncludingBars()
+    {
+        var s = AsymmetricBoard();
+
+        var f = s.FlippedCopy();
+
+        // Exact transform: negate + reverse, point i ↔ 25 - i (bars 0 ↔ 25).
+        for (int i = 0; i <= 25; i++)
+        {
+            Assert.True(
+                f.Points[i] == -s.Points[25 - i],
+                $"Point {i}: expected {-s.Points[25 - i]}, got {f.Points[i]}");
+        }
+    }
+
+    [Fact]
+    public void FlippedCopy_FlipOfFlip_IsIdentity()
+    {
+        var s = AsymmetricBoard();
+
+        var back = s.FlippedCopy().FlippedCopy();
+
+        Assert.Equal(s.Points, back.Points);
+        Assert.Equal(s.HighPointOccupied, back.HighPointOccupied);
+    }
+
+    [Fact]
+    public void FlippedCopy_StandardStart_IsFlipSymmetric()
+    {
+        var s = BoardState.Standard();
+
+        var f = s.FlippedCopy();
+
+        Assert.Equal(s.Points, f.Points);
+        Assert.Equal(s.HighPointOccupied, f.HighPointOccupied);
+    }
+
+    [Fact]
+    public void FlippedCopy_LeavesReceiverUntouched_AndCopyIsIndependent()
+    {
+        var s = AsymmetricBoard();
+        int[] before = (int[])s.Points.Clone();
+        int highBefore = s.HighPointOccupied;
+
+        var f = s.FlippedCopy();
+
+        Assert.Equal(before, s.Points);
+        Assert.Equal(highBefore, s.HighPointOccupied);
+
+        // Mutating the copy must not leak back into the receiver.
+        f.Points[6] = 0;
+        Assert.Equal(before, s.Points);
+    }
+
+    [Fact]
+    public void FlippedCopy_SwapsPipCounts()
+    {
+        var s = AsymmetricBoard();
+        // Guard against a vacuous pass: the two pip counts must differ.
+        Assert.NotEqual(s.PipCount, s.OpponentPipCount);
+
+        var f = s.FlippedCopy();
+
+        Assert.Equal(s.OpponentPipCount, f.PipCount);
+        Assert.Equal(s.PipCount, f.OpponentPipCount);
+    }
+
+    [Fact]
+    public void FlippedCopy_HighPointOccupied_MatchesFreshConstruction()
+    {
+        var s = AsymmetricBoard();
+
+        var f = s.FlippedCopy();
+        var fresh = BoardState.FromMop(f.ToMop());
+
+        Assert.Equal(fresh.HighPointOccupied, f.HighPointOccupied);
+    }
+
+    [Fact]
+    public void FlippedCopy_EmptyBoard_StaysEmpty()
+    {
+        var f = new BoardState().FlippedCopy();
+
+        Assert.All(f.Points, p => Assert.Equal(0, p));
+        Assert.Equal(0, f.HighPointOccupied);
+    }
+
+    [Fact]
+    public void FlippedCopy_Bg960_IsFlipSymmetric()
+    {
+        // Bg960 positions are symmetric by construction (each made point's
+        // mirror holds the negated count), so a flipped copy must reproduce
+        // the original exactly.
+        for (int seed = 1; seed <= 50; seed++)
+        {
+            var s = BoardState.Bg960(seed: seed);
+            var f = s.FlippedCopy();
+            Assert.True(
+                f.Points.SequenceEqual(s.Points),
+                $"Seed {seed}: flipped copy differs from original");
+            Assert.Equal(s.HighPointOccupied, f.HighPointOccupied);
+        }
+    }
 }

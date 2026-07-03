@@ -67,6 +67,30 @@ public class BoardState
         return copy;
     }
 
+    /// <summary>
+    /// Return a new <see cref="BoardState"/> re-expressed from the opponent's
+    /// perspective; this instance is untouched. Every value is negated and the
+    /// array reversed (point <c>i</c> ↔ point <c>25 - i</c>), so the bars swap
+    /// (<c>[0]</c> ↔ <c>[25]</c>), positive values become the previous opponent's
+    /// checkers, and <see cref="PipCount"/> / <see cref="OpponentPipCount"/> swap.
+    /// The transform is an involution: <c>FlippedCopy().FlippedCopy()</c>
+    /// reproduces the original position. <see cref="HighPointOccupied"/> is
+    /// recomputed for the new frame.
+    ///
+    /// <para>
+    /// Use this to <em>query</em> a position from the other player's frame (e.g.
+    /// cube-response evaluation) without advancing state. To advance past a turn
+    /// boundary, use <see cref="ApplyPlay(Play)"/>, which applies moves and flips
+    /// atomically in place.
+    /// </para>
+    /// </summary>
+    public BoardState FlippedCopy()
+    {
+        var copy = Copy();
+        copy.Flip();
+        return copy;
+    }
+
     // ── Mop bridge ────────────────────────────────────────────────
 
     /// <summary>
@@ -400,9 +424,11 @@ public class BoardState
     /// <summary>
     /// Flip perspective: negate every value and reverse the array, so points
     /// 0↔25, 1↔24, …, 12↔13. Implementation mechanics for
-    /// <see cref="ApplyPlay(Play)"/> — never exposed publicly. Callers should
-    /// always reason in on-roll POV; <see cref="ApplyPlay(Play)"/> performs
-    /// the flip atomically with the move application.
+    /// <see cref="ApplyPlay(Play)"/> and <see cref="FlippedCopy"/> — never
+    /// exposed publicly. Callers should always reason in on-roll POV;
+    /// <see cref="ApplyPlay(Play)"/> performs the flip atomically with the
+    /// move application, and <see cref="FlippedCopy"/> flips a copy for
+    /// other-frame queries.
     ///
     /// Borne-off counts are not tracked on <see cref="BoardState"/> (checkers
     /// simply leave the board), so nothing else needs swapping.

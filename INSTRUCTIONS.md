@@ -150,16 +150,22 @@ Three layers of mutation, in increasing scope:
   past a turn boundary; callers reasoning in on-roll POV never need to
   flip explicitly.
 
-- **`Flip()`** — `private`. Implementation mechanic for `ApplyPlay`.
-  Negates and reverses the array (point `i` ↔ point `25-i`, swapping
-  the bars in the process), then recomputes `HighPointOccupied` from
-  scratch. Not exposed: the design intent is that on-roll POV reasoning
-  is the only POV consumers ever see.
+- **`Flip()`** — `private`. Implementation mechanic for `ApplyPlay` and
+  `FlippedCopy()`. Negates and reverses the array (point `i` ↔ point
+  `25-i`, swapping the bars in the process), then recomputes
+  `HighPointOccupied` from scratch. Stays private: live-state flips
+  happen only inside `ApplyPlay`, so callers advancing state always
+  reason in on-roll POV. `FlippedCopy()` is the public flipped-*copy*
+  primitive for querying a position from the other player's frame
+  (e.g. cube-response evaluation) without advancing state — the
+  receiver is untouched.
 
 Factories: `Standard()`, `Nackgammon()`, `Bg960(int? seed = null)` for
 the three starting variants. `FromMop(IReadOnlyList<int>)` and `ToMop()`
 bridge to/from the 26-element on-roll-relative point array used by
-`PositionData.Mop`. `Copy()` is a deep copy. `RecalcHighPoint()` is
+`PositionData.Mop`. `Copy()` is a deep copy; `FlippedCopy()` is a deep
+copy re-expressed from the opponent's perspective (an involution —
+flipping twice reproduces the original). `RecalcHighPoint()` is
 public for callers that mutate `Points` directly.
 
 Derived properties:
@@ -389,6 +395,7 @@ public class BoardState
 
     // Maintenance
     public BoardState Copy();
+    public BoardState FlippedCopy();              // copy from opponent's perspective; receiver untouched
     public void RecalcHighPoint();
 
     // Apply / undo (hot-path primitives)
@@ -518,7 +525,9 @@ registration in `BgDecisionDataSerializationTests` and
   not the previous on-roll's. There is no public `Flip()` — callers
   reasoning in on-roll POV never need to flip explicitly. Code that
   expects to inspect a state "from the original mover's POV" after a
-  turn must take a `Copy()` *before* calling `ApplyPlay`.
+  turn must take a `Copy()` *before* calling `ApplyPlay`. To *view* a
+  position from the other player's frame without advancing state, use
+  `FlippedCopy()` — never re-encode negate-and-reverse in a consumer.
 - **`PlayCandidate.EquityLoss` is non-nullable; `0.0` means no loss
   vs. best.** Identifying the best candidate uses
   `DecisionData.BestPlayIndex`; testing membership in the best-equity
