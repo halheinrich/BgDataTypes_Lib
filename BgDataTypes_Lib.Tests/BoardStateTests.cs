@@ -200,6 +200,73 @@ public class BoardStateTests
         Assert.Throws<ArgumentNullException>(() => BoardState.FromMop(null!));
     }
 
+    // Four cases ported from BgMoveGen's deleted BoardStateBridgeTests, orphaned
+    // when BoardState moved to BgDataTypes_Lib. The other bridge cases from that
+    // suite (Standard round-trip, defensive copy, high-point recalc, null /
+    // wrong-length throws) are already pinned above and are not duplicated here.
+
+    [Fact]
+    public void FromMop_ToMop_RoundTrip_Bg960Seeded()
+    {
+        var s = BoardState.Bg960(seed: 42);
+        var s2 = BoardState.FromMop(s.ToMop());
+
+        Assert.Equal(s.Points, s2.Points);
+        Assert.Equal(s.HighPointOccupied, s2.HighPointOccupied);
+    }
+
+    [Fact]
+    public void FromMop_ToMop_RoundTrip_MidGamePosition()
+    {
+        // Hand-built mid-game: both bars occupied, hit-eligible blot, partial
+        // bear-off, both signs present at non-trivial counts. The player-on-bar
+        // checker at [25] makes 25 the highest occupied point.
+        var s = new BoardState();
+        s.Points[0] = -1;    // opponent on bar
+        s.Points[1] = 3;     // player home-board point
+        s.Points[3] = -1;    // opponent blot in player's home
+        s.Points[6] = 4;
+        s.Points[8] = 2;
+        s.Points[12] = -3;
+        s.Points[13] = 2;
+        s.Points[17] = -4;
+        s.Points[19] = -5;
+        s.Points[24] = 1;    // player blot on 24
+        s.Points[25] = 1;    // player on bar
+        s.RecalcHighPoint();
+
+        var s2 = BoardState.FromMop(s.ToMop());
+
+        Assert.Equal(s.Points, s2.Points);
+        Assert.Equal(s.HighPointOccupied, s2.HighPointOccupied);
+        Assert.Equal(25, s2.HighPointOccupied);
+    }
+
+    [Fact]
+    public void FromMop_RecomputesHighPointOccupied_BarOccupied()
+    {
+        // Bar (index 25) is the highest possible occupied point — recalc must
+        // reach it, not stop at the highest playing-surface point.
+        var mop = new int[26];
+        mop[6] = 5;
+        mop[25] = 1;   // player on bar
+
+        var s = BoardState.FromMop(mop);
+
+        Assert.Equal(25, s.HighPointOccupied);
+    }
+
+    [Fact]
+    public void FromMop_AcceptsPseudoboard_AllZero()
+    {
+        // Borne-off / cube-decision shells with no checkers are legitimate
+        // inputs — FromMop performs no checker-count validation.
+        var s = BoardState.FromMop(new int[26]);
+
+        Assert.Equal(0, s.HighPointOccupied);
+        Assert.All(s.Points, p => Assert.Equal(0, p));
+    }
+
     // ── Copy ──────────────────────────────────────────────────────
 
     [Fact]
