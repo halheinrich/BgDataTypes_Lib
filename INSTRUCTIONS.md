@@ -34,6 +34,7 @@ BgDataTypes_Lib/
   BgDataTypes_Lib.csproj
   BgDecisionData.cs         — composite: Position + Decision + Descriptive + Outcome
   BoardState.cs             — mutable int[26] + HighPointOccupied + apply/undo/ApplyPlay
+  CanonicalPlay.cs          — canonical chain form of Play; the play-equivalence SSOT
   CubeAction.cs             — enum (string-serialized)
   CubeDecisionPair.cs       — readonly record struct (Doubler, Taker), validated halves
   CubeOwner.cs              — enum (string-serialized)
@@ -46,6 +47,7 @@ BgDataTypes_Lib/
   Move.cs                   — (FrPt, ToPt) record struct
   Play.cs                   — fixed 4-slot Move buffer
   PlayCandidate.cs
+  PlayChain.cs              — (FrPt, ToPt) record struct: one collapsed trajectory
   PlayJsonConverter.cs      — JSON-array converter for Play
   PlayOutcomeData.cs        — after-boards derived from play choices
   PositionData.cs
@@ -53,6 +55,7 @@ BgDataTypes_Lib.Tests/
   BgDataTypes_Lib.Tests.csproj
   BgDecisionDataSerializationTests.cs
   BoardStateTests.cs
+  CanonicalPlayTests.cs
   CubeActionTests.cs
   CubeDecisionPairTests.cs
   DecisionIdTests.cs
@@ -107,7 +110,9 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
-| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash via order-invariant `DeduplicationKey()`. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization). |
+| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
+| `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint (an intermediate hit splits the trajectory into two chains). |
+| `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, full equality surface (`IEquatable`, `==`/`!=`, hash). The canonical chain form of a `Play` and the single source of play equivalence. Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 
@@ -124,6 +129,36 @@ move:
 
 Move-generation rules (which `FrPt`/`ToPt` combinations are legal, bearing-off
 overshoot, etc.) live in `BgMoveGen` — `Move` here is just the encoding.
+
+### Canonical play form
+
+`Play.ToCanonical()` produces a `CanonicalPlay` — the single source of play
+equivalence. `Play.Equals` / `GetHashCode` / `==` delegate to it, so play
+equality is **notation-level, not encoding-level**: insensitive to move order
+and to how a checker's trajectory is decomposed into single-die hops, fully
+sensitive to hits.
+
+Collapse semantics (the XG chain-collapse rules, previously encoded
+display-side in `BgMoveGen.MoveNotationFormatter` — the rule now lives here
+and the formatter renders from this form):
+
+- Consecutive single-die hops of one checker merge into a single
+  `PlayChain` recording source and final landing point:
+  `{(13,10),(10,8)}` and `{(13,8)}` both canonicalize to the chain `13/8`.
+- **Hit-visibility rule** (the one predicate gating every join): two
+  segments joining at point P may merge only when the segment *ending* at P
+  does not hit there — otherwise the hit marking that now-intermediate point
+  would be lost. So `13/10*/8` splits into chains `{13/10*, 10/8}` (≠ `13/8`),
+  while `13/10 10/8*` collapses to `13/8*`. A hit only ever sits at a chain's
+  endpoint.
+- Moves are pre-sorted (FrPt desc, |ToPt| desc, hit first) so the same
+  multiset of moves always canonicalizes identically; chains are emitted
+  sorted the same way. Matching is bidirectional with a fixpoint fuse pass,
+  keeping the whole `Move` encoding domain deterministic (bar entry,
+  bear-off, doubles, out-of-order legs, even physically-impossible zigzags).
+- Duplicate chains (doubles moving two checkers along the same route) are
+  kept as repeated entries — `"(2)"` grouping, `"bar"`/`"off"` labels and all
+  other notation rendering stay in `BgMoveGen`'s formatter.
 
 ### BoardState
 
@@ -365,16 +400,34 @@ public class DecisionData
 
 public readonly record struct Move(int FrPt, int ToPt);
 
+public readonly record struct PlayChain(int FrPt, int ToPt);
+
 public struct Play : IEquatable<Play>
 {
     public int Count { get; private set; }
-    public Move this[int index] { get; }
+    public Move this[int index] { get; }          // readonly
     public void Add(Move move);
     public void RemoveLast();
-    public Play Snapshot();
-    public (int, int, int, int, int, int, int, int) DeduplicationKey();
+    public Play Snapshot();                       // readonly
+    public CanonicalPlay ToCanonical();           // readonly; equality SSOT
+    public bool Equals(Play other);               // canonical equivalence
     public override bool Equals(object? obj);
     public override int GetHashCode();
+    public static bool operator ==(Play left, Play right);
+    public static bool operator !=(Play left, Play right);
+}
+
+public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
+{
+    // No public constructor path — produced by Play.ToCanonical() only,
+    // so every instance is guaranteed canonical. default == empty play's form.
+    public int Count { get; }                     // 0-4 chains
+    public PlayChain this[int index] { get; }     // canonical order (FrPt desc)
+    public bool Equals(CanonicalPlay other);
+    public override bool Equals(object? obj);
+    public override int GetHashCode();
+    public static bool operator ==(CanonicalPlay left, CanonicalPlay right);
+    public static bool operator !=(CanonicalPlay left, CanonicalPlay right);
 }
 
 public class BoardState
@@ -489,12 +542,17 @@ registration in `BgDecisionDataSerializationTests` and
   modifying the local copy, not the list element. Use `Snapshot()` when
   the intent is an explicit independent copy, and re-assign back to the
   list slot when mutation is intended.
-- **`Play.DeduplicationKey` is order- and hit-invariant.** Two plays with
-  the same `(FrPt, |ToPt|)` multiset have equal hashes and compare equal
-  even if their `Move` order differs and even if one hits while the other
-  does not.
-  This matches the move-generation dedup contract; do not rely on `Equals`
-  to discriminate hit vs non-hit or to compare move ordering.
+- **`Play` equality is notation-level, not encoding-level.** Equality /
+  hash / `==` delegate to `ToCanonical()`: insensitive to move order *and*
+  to hop decomposition (`{(13,10),(10,8)}` equals `{(13,8)}`; a one-hop
+  overshoot bear-off equals its two-hop decomposition), but **fully
+  hit-sensitive** (`13/10*/8` ≠ `13/8`). Do not rely on `Equals` to
+  distinguish different encodings of the same play — compare move sequences
+  directly if encoding identity matters. Conversely, do rely on it to
+  distinguish hitting from non-hitting plays: the old hit-stripped
+  `DeduplicationKey()` (which compared them equal) is gone, deliberately —
+  it let a hit-less encoding of a hitting play validate as legal and apply
+  without barring the blot.
 - **`Play` requires its bundled `JsonConverter`.** Default property-based
   serialization only sees `Count`, losing every move. The
   `[JsonConverter(typeof(PlayJsonConverter))]` attribute is intrinsic to

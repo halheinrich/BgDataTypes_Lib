@@ -6,9 +6,17 @@ namespace BgDataTypes_Lib;
 /// A complete play: the sequence of moves for one turn.
 /// Uses a fixed-size buffer (max 4 moves for doubles) to avoid heap allocation.
 ///
+/// Equality is notation-level, not encoding-level: two plays are equal iff
+/// their canonical chain forms (<see cref="ToCanonical"/>) are equal —
+/// insensitive to move order and to how a checker's trajectory is decomposed
+/// into single-die hops, but fully sensitive to hits. See
+/// <see cref="CanonicalPlay"/> for the collapse semantics.
+///
 /// Serialised as a JSON array of <see cref="Move"/> via <see cref="PlayJsonConverter"/>;
-/// the private buffer fields and the <see cref="Count"/> setter are not exposed
-/// to the default property-based serialiser.
+/// the raw move sequence round-trips exactly — canonicalization affects
+/// equality, never storage. The private buffer fields and the
+/// <see cref="Count"/> setter are not exposed to the default property-based
+/// serialiser.
 /// </summary>
 [JsonConverter(typeof(PlayJsonConverter))]
 public struct Play : IEquatable<Play>
@@ -17,7 +25,7 @@ public struct Play : IEquatable<Play>
     private Move _m0, _m1, _m2, _m3;
     public int Count { get; private set; }
 
-    public Move this[int index] => index switch
+    public readonly Move this[int index] => index switch
     {
         0 => _m0,
         1 => _m1,
@@ -45,7 +53,7 @@ public struct Play : IEquatable<Play>
         Count--;
     }
 
-    public Play Snapshot()
+    public readonly Play Snapshot()
     {
         var copy = new Play();
         copy._m0 = _m0;
@@ -57,31 +65,17 @@ public struct Play : IEquatable<Play>
     }
 
     /// <summary>
-    /// Normalized key for deduplication: sorted (FrPt, |ToPt|) pairs.
-    /// Used by legacy path and equivalence tests.
+    /// The canonical chain form of this play — the single source of play
+    /// equivalence (see <see cref="CanonicalPlay"/>). <see cref="Equals(Play)"/>
+    /// and <see cref="GetHashCode"/> delegate here; a caller comparing one play
+    /// against many should hoist its canonical form out of the loop.
     /// </summary>
-    public (int, int, int, int, int, int, int, int) DeduplicationKey()
-    {
-        Span<(int fr, int to)> pairs = stackalloc (int, int)[Count];
-        for (int i = 0; i < Count; i++)
-            pairs[i] = (this[i].FrPt, Math.Abs(this[i].ToPt));
+    public readonly CanonicalPlay ToCanonical() => CanonicalPlay.FromPlay(in this);
 
-        // Simple sort for up to 4 elements
-        for (int i = 0; i < Count - 1; i++)
-            for (int j = i + 1; j < Count; j++)
-                if (pairs[j].fr > pairs[i].fr ||
-                    (pairs[j].fr == pairs[i].fr && pairs[j].to > pairs[i].to))
-                    (pairs[i], pairs[j]) = (pairs[j], pairs[i]);
+    public readonly bool Equals(Play other) => ToCanonical().Equals(other.ToCanonical());
+    public override readonly bool Equals(object? obj) => obj is Play p && Equals(p);
+    public override readonly int GetHashCode() => ToCanonical().GetHashCode();
 
-        return (
-            Count > 0 ? pairs[0].fr : -99, Count > 0 ? pairs[0].to : -99,
-            Count > 1 ? pairs[1].fr : -99, Count > 1 ? pairs[1].to : -99,
-            Count > 2 ? pairs[2].fr : -99, Count > 2 ? pairs[2].to : -99,
-            Count > 3 ? pairs[3].fr : -99, Count > 3 ? pairs[3].to : -99
-        );
-    }
-
-    public bool Equals(Play other) => DeduplicationKey() == other.DeduplicationKey();
-    public override bool Equals(object? obj) => obj is Play p && Equals(p);
-    public override int GetHashCode() => DeduplicationKey().GetHashCode();
+    public static bool operator ==(Play left, Play right) => left.Equals(right);
+    public static bool operator !=(Play left, Play right) => !left.Equals(right);
 }
