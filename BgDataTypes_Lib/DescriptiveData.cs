@@ -8,6 +8,8 @@ public class DescriptiveData
     public string? Title { get; init; }
     public DateOnly? Date { get; init; }
     public string? Event { get; init; }
+
+    /// <summary>Originating file name including extension (e.g. "match.xg", "session.xgp"). No directory.</summary>
     public string? SourceFile { get; init; }
 
     /// <summary>Game number within the match (1-based).</summary>

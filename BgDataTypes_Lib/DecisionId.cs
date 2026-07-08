@@ -44,8 +44,9 @@ namespace BgDataTypes_Lib;
 ///
 /// <para>
 /// Filename equality is case-sensitive (record-default semantics on
-/// <see cref="string"/>). The bare filename is stored — the full path lives
-/// on <c>DescriptiveData.SourceFile</c>.
+/// <see cref="string"/>). The bare filename (with extension, no directory)
+/// is stored — the same form the producer stamps on
+/// <c>DescriptiveData.SourceFile</c>; no full path is retained anywhere.
 /// </para>
 ///
 /// <para>
