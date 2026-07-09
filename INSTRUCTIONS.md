@@ -225,10 +225,18 @@ ones when computing from a live state.
 Two-shape carrier for the stable, persistent reference to a single decision
 within an XG-family source file:
 
-- `XgpDecisionId(Filename)` — bare filename for `.xgp` single-decision files.
+- `XgpDecisionId(Filename)` — bare filename for `.xgp` position files.
 - `XgDecisionId(Filename, Game, MoveNumber, IsCube)` — colon-separated tuple
   for `.xg` multi-game files. `IsCube` disambiguates the cube row from the
   checker-play row XG emits at the same `MoveNumber`.
+
+The bare filename is a unique key for `.xgp` not because XG writes one decision
+per file — it does not. XG always writes a cube pane alongside the move pane,
+and a position saved after the dice were rolled can carry analysis in both. The
+key holds because the producing iterator's emission policy selects at most one
+decision per `.xgp`: the analysed checker play if there is one, otherwise the
+analysed cube. That is a producer contract `XgpDecisionId` depends on, not a
+property of the file format.
 
 Both records expose `Filename` via the abstract base; both reject `':'` in
 `Filename` with `ArgumentException` (symmetric — the parse dispatcher

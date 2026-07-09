@@ -11,8 +11,10 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// Two concrete shapes:
 /// <list type="bullet">
-///   <item><see cref="XgpDecisionId"/> — a single-decision <c>.xgp</c> file is
-///     uniquely identified by its bare filename.</item>
+///   <item><see cref="XgpDecisionId"/> — a decision from an <c>.xgp</c> position
+///     file is identified by the file's bare filename. The producing iterator
+///     guarantees at most one decision per <c>.xgp</c>, which is what makes the
+///     bare filename a unique key.</item>
 ///   <item><see cref="XgDecisionId"/> — a decision inside a multi-game
 ///     <c>.xg</c> file is identified by the tuple
 ///     <c>(Filename, Game, MoveNumber, IsCube)</c>.
@@ -218,9 +220,20 @@ public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<Decisio
 }
 
 /// <summary>
-/// Identifier for a decision in an <c>.xgp</c> single-decision file. Identity
-/// is the bare filename; <see cref="DecisionId.ToString"/> returns the
-/// filename unchanged.
+/// Identifier for a decision in an <c>.xgp</c> position file. Identity is the
+/// bare filename; <see cref="DecisionId.ToString"/> returns the filename
+/// unchanged.
+///
+/// <para>
+/// <b>Why the bare filename is a unique key.</b> Not because XG writes one
+/// decision per <c>.xgp</c> — it does not. XG always writes a cube pane
+/// alongside the move pane, and a position saved after the dice were rolled
+/// can carry analysis in both. The key holds because the producing iterator's
+/// emission policy selects at most one decision per <c>.xgp</c>: the analysed
+/// checker play if there is one, otherwise the analysed cube. That is a
+/// producer contract this identifier depends on, not a property of the file
+/// format.
+/// </para>
 /// </summary>
 public sealed record XgpDecisionId(string Filename) : DecisionId
 {
