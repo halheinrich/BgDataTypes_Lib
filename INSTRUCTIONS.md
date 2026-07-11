@@ -30,6 +30,7 @@ to register converters on their `JsonSerializerOptions`.
 
 ```
 BgDataTypes_Lib.slnx
+Directory.Packages.props
 BgDataTypes_Lib/
   BgDataTypes_Lib.csproj
   BgDecisionData.cs         — composite: Position + Decision + Descriptive + Outcome
@@ -53,11 +54,13 @@ BgDataTypes_Lib/
   PositionData.cs
 BgDataTypes_Lib.Tests/
   BgDataTypes_Lib.Tests.csproj
+  BgDecisionDataFilterErrorTests.cs
   BgDecisionDataSerializationTests.cs
   BoardStateTests.cs
   CanonicalPlayTests.cs
   CubeActionTests.cs
   CubeDecisionPairTests.cs
+  DecisionDataCubeScoringTests.cs
   DecisionIdTests.cs
   DecisionRowSerializationTests.cs
   MoveTests.cs
