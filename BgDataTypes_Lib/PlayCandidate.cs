@@ -32,6 +32,13 @@ public class PlayCandidate
     /// Defaults to 0 (treated as lowest).</summary>
     public int DepthRank { get; init; }
 
+    /// <summary>Depth class of the analysis behind this candidate — the
+    /// taxonomy form of the <see cref="Depth"/> / <see cref="DepthAbbreviation"/> /
+    /// <see cref="DepthRank"/> triple, used for depth filtering.
+    /// Producer-stamped; <see cref="AnalysisDepthClass.Unknown"/> when not
+    /// set (including JSON written before this field existed).</summary>
+    public AnalysisDepthClass DepthClass { get; init; }
+
     /// <summary>Primary equity value, displayed top-right in the analysis panel.</summary>
     public double Equity { get; init; }
 

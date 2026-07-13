@@ -195,6 +195,41 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
+    public void PlayCandidate_DepthClass_RoundTrip()
+    {
+        var original = new PlayCandidate
+        {
+            MoveNotation = "8/5(2) 6/3(2)",
+            DepthClass = AnalysisDepthClass.XgRollerPlusPlus,
+            Equity = -0.142
+        };
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        // String form via the enum's bundled converter — no options-level registration.
+        Assert.Contains("\"DepthClass\":\"XgRollerPlusPlus\"", json);
+        Assert.Equal(AnalysisDepthClass.XgRollerPlusPlus, restored.DepthClass);
+    }
+
+    [Fact]
+    public void PlayCandidate_DepthClass_DefaultsToUnknown()
+    {
+        var p = new PlayCandidate { MoveNotation = "8/5 6/1" };
+        Assert.Equal(AnalysisDepthClass.Unknown, p.DepthClass);
+    }
+
+    [Fact]
+    public void PlayCandidate_DepthClass_MissingInLegacyJson_DeserializesToUnknown()
+    {
+        // JSON written before DepthClass existed carries no such field.
+        var json = "{\"MoveNotation\":\"8/5 6/1\",\"Depth\":\"3-ply\",\"Equity\":-0.12}";
+        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+
+        Assert.Equal(AnalysisDepthClass.Unknown, restored.DepthClass);
+        Assert.Equal("3-ply", restored.Depth);
+    }
+
+    [Fact]
     public void PlayCandidate_Play_DefaultsToEmpty()
     {
         var p = new PlayCandidate { MoveNotation = "8/5 6/1" };
@@ -368,6 +403,43 @@ public class BgDecisionDataSerializationTests
     {
         var d = new DecisionData();
         Assert.Equal(0, d.CubeDepthRank);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepthClass_RoundTrip()
+    {
+        var original = new DecisionData
+        {
+            Dice = [0, 0],
+            IsCube = true,
+            CubeDepthClass = AnalysisDepthClass.Rollout,
+            NoDoubleEquity = 0.312,
+            DoubleTakeEquity = 0.287
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Contains("\"CubeDepthClass\":\"Rollout\"", json);
+        Assert.Equal(AnalysisDepthClass.Rollout, restored.CubeDepthClass);
+        Assert.True(restored.IsCube);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepthClass_DefaultsToUnknown()
+    {
+        var d = new DecisionData();
+        Assert.Equal(AnalysisDepthClass.Unknown, d.CubeDepthClass);
+    }
+
+    [Fact]
+    public void DecisionData_CubeDepthClass_MissingInLegacyJson_DeserializesToUnknown()
+    {
+        var json = "{\"Dice\":[0,0],\"IsCube\":true,\"CubeDepth\":\"3-ply\",\"NoDoubleEquity\":0.312}";
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Equal(AnalysisDepthClass.Unknown, restored.CubeDepthClass);
+        Assert.Equal("3-ply", restored.CubeDepth);
     }
 
     [Fact]
@@ -769,6 +841,90 @@ public class BgDecisionDataSerializationTests
         };
 
         Assert.Equal(11, data.MatchLength);
+    }
+
+    // -----------------------------------------------------------------------
+    //  IDecisionFilterData — AnalysisDepthClass derivation
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void BgDecisionData_AnalysisDepthClass_CubeDecision_UsesCubeDepthClass()
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData
+            {
+                IsCube = true,
+                CubeDepthClass = AnalysisDepthClass.XgRollerPlus
+            }
+        };
+
+        Assert.Equal(AnalysisDepthClass.XgRollerPlus, data.AnalysisDepthClass);
+    }
+
+    [Fact]
+    public void BgDecisionData_AnalysisDepthClass_CheckerPlay_UsesBestPlayCandidate()
+    {
+        // BestPlayIndex deliberately not 0, to pin that derivation indexes by
+        // it rather than taking the first candidate.
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData
+            {
+                IsCube = false,
+                BestPlayIndex = 1,
+                Plays =
+                [
+                    new PlayCandidate { MoveNotation = "8/5 6/1", DepthClass = AnalysisDepthClass.Ply3 },
+                    new PlayCandidate { MoveNotation = "8/3 6/1", DepthClass = AnalysisDepthClass.Rollout }
+                ]
+            }
+        };
+
+        Assert.Equal(AnalysisDepthClass.Rollout, data.AnalysisDepthClass);
+    }
+
+    [Fact]
+    public void BgDecisionData_AnalysisDepthClass_CheckerPlay_OutOfRangeBestPlayIndex_ReturnsUnknown()
+    {
+        // Malformed or legacy data can carry a BestPlayIndex that doesn't
+        // identify a candidate; the derivation degrades to Unknown rather
+        // than throwing from a property getter that runs on every filter
+        // pass and serialization.
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData
+            {
+                IsCube = false,
+                BestPlayIndex = 2,
+                Plays = [new PlayCandidate { MoveNotation = "8/5 6/1", DepthClass = AnalysisDepthClass.Ply3 }]
+            }
+        };
+
+        Assert.Equal(AnalysisDepthClass.Unknown, data.AnalysisDepthClass);
+    }
+
+    [Fact]
+    public void BgDecisionData_AnalysisDepthClass_CheckerPlay_EmptyPlays_ReturnsUnknown()
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData { IsCube = false }
+        };
+
+        Assert.Equal(AnalysisDepthClass.Unknown, data.AnalysisDepthClass);
+    }
+
+    [Fact]
+    public void BgDecisionData_AnalysisDepthClass_DefaultsToUnknown()
+    {
+        IDecisionFilterData data = new BgDecisionData { Id = new XgpDecisionId("test.xgp") };
+
+        Assert.Equal(AnalysisDepthClass.Unknown, data.AnalysisDepthClass);
     }
 
     // -----------------------------------------------------------------------

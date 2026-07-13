@@ -38,6 +38,22 @@ public class BgDecisionData : IDecisionFilterData
     public int MatchLength => Descriptive.MatchLength;
     public int MoveNumber => Descriptive.MoveNumber;
     public bool IsStandardStart => Descriptive.IsStandardStart;
+    /// <summary>
+    /// Derived per the <see cref="DecisionRow.AnalysisDepth"/> convention:
+    /// cube decisions report the cube analysis
+    /// (<see cref="DecisionData.CubeDepthClass"/>); checker plays report the
+    /// best-play candidate's <see cref="PlayCandidate.DepthClass"/>.
+    /// <see cref="AnalysisDepthClass.Unknown"/> when
+    /// <see cref="DecisionData.BestPlayIndex"/> does not identify a candidate
+    /// (empty <see cref="DecisionData.Plays"/>, or an out-of-range index from
+    /// malformed data) — depth-not-recorded rather than a throw, since this
+    /// getter runs on every filter pass and serialization.
+    /// </summary>
+    public AnalysisDepthClass AnalysisDepthClass => Decision.IsCube
+        ? Decision.CubeDepthClass
+        : Decision.BestPlayIndex >= 0 && Decision.BestPlayIndex < Decision.Plays.Count
+            ? Decision.Plays[Decision.BestPlayIndex].DepthClass
+            : AnalysisDepthClass.Unknown;
     public double? FilterError => Decision.IsCube
         ? Decision.UserDoubleError ?? Decision.UserTakeError
         : Decision.UserPlayError;

@@ -48,6 +48,15 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <summary>Human-readable analysis depth label, e.g. "3-ply", "Rollout: 1296 trials. 3-ply".</summary>
     public string AnalysisDepth { get; init; } = string.Empty;
 
+    /// <summary>Depth class of the analysis — the taxonomy form of
+    /// <see cref="AnalysisDepth"/>, used for depth filtering
+    /// (<see cref="IDecisionFilterData.AnalysisDepthClass"/>).
+    /// Producer-stamped; <see cref="AnalysisDepthClass.Unknown"/> when not
+    /// set (including JSON written before this field existed). Serializes to
+    /// JSON; excluded from CSV output (<see cref="AnalysisDepth"/> remains
+    /// the CSV depth column).</summary>
+    public AnalysisDepthClass AnalysisDepthClass { get; init; }
+
     /// <summary>Best equity value from the analysis.</summary>
     public double Equity { get; init; }
 

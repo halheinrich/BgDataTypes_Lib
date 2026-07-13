@@ -22,9 +22,11 @@ Atomic by design. BgDataTypes_Lib has no subproject dependencies and must
 not gain any. The shared-data layer is the foundation other subprojects
 rest on; introducing a subproject dependency here would either create a
 circular reference or force the dependency on every consumer transitively.
-`System.Text.Json` is the only runtime dependency; `CubeOwner` and `Play`
-each bundle their own `[JsonConverter]` attribute so consumers do not have
-to register converters on their `JsonSerializerOptions`.
+`System.Text.Json` is the only runtime dependency; the serialized types
+that need converters (`CubeOwner`, `CubeAction`, `AnalysisDepthClass`,
+`Play`, `DecisionId`) each bundle their own `[JsonConverter]` attribute so
+consumers do not have to register converters on their
+`JsonSerializerOptions`.
 
 ## Directory tree
 
@@ -33,6 +35,7 @@ BgDataTypes_Lib.slnx
 Directory.Packages.props
 BgDataTypes_Lib/
   BgDataTypes_Lib.csproj
+  AnalysisDepthClass.cs     — enum (string-serialized): analysis depth taxonomy
   BgDecisionData.cs         — composite: Position + Decision + Descriptive + Outcome
   BoardState.cs             — mutable int[26] + HighPointOccupied + apply/undo/ApplyPlay
   CanonicalPlay.cs          — canonical chain form of Play; the play-equivalence SSOT
@@ -54,6 +57,7 @@ BgDataTypes_Lib/
   PositionData.cs
 BgDataTypes_Lib.Tests/
   BgDataTypes_Lib.Tests.csproj
+  AnalysisDepthClassTests.cs
   BgDecisionDataFilterErrorTests.cs
   BgDecisionDataSerializationTests.cs
   BoardStateTests.cs
@@ -77,8 +81,9 @@ move primitives `Move` (`readonly record struct`) and `Play` (mutable
 their move-generation origins. `BoardState` is a `class` but mutable —
 the one deliberate exception (see "Mutability exception" below).
 Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
-attributes: `JsonStringEnumConverter` on `CubeOwner` and `CubeAction`,
-and `PlayJsonConverter` on `Play`. Consumers do not need to
+attributes: `JsonStringEnumConverter` on `CubeOwner`, `CubeAction`, and
+`AnalysisDepthClass`, `PlayJsonConverter` on `Play`, and
+`DecisionIdJsonConverter` on `DecisionId`. Consumers do not need to
 register any of these converters on their `JsonSerializerOptions` — the
 attributes carry the contract on the types themselves.
 
@@ -101,7 +106,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | Type | Fields |
 |---|---|
 | `PositionData` | `Mop`, `OnRollNeeds`, `OpponentNeeds`, `OnRollPipCount`, `OpponentPipCount`, `CubeSize`, `CubeOwner`, `IsCrawford` |
-| `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, `CubeDepthAbbreviation`, `CubeDepthRank`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?` |
+| `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, `CubeDepthAbbreviation`, `CubeDepthRank`, `CubeDepthClass`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?` |
 | `DescriptiveData` | `MatchLength`, `OnRollName`, `OpponentName`, `Title`, `Date`, `Event`, `SourceFile`, `MoveNumber`, `IsStandardStart` |
 | `PlayOutcomeData` | `AfterBestBoard`, `AfterPlayerBoard` |
 
@@ -111,12 +116,13 @@ via `ApplyPlay`, never via raw point-array mutation.
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
+| `AnalysisDepthClass` | enum: `Unknown`, `Book`, `Ply1`–`Ply7`, `XgRoller`, `XgRollerPlus`, `XgRollerPlusPlus`, `Rollout` — depth class of an XG analysis, serializes as string. The taxonomy SSOT for depth filtering; classification is producer-side (ConvertXgToJson_Lib maps XG level codes onto it). `Unknown = 0` deliberately — unstamped/legacy JSON deserializes to it. Declared in ascending-rigor order mirroring the producer's ranks (informational, not contractual — filter by membership; `DepthRank` orders). Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Variants sharing a class keep their finer identity only in the label strings ("3-ply red" is `Ply3`; Book V1/V2 are both `Book`). |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
 | `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint (an intermediate hit splits the trajectory into two chains). |
 | `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, full equality surface (`IEquatable`, `==`/`!=`, hash). The canonical chain form of a `Play` and the single source of play equivalence. Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
+| `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `DepthClass`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `IsUserPlay`, `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 
 ### Move encoding
@@ -308,7 +314,11 @@ Implements `IDecisionFilterData` via forwarding properties. `Board` returns
 on `IsCube`. The "empty for cube decisions" invariant is producer-enforced:
 whoever constructs `BgDecisionData` leaves `Outcome` at its default (empty lists).
 `FilterError` routes to `UserDoubleError ?? UserTakeError` for cube decisions,
-otherwise `UserPlayError`.
+otherwise `UserPlayError`. `AnalysisDepthClass` derives per the
+`DecisionRow.AnalysisDepth` convention: cube decisions report
+`Decision.CubeDepthClass`, checker plays report the `BestPlayIndex`
+candidate's `DepthClass` (`Unknown` when `BestPlayIndex` does not identify
+a candidate — empty `Plays`, or an out-of-range index from malformed data).
 
 ### After-boards (PlayOutcomeData)
 
@@ -329,7 +339,9 @@ by the XG → JSON conversion pipeline, for different consumers. Implements
 (`ToCsvLine`, `CsvHeader`, private `CsvEscape`). `Board`, `AfterBestBoard`, and
 `AfterPlayerBoard` are all stored as `IReadOnlyList<int>` (26 elements each,
 same layout as `PositionData.Mop` — with flipped POV on the after-boards).
-All three board fields serialize to JSON but are **excluded from CSV output**.
+All three board fields serialize to JSON but are **excluded from CSV output**,
+as is `AnalysisDepthClass` (the taxonomy form of `AnalysisDepth`, which
+remains the CSV depth column).
 
 ### Mop layout
 
@@ -356,6 +368,7 @@ public interface IDecisionFilterData
     int MatchLength { get; }
     int MoveNumber { get; }                       // 1-based within the game
     bool IsStandardStart { get; }                 // false for non-standard openings
+    AnalysisDepthClass AnalysisDepthClass { get; } // cube analysis for cubes, best-play candidate for checkers
     double? FilterError { get; }                  // ≥ 0 or null
     IReadOnlyList<int> Board { get; }             // 26 elements, see Mop layout
     IReadOnlyList<int> AfterBestBoard { get; }    // POV flipped; empty for cubes
@@ -383,7 +396,8 @@ public sealed class DecisionRow : IDecisionFilterData
     public string ToCsvLine();
     // IsCube, MatchScore, and FilterError are [JsonIgnore]d (computed /
     // derived). The three board lists (Board, AfterBestBoard,
-    // AfterPlayerBoard) serialize to JSON but are excluded from CSV output.
+    // AfterPlayerBoard) and AnalysisDepthClass serialize to JSON but are
+    // excluded from CSV output.
     // Id is JSON-serialized (as canonical string) but excluded from CSV
     // output — CSV columns are listed explicitly.
 }
@@ -396,8 +410,8 @@ public class DecisionData
 {
     // Init-only properties per Architecture table (Dice, Plays, BestPlayIndex,
     // UserPlayIndex, UserPlayError?, IsCube, CubeDepth, CubeDepthAbbreviation,
-    // CubeDepthRank, NoDoubleEquity, DoubleTakeEquity, the pct fields,
-    // ProbOfOpponentErrorJustifyingDouble, UserDoubleError?, UserTakeError?).
+    // CubeDepthRank, CubeDepthClass, NoDoubleEquity, DoubleTakeEquity, the pct
+    // fields, ProbOfOpponentErrorJustifyingDouble, UserDoubleError?, UserTakeError?).
 
     // Cube-decision scoring (computed; throw InvalidOperationException when IsCube is false).
     [JsonIgnore] public CubeAction  BestDoublerAction { get; }   // Double or NoDouble
@@ -479,6 +493,16 @@ public enum CubeOwner { OnRoll, Opponent, Centered }
 
 public enum CubeAction { NoDouble, Double, Take, Pass }
 
+// Ascending-rigor order mirroring the producer's ranks (informational —
+// filter by membership; DepthRank orders). Unknown = 0 deliberately:
+// unstamped/legacy JSON deserializes to it. Every member carries a
+// [Description] display label.
+public enum AnalysisDepthClass
+{
+    Unknown, Book, Ply1, Ply2, Ply3, Ply4, Ply5, Ply6, Ply7,
+    XgRoller, XgRollerPlus, XgRollerPlusPlus, Rollout
+}
+
 // Validated halves: Doubler ∈ {NoDouble, Double}, Taker ∈ {Take, Pass};
 // a cross-half value throws ArgumentOutOfRangeException. default is
 // non-meaningful (see Pitfalls).
@@ -498,11 +522,11 @@ public sealed record XgDecisionId(
 ```
 
 Serialization contract: round-trips cleanly through `System.Text.Json` —
-no consumer-side converter registration required. `CubeOwner`
-bundles `JsonStringEnumConverter` via attribute; `Play` bundles
-`PlayJsonConverter` via attribute. Tested without any options-level
-registration in `BgDecisionDataSerializationTests` and
-`DecisionRowSerializationTests`.
+no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
+and `AnalysisDepthClass` bundle `JsonStringEnumConverter` via attribute;
+`Play` bundles `PlayJsonConverter`; `DecisionId` bundles
+`DecisionIdJsonConverter`. Tested without any options-level registration in
+`BgDecisionDataSerializationTests` and `DecisionRowSerializationTests`.
 
 ## Pitfalls
 
@@ -597,6 +621,15 @@ registration in `BgDecisionDataSerializationTests` and
   turn must take a `Copy()` *before* calling `ApplyPlay`. To *view* a
   position from the other player's frame without advancing state, use
   `FlippedCopy()` — never re-encode negate-and-reverse in a consumer.
+- **`AnalysisDepthClass` declaration order is informational, not
+  contractual.** Members mirror the producer's ascending-rigor ranks, but
+  depth filtering must use membership; `DepthRank` / `CubeDepthRank` remain
+  the ordering surface for consumers that compare depths. `Unknown` is
+  deliberately the zero value — unstamped construction sites and JSON written
+  before the field existed read as `Unknown`, which means "depth not
+  recorded", not an error. Do not strip a member's `[Description]` label:
+  downstream label readers (XgFilter_Lib's `EnumLabel.ToLabel`) throw on a
+  member without one.
 - **`PlayCandidate.EquityLoss` is non-nullable; `0.0` means no loss
   vs. best.** Identifying the best candidate uses
   `DecisionData.BestPlayIndex`; testing membership in the best-equity

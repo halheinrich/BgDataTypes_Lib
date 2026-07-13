@@ -32,6 +32,12 @@ public class DecisionData
     /// <summary>Ordinal ranking of CubeDepth; see PlayCandidate.DepthRank
     /// for semantics. Defaults to 0.</summary>
     public int CubeDepthRank { get; init; }
+
+    /// <summary>Depth class of the cube analysis; see
+    /// <see cref="PlayCandidate.DepthClass"/> for semantics.
+    /// <see cref="AnalysisDepthClass.Unknown"/> when IsCube is false or
+    /// when not stamped (including JSON written before this field existed).</summary>
+    public AnalysisDepthClass CubeDepthClass { get; init; }
     public double NoDoubleEquity { get; init; }
     public double DoubleTakeEquity { get; init; }
 

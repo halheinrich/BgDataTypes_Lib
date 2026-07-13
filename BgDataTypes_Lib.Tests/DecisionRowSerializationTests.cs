@@ -124,6 +124,73 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
+    //  AnalysisDepthClass — JSON only, excluded from CSV
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_AnalysisDepthClass_RoundTrip()
+    {
+        var original = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            AnalysisDepth = "XG Roller++",
+            AnalysisDepthClass = AnalysisDepthClass.XgRollerPlusPlus
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+
+        // String form via the enum's bundled converter — no options-level registration.
+        Assert.Contains("\"AnalysisDepthClass\":\"XgRollerPlusPlus\"", json);
+        Assert.Equal(AnalysisDepthClass.XgRollerPlusPlus, restored.AnalysisDepthClass);
+    }
+
+    [Fact]
+    public void DecisionRow_AnalysisDepthClass_DefaultsToUnknown()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        Assert.Equal(AnalysisDepthClass.Unknown, row.AnalysisDepthClass);
+    }
+
+    [Fact]
+    public void DecisionRow_AnalysisDepthClass_MissingInLegacyJson_DeserializesToUnknown()
+    {
+        // JSON written before AnalysisDepthClass existed carries no such field.
+        var json = "{\"Id\":\"test.xgp\",\"AnalysisDepth\":\"3-ply\",\"Roll\":63}";
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+
+        Assert.Equal(AnalysisDepthClass.Unknown, restored.AnalysisDepthClass);
+        Assert.Equal("3-ply", restored.AnalysisDepth);
+    }
+
+    [Fact]
+    public void DecisionRow_AnalysisDepthClass_NotInCsvOutput()
+    {
+        var row = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            AnalysisDepth = "3-ply",
+            AnalysisDepthClass = AnalysisDepthClass.Ply3
+        };
+
+        Assert.DoesNotContain("AnalysisDepthClass", DecisionRow.CsvHeader);
+        // Column count unchanged: 11 columns → 10 commas.
+        Assert.Equal(10, row.ToCsvLine().Count(c => c == ','));
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_AnalysisDepthClass()
+    {
+        IDecisionFilterData row = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            AnalysisDepthClass = AnalysisDepthClass.Rollout
+        };
+
+        Assert.Equal(AnalysisDepthClass.Rollout, row.AnalysisDepthClass);
+    }
+
+    // -----------------------------------------------------------------------
     //  MatchScore reconstruction
     // -----------------------------------------------------------------------
 

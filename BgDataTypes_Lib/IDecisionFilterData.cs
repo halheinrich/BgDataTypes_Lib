@@ -32,6 +32,15 @@ public interface IDecisionFilterData
     bool IsStandardStart { get; }
 
     /// <summary>
+    /// Depth class of the analysis behind this decision: the cube analysis
+    /// for cube decisions, the best-play candidate's analysis for checker
+    /// plays (mirroring the <see cref="DecisionRow.AnalysisDepth"/>
+    /// convention). <see cref="BgDataTypes_Lib.AnalysisDepthClass.Unknown"/>
+    /// when the depth was never stamped (legacy data).
+    /// </summary>
+    AnalysisDepthClass AnalysisDepthClass { get; }
+
+    /// <summary>
     /// Error magnitude for this decision (≥ 0).
     /// For checker plays: equity loss vs best play.
     /// For cube decisions: equity loss from doubling or take/drop decision.
