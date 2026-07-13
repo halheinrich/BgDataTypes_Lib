@@ -18,9 +18,9 @@ public class AnalysisDepthClassTests
     };
 
     [Fact]
-    public void HasExactlyThirteenMembers()
+    public void HasExactlyTwentyMembers()
     {
-        Assert.Equal(13, Enum.GetValues<AnalysisDepthClass>().Length);
+        Assert.Equal(20, Enum.GetValues<AnalysisDepthClass>().Length);
     }
 
     [Fact]
@@ -36,8 +36,9 @@ public class AnalysisDepthClassTests
     public void MembersAreInAscendingRigorOrder()
     {
         // Mirrors the producer's rank ordering (Book/unknown 0, N-ply 1-7,
-        // XG Roller family 20-22, rollouts 100+). Informational, not
-        // contractual — filtering uses membership, DepthRank orders.
+        // XG Roller family 20-22, rollouts 100 for unknown inner ply through
+        // 107). Informational, not contractual — filtering uses membership,
+        // DepthRank orders.
         AnalysisDepthClass[] expected =
         [
             AnalysisDepthClass.Unknown,
@@ -53,6 +54,13 @@ public class AnalysisDepthClassTests
             AnalysisDepthClass.XgRollerPlus,
             AnalysisDepthClass.XgRollerPlusPlus,
             AnalysisDepthClass.Rollout,
+            AnalysisDepthClass.RolloutPly1,
+            AnalysisDepthClass.RolloutPly2,
+            AnalysisDepthClass.RolloutPly3,
+            AnalysisDepthClass.RolloutPly4,
+            AnalysisDepthClass.RolloutPly5,
+            AnalysisDepthClass.RolloutPly6,
+            AnalysisDepthClass.RolloutPly7,
         ];
         Assert.Equal(expected, Enum.GetValues<AnalysisDepthClass>());
     }
@@ -63,6 +71,7 @@ public class AnalysisDepthClassTests
     [InlineData(AnalysisDepthClass.Ply3, "\"Ply3\"")]
     [InlineData(AnalysisDepthClass.XgRollerPlusPlus, "\"XgRollerPlusPlus\"")]
     [InlineData(AnalysisDepthClass.Rollout, "\"Rollout\"")]
+    [InlineData(AnalysisDepthClass.RolloutPly3, "\"RolloutPly3\"")]
     public void Serializes_AsString(AnalysisDepthClass depthClass, string expectedJson)
     {
         var json = JsonSerializer.Serialize(depthClass, Options);
@@ -76,6 +85,8 @@ public class AnalysisDepthClassTests
     [InlineData(AnalysisDepthClass.Ply7)]
     [InlineData(AnalysisDepthClass.XgRoller)]
     [InlineData(AnalysisDepthClass.Rollout)]
+    [InlineData(AnalysisDepthClass.RolloutPly1)]
+    [InlineData(AnalysisDepthClass.RolloutPly7)]
     public void RoundTrips_ThroughJson(AnalysisDepthClass depthClass)
     {
         var json = JsonSerializer.Serialize(depthClass, Options);
@@ -104,6 +115,7 @@ public class AnalysisDepthClassTests
     [InlineData(AnalysisDepthClass.XgRollerPlus, "XG Roller+")]
     [InlineData(AnalysisDepthClass.XgRollerPlusPlus, "XG Roller++")]
     [InlineData(AnalysisDepthClass.Rollout, "Rollout")]
+    [InlineData(AnalysisDepthClass.RolloutPly3, "Rollout (3-ply)")]
     public void DescriptionLabels_MatchDisplayForms(AnalysisDepthClass depthClass, string expectedLabel)
     {
         var field = typeof(AnalysisDepthClass).GetField(depthClass.ToString())!;

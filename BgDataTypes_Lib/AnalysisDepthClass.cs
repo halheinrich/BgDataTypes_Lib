@@ -17,7 +17,8 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// Members are declared in ascending-rigor order, mirroring the producer's
 /// ordinal ranks (Book and unknown rank 0, N-ply 1–7, the XG Roller family
-/// 20–22, rollouts 100+). That ordering is informational, not contractual:
+/// 20–22, rollouts 100 for unknown inner ply through 107 for a 7-ply
+/// inner evaluation). That ordering is informational, not contractual:
 /// depth filtering works by membership, and nothing guarantees the numeric
 /// values stay stable if the taxonomy grows. <see cref="PlayCandidate.DepthRank"/>
 /// remains the ordering surface for consumers that compare depths.
@@ -28,7 +29,10 @@ namespace BgDataTypes_Lib;
 /// stamped — deserializes to it. Variants that share a class keep their finer
 /// identity only in the label string ("3-ply red" is <see cref="Ply3"/>;
 /// Book V1 and V2 are both <see cref="Book"/>; rollout trial counts live in
-/// the label / abbreviation).
+/// the label / abbreviation — trial count is not a taxonomy axis, but rollout
+/// inner ply is: <see cref="RolloutPly1"/>–<see cref="RolloutPly7"/> preserve
+/// it, with <see cref="Rollout"/> as the floor for a rollout whose inner ply
+/// is unknown).
 /// </para>
 /// <para>
 /// Every member carries a <see cref="DescriptionAttribute"/> — the UI-facing
@@ -90,7 +94,38 @@ public enum AnalysisDepthClass
     [Description("XG Roller++")]
     XgRollerPlusPlus,
 
-    /// <summary>Full rollout, at any trial count and inner ply.</summary>
+    /// <summary>Full rollout whose inner evaluation ply is unknown — the
+    /// producer's no-context rollout sentinel (rank 100). The floor of the
+    /// rollout tier; a rollout with a known inner ply classifies as
+    /// <see cref="RolloutPly1"/>–<see cref="RolloutPly7"/>.</summary>
     [Description("Rollout")]
-    Rollout
+    Rollout,
+
+    /// <summary>Full rollout with a 1-ply inner evaluation, at any trial count.</summary>
+    [Description("Rollout (1-ply)")]
+    RolloutPly1,
+
+    /// <summary>Full rollout with a 2-ply inner evaluation, at any trial count.</summary>
+    [Description("Rollout (2-ply)")]
+    RolloutPly2,
+
+    /// <summary>Full rollout with a 3-ply inner evaluation, at any trial count.</summary>
+    [Description("Rollout (3-ply)")]
+    RolloutPly3,
+
+    /// <summary>Full rollout with a 4-ply inner evaluation, at any trial count.</summary>
+    [Description("Rollout (4-ply)")]
+    RolloutPly4,
+
+    /// <summary>Full rollout with a 5-ply inner evaluation, at any trial count.</summary>
+    [Description("Rollout (5-ply)")]
+    RolloutPly5,
+
+    /// <summary>Full rollout with a 6-ply inner evaluation, at any trial count.</summary>
+    [Description("Rollout (6-ply)")]
+    RolloutPly6,
+
+    /// <summary>Full rollout with a 7-ply inner evaluation, at any trial count.</summary>
+    [Description("Rollout (7-ply)")]
+    RolloutPly7
 }
