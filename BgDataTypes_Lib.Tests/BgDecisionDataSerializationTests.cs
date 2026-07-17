@@ -28,8 +28,7 @@ public class BgDecisionDataSerializationTests
         var original = new PlayCandidate
         {
             MoveNotation = "8/5(2) 6/3(2)",
-            Equity = -0.142,
-            IsUserPlay = false
+            Equity = -0.142
         };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
@@ -37,7 +36,6 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.MoveNotation, restored.MoveNotation);
         Assert.Equal(original.Equity, restored.Equity);
         Assert.Equal(0.0, restored.EquityLoss);
-        Assert.Equal(original.IsUserPlay, restored.IsUserPlay);
     }
 
     [Fact]
@@ -47,14 +45,12 @@ public class BgDecisionDataSerializationTests
         {
             MoveNotation = "13/8 13/11",
             Equity = -0.187,
-            EquityLoss = 0.045,
-            IsUserPlay = true
+            EquityLoss = 0.045
         };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
         Assert.Equal(original.EquityLoss, restored.EquityLoss);
-        Assert.True(restored.IsUserPlay);
     }
 
     [Fact]
@@ -494,7 +490,7 @@ public class BgDecisionDataSerializationTests
             Dice = [3, 5],
             Plays =
             [
-                new PlayCandidate { MoveNotation = "8/5 6/1", Depth = "3-ply", Equity = -0.120, IsUserPlay = true },
+                new PlayCandidate { MoveNotation = "8/5 6/1", Depth = "3-ply", Equity = -0.120 },
                 new PlayCandidate { MoveNotation = "8/3 6/1", Depth = "3-ply", Equity = -0.165, EquityLoss = 0.045 }
             ],
             IsCube = false
@@ -648,7 +644,7 @@ public class BgDecisionDataSerializationTests
                 Dice = [6, 4],
                 Plays =
                 [
-                    new PlayCandidate { MoveNotation = "24/18 24/20", Depth = "3-ply", Equity = 0.211, IsUserPlay = false },
+                    new PlayCandidate { MoveNotation = "24/18 24/20", Depth = "3-ply", Equity = 0.211 },
                     new PlayCandidate { MoveNotation = "24/18 13/9",  Depth = "3-ply", Equity = 0.198, EquityLoss = 0.013 }
                 ],
                 IsCube = false
@@ -690,8 +686,8 @@ public class BgDecisionDataSerializationTests
             Dice = [3, 5],
             Plays =
             [
-                new PlayCandidate { MoveNotation = "8/5 6/1", Equity = -0.120, IsUserPlay = false },
-                new PlayCandidate { MoveNotation = "8/3 6/1", Equity = -0.165, EquityLoss = 0.045, IsUserPlay = true }
+                new PlayCandidate { MoveNotation = "8/5 6/1", Equity = -0.120 },
+                new PlayCandidate { MoveNotation = "8/3 6/1", Equity = -0.165, EquityLoss = 0.045 }
             ],
             IsCube = false,
             UserPlayIndex = 1,
