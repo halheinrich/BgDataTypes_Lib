@@ -31,6 +31,13 @@ namespace BgDataTypes_Lib;
 /// </summary>
 public class BoardState
 {
+    /// <summary>
+    /// The raw 26-element point array (layout in the type summary). Exposed
+    /// for hot-path reads and deliberate bulk writes; direct mutation
+    /// bypasses the incremental bookkeeping, so follow it with
+    /// <see cref="RecalcHighPoint"/> or <see cref="HighPointOccupied"/>
+    /// desyncs.
+    /// </summary>
     public readonly int[] Points = new int[26];
 
     /// <summary>
@@ -43,6 +50,11 @@ public class BoardState
     /// </summary>
     public int HighPointOccupied;
 
+    /// <summary>
+    /// An empty board — all points zero, <see cref="HighPointOccupied"/> 0.
+    /// Use the factories (<see cref="Standard"/>, <see cref="Nackgammon"/>,
+    /// <see cref="Bg960"/>, <see cref="FromMop"/>) for populated starts.
+    /// </summary>
     public BoardState() { }
 
     /// <summary>

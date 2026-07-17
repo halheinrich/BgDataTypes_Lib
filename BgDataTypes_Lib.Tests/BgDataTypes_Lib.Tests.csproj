@@ -1,10 +1,12 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- TargetFramework, Nullable, ImplicitUsings, and TreatWarningsAsErrors
+       come from Directory.Build.props. Doc-file generation is a shipping-
+       surface concern; test members need no XML docs, so the repo-wide
+       GenerateDocumentationFile=true is overridden off here. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

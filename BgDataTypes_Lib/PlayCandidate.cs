@@ -1,5 +1,12 @@
 ﻿namespace BgDataTypes_Lib;
 
+/// <summary>
+/// One analysed candidate play of a checker-play decision — one row of the
+/// producing analyser's move list, carried in <see cref="DecisionData.Plays"/>.
+/// Which candidate is the best or the user's play is recorded on the parent
+/// (<see cref="DecisionData.BestPlayIndex"/> / <see cref="DecisionData.UserPlayIndex"/>),
+/// not flagged per-candidate.
+/// </summary>
 public class PlayCandidate
 {
     /// <summary>Move notation, e.g. "8/5(2) 6/3(2)".</summary>
@@ -53,11 +60,22 @@ public class PlayCandidate
     /// </summary>
     public double EquityLoss { get; init; }
 
-    // On-roll player probabilities for this candidate move. Null when not evaluated.
+    // Outcome probabilities of this candidate, on-roll POV, fractions in
+    // [0, 1] despite the Pct suffix, surfaced verbatim from XG's evaluation
+    // vector. Null when the candidate was not evaluated (or the source
+    // predates these fields). Win/Lose are total win/loss probabilities; the
+    // gammon and backgammon fields are XG's G/B breakdown figures.
+
+    /// <summary>Probability the on-roll player wins with this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? WinPct { get; init; }
+    /// <summary>XG's gammon-win figure (the "G" of its W/G/B breakdown) for this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? WinGammonPct { get; init; }
+    /// <summary>XG's backgammon-win figure (the "B" of its W/G/B breakdown) for this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? WinBgPct { get; init; }
+    /// <summary>Probability the on-roll player loses with this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? LosePct { get; init; }
+    /// <summary>XG's gammon-loss figure for this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? LoseGammonPct { get; init; }
+    /// <summary>XG's backgammon-loss figure for this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? LoseBgPct { get; init; }
 }

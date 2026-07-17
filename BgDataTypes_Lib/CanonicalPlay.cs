@@ -222,6 +222,11 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
     // and hit flag carried separately so join points compare sign-free.
     private readonly record struct Segment(int From, int To, bool Hit);
 
+    /// <summary>
+    /// Structural equality of the sorted chain sequences. Because every
+    /// instance is canonical, this is exactly play equivalence — see the
+    /// type summary.
+    /// </summary>
     public bool Equals(CanonicalPlay other)
     {
         if (Count != other.Count) return false;
@@ -230,8 +235,10 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
         return true;
     }
 
+    /// <inheritdoc cref="Equals(CanonicalPlay)"/>
     public override bool Equals(object? obj) => obj is CanonicalPlay c && Equals(c);
 
+    /// <summary>Hash of the chain sequence, consistent with <see cref="Equals(CanonicalPlay)"/>.</summary>
     public override int GetHashCode()
     {
         var hc = new HashCode();
@@ -240,6 +247,8 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
         return hc.ToHashCode();
     }
 
+    /// <inheritdoc cref="Equals(CanonicalPlay)"/>
     public static bool operator ==(CanonicalPlay left, CanonicalPlay right) => left.Equals(right);
+    /// <summary>Negation of <see cref="op_Equality"/>.</summary>
     public static bool operator !=(CanonicalPlay left, CanonicalPlay right) => !left.Equals(right);
 }

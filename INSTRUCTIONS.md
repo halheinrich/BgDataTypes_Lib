@@ -32,6 +32,7 @@ consumers do not have to register converters on their
 
 ```
 BgDataTypes_Lib.slnx
+Directory.Build.props       — repo-wide build policy (TFM, TWaE, XML docs)
 Directory.Packages.props
 BgDataTypes_Lib/
   BgDataTypes_Lib.csproj
