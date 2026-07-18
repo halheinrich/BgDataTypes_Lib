@@ -48,14 +48,24 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <summary>Human-readable analysis depth label, e.g. "3-ply", "Rollout: 1296 trials. 3-ply".</summary>
     public string AnalysisDepth { get; init; } = string.Empty;
 
-    /// <summary>Depth class of the analysis — the taxonomy form of
-    /// <see cref="AnalysisDepth"/>, used for depth filtering
-    /// (<see cref="IDecisionFilterData.AnalysisDepthClass"/>).
-    /// Producer-stamped; <see cref="AnalysisDepthClass.Unknown"/> when not
-    /// set (including JSON written before this field existed). Serializes to
-    /// JSON; excluded from CSV output (<see cref="AnalysisDepth"/> remains
-    /// the CSV depth column).</summary>
-    public AnalysisDepthClass AnalysisDepthClass { get; init; }
+    /// <summary>How the analysis behind this decision was produced — the mode
+    /// axis of the two-axis depth taxonomy
+    /// (<see cref="IDecisionFilterData.AnalysisMode"/>); together with
+    /// <see cref="AnalysisLevel"/> it is the taxonomy form of
+    /// <see cref="AnalysisDepth"/>, used for depth filtering.
+    /// Producer-stamped; <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/>
+    /// when not set (including JSON written before the two-axis pair
+    /// existed). Serializes to JSON; excluded from CSV output
+    /// (<see cref="AnalysisDepth"/> remains the CSV depth column).</summary>
+    public AnalysisMode AnalysisMode { get; init; }
+
+    /// <summary>Evaluation level of the analysis behind this decision — the
+    /// level axis paired with <see cref="AnalysisMode"/>
+    /// (<see cref="IDecisionFilterData.AnalysisLevel"/>); for rollout-family
+    /// modes, the inner level of the row's decision kind. Producer-stamped;
+    /// <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when not set.
+    /// Serializes to JSON; excluded from CSV output.</summary>
+    public AnalysisLevel AnalysisLevel { get; init; }
 
     /// <summary>Best equity value from the analysis.</summary>
     public double Equity { get; init; }

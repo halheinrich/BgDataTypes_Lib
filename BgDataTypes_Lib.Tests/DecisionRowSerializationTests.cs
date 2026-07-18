@@ -124,70 +124,82 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  AnalysisDepthClass — JSON only, excluded from CSV
+    //  AnalysisMode / AnalysisLevel — JSON only, excluded from CSV
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_AnalysisDepthClass_RoundTrip()
+    public void DecisionRow_AnalysisModeAndLevel_RoundTrip()
     {
         var original = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
             AnalysisDepth = "XG Roller++",
-            AnalysisDepthClass = AnalysisDepthClass.XgRollerPlusPlus
+            AnalysisMode = AnalysisMode.Evaluation,
+            AnalysisLevel = AnalysisLevel.XgRollerPlusPlus
         };
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
-        // String form via the enum's bundled converter — no options-level registration.
-        Assert.Contains("\"AnalysisDepthClass\":\"XgRollerPlusPlus\"", json);
-        Assert.Equal(AnalysisDepthClass.XgRollerPlusPlus, restored.AnalysisDepthClass);
+        // String form via the enums' bundled converters — no options-level registration.
+        Assert.Contains("\"AnalysisMode\":\"Evaluation\"", json);
+        Assert.Contains("\"AnalysisLevel\":\"XgRollerPlusPlus\"", json);
+        Assert.Equal(AnalysisMode.Evaluation, restored.AnalysisMode);
+        Assert.Equal(AnalysisLevel.XgRollerPlusPlus, restored.AnalysisLevel);
     }
 
     [Fact]
-    public void DecisionRow_AnalysisDepthClass_DefaultsToUnknown()
+    public void DecisionRow_AnalysisModeAndLevel_DefaultToUnknown()
     {
         var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
-        Assert.Equal(AnalysisDepthClass.Unknown, row.AnalysisDepthClass);
+        Assert.Equal(AnalysisMode.Unknown, row.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, row.AnalysisLevel);
     }
 
     [Fact]
-    public void DecisionRow_AnalysisDepthClass_MissingInLegacyJson_DeserializesToUnknown()
+    public void DecisionRow_LegacyAnalysisDepthClassJson_DeserializesToUnknownPair()
     {
-        // JSON written before AnalysisDepthClass existed carries no such field.
-        var json = "{\"Id\":\"test.xgp\",\"AnalysisDepth\":\"3-ply\",\"Roll\":63}";
+        // JSON written before the two-axis pair existed carries the retired
+        // flat "AnalysisDepthClass" property (or no taxonomy field at all).
+        // The unrecognized property is ignored and both axes read as their
+        // zero value — legacy data means "depth not recorded", never an error.
+        var json = "{\"Id\":\"test.xgp\",\"AnalysisDepth\":\"3-ply\",\"AnalysisDepthClass\":\"Ply3\",\"Roll\":63}";
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
-        Assert.Equal(AnalysisDepthClass.Unknown, restored.AnalysisDepthClass);
+        Assert.Equal(AnalysisMode.Unknown, restored.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, restored.AnalysisLevel);
         Assert.Equal("3-ply", restored.AnalysisDepth);
     }
 
     [Fact]
-    public void DecisionRow_AnalysisDepthClass_NotInCsvOutput()
+    public void DecisionRow_AnalysisModeAndLevel_NotInCsvOutput()
     {
         var row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
             AnalysisDepth = "3-ply",
-            AnalysisDepthClass = AnalysisDepthClass.Ply3
+            AnalysisMode = AnalysisMode.Evaluation,
+            AnalysisLevel = AnalysisLevel.Ply3
         };
 
-        Assert.DoesNotContain("AnalysisDepthClass", DecisionRow.CsvHeader);
+        Assert.DoesNotContain("AnalysisMode", DecisionRow.CsvHeader);
+        Assert.DoesNotContain("AnalysisLevel", DecisionRow.CsvHeader);
         // Column count unchanged: 11 columns → 10 commas.
         Assert.Equal(10, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
-    public void DecisionRow_IDecisionFilterData_AnalysisDepthClass()
+    public void DecisionRow_IDecisionFilterData_AnalysisModeAndLevel()
     {
         IDecisionFilterData row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
-            AnalysisDepthClass = AnalysisDepthClass.Rollout
+            AnalysisMode = AnalysisMode.BookRollout,
+            AnalysisLevel = AnalysisLevel.XgRoller
         };
 
-        Assert.Equal(AnalysisDepthClass.Rollout, row.AnalysisDepthClass);
+        Assert.Equal(AnalysisMode.BookRollout, row.AnalysisMode);
+        Assert.Equal(AnalysisLevel.XgRoller, row.AnalysisLevel);
     }
 
     // -----------------------------------------------------------------------

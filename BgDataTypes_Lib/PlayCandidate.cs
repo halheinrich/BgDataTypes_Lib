@@ -39,12 +39,22 @@ public class PlayCandidate
     /// Defaults to 0 (treated as lowest).</summary>
     public int DepthRank { get; init; }
 
-    /// <summary>Depth class of the analysis behind this candidate — the
-    /// taxonomy form of the <see cref="Depth"/> / <see cref="DepthAbbreviation"/> /
-    /// <see cref="DepthRank"/> triple, used for depth filtering.
-    /// Producer-stamped; <see cref="AnalysisDepthClass.Unknown"/> when not
-    /// set (including JSON written before this field existed).</summary>
-    public AnalysisDepthClass DepthClass { get; init; }
+    /// <summary>How this candidate's numbers were produced — the mode axis of
+    /// the two-axis depth taxonomy behind the <see cref="Depth"/> /
+    /// <see cref="DepthAbbreviation"/> / <see cref="DepthRank"/> display
+    /// forms, used for depth filtering together with
+    /// <see cref="AnalysisLevel"/>. Producer-stamped;
+    /// <see cref="AnalysisMode.Unknown"/> when not set (including JSON
+    /// written before the two-axis pair existed).</summary>
+    public AnalysisMode AnalysisMode { get; init; }
+
+    /// <summary>Evaluation level of the analysis behind this candidate — the
+    /// level axis paired with <see cref="AnalysisMode"/>. For a rollout this
+    /// is the inner moves level (checker rows never carry Roller-family
+    /// rollout levels — see <see cref="BgDataTypes_Lib.AnalysisMode"/>).
+    /// Producer-stamped; <see cref="AnalysisLevel.Unknown"/> when not
+    /// set.</summary>
+    public AnalysisLevel AnalysisLevel { get; init; }
 
     /// <summary>Primary equity value, displayed top-right in the analysis panel.</summary>
     public double Equity { get; init; }

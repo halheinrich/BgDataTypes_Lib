@@ -71,19 +71,38 @@ public class BgDecisionData : IDecisionFilterData
     /// <summary>
     /// Derived per the <see cref="DecisionRow.AnalysisDepth"/> convention:
     /// cube decisions report the cube analysis
-    /// (<see cref="DecisionData.CubeDepthClass"/>); checker plays report the
-    /// best-play candidate's <see cref="PlayCandidate.DepthClass"/>.
-    /// <see cref="AnalysisDepthClass.Unknown"/> when
+    /// (<see cref="DecisionData.CubeAnalysisMode"/>); checker plays report
+    /// the best-play candidate's <see cref="PlayCandidate.AnalysisMode"/>.
+    /// <see cref="AnalysisMode.Unknown"/> when
     /// <see cref="DecisionData.BestPlayIndex"/> does not identify a candidate
     /// (empty <see cref="DecisionData.Plays"/>, or an out-of-range index from
     /// malformed data) — depth-not-recorded rather than a throw, since this
     /// getter runs on every filter pass and serialization.
     /// </summary>
-    public AnalysisDepthClass AnalysisDepthClass => Decision.IsCube
-        ? Decision.CubeDepthClass
-        : Decision.BestPlayIndex >= 0 && Decision.BestPlayIndex < Decision.Plays.Count
-            ? Decision.Plays[Decision.BestPlayIndex].DepthClass
-            : AnalysisDepthClass.Unknown;
+    public AnalysisMode AnalysisMode => Decision.IsCube
+        ? Decision.CubeAnalysisMode
+        : BestPlayCandidate?.AnalysisMode ?? AnalysisMode.Unknown;
+    /// <summary>
+    /// Derived from the same analysis as <see cref="AnalysisMode"/>: cube
+    /// decisions report <see cref="DecisionData.CubeAnalysisLevel"/>, checker
+    /// plays the best-play candidate's
+    /// <see cref="PlayCandidate.AnalysisLevel"/>.
+    /// <see cref="AnalysisLevel.Unknown"/> when
+    /// <see cref="DecisionData.BestPlayIndex"/> does not identify a
+    /// candidate.
+    /// </summary>
+    public AnalysisLevel AnalysisLevel => Decision.IsCube
+        ? Decision.CubeAnalysisLevel
+        : BestPlayCandidate?.AnalysisLevel ?? AnalysisLevel.Unknown;
+    /// <summary>
+    /// The candidate <see cref="DecisionData.BestPlayIndex"/> identifies, or
+    /// null when it identifies none — shared by the two depth-axis
+    /// derivations so they always read the same candidate.
+    /// </summary>
+    private PlayCandidate? BestPlayCandidate =>
+        Decision.BestPlayIndex >= 0 && Decision.BestPlayIndex < Decision.Plays.Count
+            ? Decision.Plays[Decision.BestPlayIndex]
+            : null;
     /// <inheritdoc/>
     /// <remarks>
     /// Cube decisions route to <see cref="DecisionData.UserDoubleError"/>,

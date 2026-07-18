@@ -32,13 +32,24 @@ public interface IDecisionFilterData
     bool IsStandardStart { get; }
 
     /// <summary>
-    /// Depth class of the analysis behind this decision: the cube analysis
-    /// for cube decisions, the best-play candidate's analysis for checker
-    /// plays (mirroring the <see cref="DecisionRow.AnalysisDepth"/>
-    /// convention). <see cref="BgDataTypes_Lib.AnalysisDepthClass.Unknown"/>
-    /// when the depth was never stamped (legacy data).
+    /// How the analysis behind this decision was produced — the mode axis of
+    /// the two-axis depth taxonomy: the cube analysis for cube decisions, the
+    /// best-play candidate's analysis for checker plays (mirroring the
+    /// <see cref="DecisionRow.AnalysisDepth"/> convention).
+    /// <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/> when the depth was
+    /// never stamped (legacy data).
     /// </summary>
-    AnalysisDepthClass AnalysisDepthClass { get; }
+    AnalysisMode AnalysisMode { get; }
+
+    /// <summary>
+    /// Evaluation level of the analysis behind this decision — the level axis
+    /// paired with <see cref="AnalysisMode"/> (for rollout-family modes, the
+    /// inner level), drawn from the same analysis
+    /// <see cref="AnalysisMode"/> reports.
+    /// <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when the depth was
+    /// never stamped (legacy data).
+    /// </summary>
+    AnalysisLevel AnalysisLevel { get; }
 
     /// <summary>
     /// Error magnitude for this decision (≥ 0).

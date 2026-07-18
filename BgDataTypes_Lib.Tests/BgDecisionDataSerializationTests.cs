@@ -191,37 +191,45 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void PlayCandidate_DepthClass_RoundTrip()
+    public void PlayCandidate_AnalysisModeAndLevel_RoundTrip()
     {
         var original = new PlayCandidate
         {
             MoveNotation = "8/5(2) 6/3(2)",
-            DepthClass = AnalysisDepthClass.XgRollerPlusPlus,
+            AnalysisMode = AnalysisMode.Rollout,
+            AnalysisLevel = AnalysisLevel.Ply3,
             Equity = -0.142
         };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
-        // String form via the enum's bundled converter — no options-level registration.
-        Assert.Contains("\"DepthClass\":\"XgRollerPlusPlus\"", json);
-        Assert.Equal(AnalysisDepthClass.XgRollerPlusPlus, restored.DepthClass);
+        // String form via the enums' bundled converters — no options-level registration.
+        Assert.Contains("\"AnalysisMode\":\"Rollout\"", json);
+        Assert.Contains("\"AnalysisLevel\":\"Ply3\"", json);
+        Assert.Equal(AnalysisMode.Rollout, restored.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Ply3, restored.AnalysisLevel);
     }
 
     [Fact]
-    public void PlayCandidate_DepthClass_DefaultsToUnknown()
+    public void PlayCandidate_AnalysisModeAndLevel_DefaultToUnknown()
     {
         var p = new PlayCandidate { MoveNotation = "8/5 6/1" };
-        Assert.Equal(AnalysisDepthClass.Unknown, p.DepthClass);
+        Assert.Equal(AnalysisMode.Unknown, p.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, p.AnalysisLevel);
     }
 
     [Fact]
-    public void PlayCandidate_DepthClass_MissingInLegacyJson_DeserializesToUnknown()
+    public void PlayCandidate_LegacyDepthClassJson_DeserializesToUnknownPair()
     {
-        // JSON written before DepthClass existed carries no such field.
-        var json = "{\"MoveNotation\":\"8/5 6/1\",\"Depth\":\"3-ply\",\"Equity\":-0.12}";
+        // JSON written before the two-axis pair existed carries the retired
+        // flat "DepthClass" property (or no taxonomy field at all). The
+        // unrecognized property is ignored and both axes read as their zero
+        // value — legacy data means "depth not recorded", never an error.
+        var json = "{\"MoveNotation\":\"8/5 6/1\",\"Depth\":\"3-ply\",\"DepthClass\":\"Ply3\",\"Equity\":-0.12}";
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
-        Assert.Equal(AnalysisDepthClass.Unknown, restored.DepthClass);
+        Assert.Equal(AnalysisMode.Unknown, restored.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, restored.AnalysisLevel);
         Assert.Equal("3-ply", restored.Depth);
     }
 
@@ -402,13 +410,17 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void DecisionData_CubeDepthClass_RoundTrip()
+    public void DecisionData_CubeAnalysisModeAndLevel_RoundTrip()
     {
+        // BookRollout + XG Roller is the motivating cube case: the shipped
+        // opening-book database carries cube rollout levels of XG Roller,
+        // which the retired flat depth class could not represent.
         var original = new DecisionData
         {
             Dice = [0, 0],
             IsCube = true,
-            CubeDepthClass = AnalysisDepthClass.Rollout,
+            CubeAnalysisMode = AnalysisMode.BookRollout,
+            CubeAnalysisLevel = AnalysisLevel.XgRoller,
             NoDoubleEquity = 0.312,
             DoubleTakeEquity = 0.287
         };
@@ -416,25 +428,32 @@ public class BgDecisionDataSerializationTests
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
 
-        Assert.Contains("\"CubeDepthClass\":\"Rollout\"", json);
-        Assert.Equal(AnalysisDepthClass.Rollout, restored.CubeDepthClass);
+        Assert.Contains("\"CubeAnalysisMode\":\"BookRollout\"", json);
+        Assert.Contains("\"CubeAnalysisLevel\":\"XgRoller\"", json);
+        Assert.Equal(AnalysisMode.BookRollout, restored.CubeAnalysisMode);
+        Assert.Equal(AnalysisLevel.XgRoller, restored.CubeAnalysisLevel);
         Assert.True(restored.IsCube);
     }
 
     [Fact]
-    public void DecisionData_CubeDepthClass_DefaultsToUnknown()
+    public void DecisionData_CubeAnalysisModeAndLevel_DefaultToUnknown()
     {
         var d = new DecisionData();
-        Assert.Equal(AnalysisDepthClass.Unknown, d.CubeDepthClass);
+        Assert.Equal(AnalysisMode.Unknown, d.CubeAnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, d.CubeAnalysisLevel);
     }
 
     [Fact]
-    public void DecisionData_CubeDepthClass_MissingInLegacyJson_DeserializesToUnknown()
+    public void DecisionData_LegacyCubeDepthClassJson_DeserializesToUnknownPair()
     {
-        var json = "{\"Dice\":[0,0],\"IsCube\":true,\"CubeDepth\":\"3-ply\",\"NoDoubleEquity\":0.312}";
+        // JSON written before the two-axis pair existed carries the retired
+        // flat "CubeDepthClass" property (or no taxonomy field at all); the
+        // unrecognized property is ignored and both axes read as Unknown.
+        var json = "{\"Dice\":[0,0],\"IsCube\":true,\"CubeDepth\":\"3-ply\",\"CubeDepthClass\":\"Ply3\",\"NoDoubleEquity\":0.312}";
         var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
 
-        Assert.Equal(AnalysisDepthClass.Unknown, restored.CubeDepthClass);
+        Assert.Equal(AnalysisMode.Unknown, restored.CubeAnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, restored.CubeAnalysisLevel);
         Assert.Equal("3-ply", restored.CubeDepth);
     }
 
@@ -840,11 +859,11 @@ public class BgDecisionDataSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  IDecisionFilterData — AnalysisDepthClass derivation
+    //  IDecisionFilterData — AnalysisMode / AnalysisLevel derivation
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void BgDecisionData_AnalysisDepthClass_CubeDecision_UsesCubeDepthClass()
+    public void BgDecisionData_AnalysisModeAndLevel_CubeDecision_UseCubeAnalysis()
     {
         IDecisionFilterData data = new BgDecisionData
         {
@@ -852,15 +871,17 @@ public class BgDecisionDataSerializationTests
             Decision = new DecisionData
             {
                 IsCube = true,
-                CubeDepthClass = AnalysisDepthClass.XgRollerPlus
+                CubeAnalysisMode = AnalysisMode.Evaluation,
+                CubeAnalysisLevel = AnalysisLevel.XgRollerPlus
             }
         };
 
-        Assert.Equal(AnalysisDepthClass.XgRollerPlus, data.AnalysisDepthClass);
+        Assert.Equal(AnalysisMode.Evaluation, data.AnalysisMode);
+        Assert.Equal(AnalysisLevel.XgRollerPlus, data.AnalysisLevel);
     }
 
     [Fact]
-    public void BgDecisionData_AnalysisDepthClass_CheckerPlay_UsesBestPlayCandidate()
+    public void BgDecisionData_AnalysisModeAndLevel_CheckerPlay_UseBestPlayCandidate()
     {
         // BestPlayIndex deliberately not 0, to pin that derivation indexes by
         // it rather than taking the first candidate.
@@ -873,17 +894,28 @@ public class BgDecisionDataSerializationTests
                 BestPlayIndex = 1,
                 Plays =
                 [
-                    new PlayCandidate { MoveNotation = "8/5 6/1", DepthClass = AnalysisDepthClass.Ply3 },
-                    new PlayCandidate { MoveNotation = "8/3 6/1", DepthClass = AnalysisDepthClass.Rollout }
+                    new PlayCandidate
+                    {
+                        MoveNotation = "8/5 6/1",
+                        AnalysisMode = AnalysisMode.Evaluation,
+                        AnalysisLevel = AnalysisLevel.Ply3
+                    },
+                    new PlayCandidate
+                    {
+                        MoveNotation = "8/3 6/1",
+                        AnalysisMode = AnalysisMode.Rollout,
+                        AnalysisLevel = AnalysisLevel.Ply1
+                    }
                 ]
             }
         };
 
-        Assert.Equal(AnalysisDepthClass.Rollout, data.AnalysisDepthClass);
+        Assert.Equal(AnalysisMode.Rollout, data.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Ply1, data.AnalysisLevel);
     }
 
     [Fact]
-    public void BgDecisionData_AnalysisDepthClass_CheckerPlay_OutOfRangeBestPlayIndex_ReturnsUnknown()
+    public void BgDecisionData_AnalysisModeAndLevel_CheckerPlay_OutOfRangeBestPlayIndex_ReturnUnknown()
     {
         // Malformed or legacy data can carry a BestPlayIndex that doesn't
         // identify a candidate; the derivation degrades to Unknown rather
@@ -896,15 +928,24 @@ public class BgDecisionDataSerializationTests
             {
                 IsCube = false,
                 BestPlayIndex = 2,
-                Plays = [new PlayCandidate { MoveNotation = "8/5 6/1", DepthClass = AnalysisDepthClass.Ply3 }]
+                Plays =
+                [
+                    new PlayCandidate
+                    {
+                        MoveNotation = "8/5 6/1",
+                        AnalysisMode = AnalysisMode.Evaluation,
+                        AnalysisLevel = AnalysisLevel.Ply3
+                    }
+                ]
             }
         };
 
-        Assert.Equal(AnalysisDepthClass.Unknown, data.AnalysisDepthClass);
+        Assert.Equal(AnalysisMode.Unknown, data.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, data.AnalysisLevel);
     }
 
     [Fact]
-    public void BgDecisionData_AnalysisDepthClass_CheckerPlay_EmptyPlays_ReturnsUnknown()
+    public void BgDecisionData_AnalysisModeAndLevel_CheckerPlay_EmptyPlays_ReturnUnknown()
     {
         IDecisionFilterData data = new BgDecisionData
         {
@@ -912,15 +953,17 @@ public class BgDecisionDataSerializationTests
             Decision = new DecisionData { IsCube = false }
         };
 
-        Assert.Equal(AnalysisDepthClass.Unknown, data.AnalysisDepthClass);
+        Assert.Equal(AnalysisMode.Unknown, data.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, data.AnalysisLevel);
     }
 
     [Fact]
-    public void BgDecisionData_AnalysisDepthClass_DefaultsToUnknown()
+    public void BgDecisionData_AnalysisModeAndLevel_DefaultToUnknown()
     {
         IDecisionFilterData data = new BgDecisionData { Id = new XgpDecisionId("test.xgp") };
 
-        Assert.Equal(AnalysisDepthClass.Unknown, data.AnalysisDepthClass);
+        Assert.Equal(AnalysisMode.Unknown, data.AnalysisMode);
+        Assert.Equal(AnalysisLevel.Unknown, data.AnalysisLevel);
     }
 
     // -----------------------------------------------------------------------

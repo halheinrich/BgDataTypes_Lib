@@ -68,11 +68,21 @@ public class DecisionData
     /// for semantics. Defaults to 0.</summary>
     public int CubeDepthRank { get; init; }
 
-    /// <summary>Depth class of the cube analysis; see
-    /// <see cref="PlayCandidate.DepthClass"/> for semantics.
-    /// <see cref="AnalysisDepthClass.Unknown"/> when IsCube is false or
-    /// when not stamped (including JSON written before this field existed).</summary>
-    public AnalysisDepthClass CubeDepthClass { get; init; }
+    /// <summary>How the cube analysis's numbers were produced — the mode axis
+    /// of the two-axis depth taxonomy; see
+    /// <see cref="PlayCandidate.AnalysisMode"/> for semantics.
+    /// <see cref="AnalysisMode.Unknown"/> when IsCube is false or when not
+    /// stamped (including JSON written before the two-axis pair existed).</summary>
+    public AnalysisMode CubeAnalysisMode { get; init; }
+
+    /// <summary>Evaluation level of the cube analysis — the level axis paired
+    /// with <see cref="CubeAnalysisMode"/>. For a rollout this is the inner
+    /// cube level, which (unlike checker rows) can be a Roller-family level:
+    /// the shipped opening-book database contains cube rollout levels of
+    /// XG Roller. See <see cref="PlayCandidate.AnalysisLevel"/> for the
+    /// checker-row counterpart. <see cref="AnalysisLevel.Unknown"/> when
+    /// IsCube is false or when not stamped.</summary>
+    public AnalysisLevel CubeAnalysisLevel { get; init; }
 
     /// <summary>
     /// Cubeful equity of not doubling (doubler's perspective, normalised
