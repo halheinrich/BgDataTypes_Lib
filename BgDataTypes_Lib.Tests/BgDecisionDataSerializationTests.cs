@@ -967,6 +967,82 @@ public class BgDecisionDataSerializationTests
     }
 
     // -----------------------------------------------------------------------
+    //  IDecisionFilterData — Dice forwarding
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void BgDecisionData_Dice_CheckerPlay_ForwardsFromDecision()
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData { IsCube = false, Dice = [6, 3] }
+        };
+
+        Assert.Equal(new DiceRoll(6, 3), data.Dice);
+    }
+
+    [Fact]
+    public void BgDecisionData_Dice_RolledOrderCanonicalized()
+    {
+        // The XG parser stamps Decision.Dice in rolled order; the forwarding
+        // property canonicalizes, so [1, 3] reads back high-first.
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData { IsCube = false, Dice = [1, 3] }
+        };
+
+        Assert.Equal(new DiceRoll(3, 1), data.Dice);
+    }
+
+    [Fact]
+    public void BgDecisionData_Dice_CubeDecision_IsNull()
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData { IsCube = true, Dice = [0, 0] }
+        };
+
+        Assert.Null(data.Dice);
+    }
+
+    [Fact]
+    public void BgDecisionData_Dice_MalformedStoredDice_Throws()
+    {
+        // A checker play whose Dice was never stamped carries the {0, 0}
+        // default — corrupt data fails loud in the DiceRoll constructor.
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData { IsCube = false }
+        };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => data.Dice);
+    }
+
+    [Fact]
+    public void BgDecisionData_Dice_NotSerialized_DecisionDiceRemainsTheWire()
+    {
+        var original = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Decision = new DecisionData { IsCube = false, Dice = [6, 3] }
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+
+        // The nested int-pair wire is unchanged; the derived canonical token
+        // never appears.
+        Assert.Contains("\"Dice\":[6,3]", json);
+        Assert.DoesNotContain("\"Dice\":\"63\"", json);
+
+        var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
+        Assert.Equal(new DiceRoll(6, 3), ((IDecisionFilterData)restored).Dice);
+    }
+
+    // -----------------------------------------------------------------------
     //  PlayOutcomeData — after-boards
     // -----------------------------------------------------------------------
 

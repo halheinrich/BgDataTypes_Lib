@@ -45,6 +45,20 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <summary>Dice roll as a two-digit integer, e.g. 63, 11. 0 for cube decisions.</summary>
     public int Roll { get; init; }
 
+    /// <summary>
+    /// <see cref="Roll"/> in canonical unordered form
+    /// (<see cref="IDecisionFilterData.Dice"/>): null when <see cref="Roll"/>
+    /// is 0 (a cube decision), otherwise the roll's two digits canonicalized
+    /// by <see cref="DiceRoll"/> ("13" and "31" both yield high 3, low 1). A
+    /// malformed <see cref="Roll"/> whose digits are not both die faces
+    /// (e.g. 70) throws <see cref="ArgumentOutOfRangeException"/> — corrupt
+    /// data fails loud rather than silently filtering wrong. Derived, so
+    /// excluded from JSON like <see cref="IsCube"/>; <see cref="Roll"/>
+    /// remains the CSV and JSON wire form.
+    /// </summary>
+    [JsonIgnore]
+    public DiceRoll? Dice => Roll == 0 ? null : new DiceRoll(Roll / 10, Roll % 10);
+
     /// <summary>Human-readable analysis depth label, e.g. "3-ply", "Rollout: 1296 trials. 3-ply".</summary>
     public string AnalysisDepth { get; init; } = string.Empty;
 

@@ -52,6 +52,14 @@ public interface IDecisionFilterData
     AnalysisLevel AnalysisLevel { get; }
 
     /// <summary>
+    /// The dice rolled for this decision, in canonical unordered form.
+    /// Null for cube decisions (<see cref="IsCube"/> == true) — a cube is
+    /// offered before the on-roll player rolls, so no dice apply; the
+    /// null-when-inapplicable convention shared with <see cref="FilterError"/>.
+    /// </summary>
+    DiceRoll? Dice { get; }
+
+    /// <summary>
     /// Error magnitude for this decision (≥ 0).
     /// For checker plays: equity loss vs best play.
     /// For cube decisions: equity loss from doubling or take/drop decision.

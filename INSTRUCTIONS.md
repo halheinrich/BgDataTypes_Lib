@@ -24,7 +24,7 @@ rest on; introducing a subproject dependency here would either create a
 circular reference or force the dependency on every consumer transitively.
 `System.Text.Json` is the only runtime dependency; the serialized types
 that need converters (`CubeOwner`, `CubeAction`, `AnalysisMode`,
-`AnalysisLevel`, `Play`, `DecisionId`) each bundle their own
+`AnalysisLevel`, `Play`, `DecisionId`, `DiceRoll`) each bundle their own
 `[JsonConverter]` attribute so consumers do not have to register
 converters on their `JsonSerializerOptions`.
 
@@ -49,6 +49,8 @@ BgDataTypes_Lib/
   DecisionIdJsonConverter.cs — canonical-string JSON converter for DecisionId
   DecisionRow.cs            — flat CSV export record
   DescriptiveData.cs
+  DiceRoll.cs               — readonly record struct: canonical unordered (High, Low)
+  DiceRollJsonConverter.cs  — two-digit-token JSON converter for DiceRoll
   IDecisionFilterData.cs    — shared filter contract
   Move.cs                   — (FrPt, ToPt) record struct
   Play.cs                   — fixed 4-slot Move buffer
@@ -70,6 +72,7 @@ BgDataTypes_Lib.Tests/
   DecisionDataCubeScoringTests.cs
   DecisionIdTests.cs
   DecisionRowSerializationTests.cs
+  DiceRollTests.cs
   MoveTests.cs
   PipCountTests.cs
   PlayTests.cs
@@ -85,8 +88,9 @@ their move-generation origins. `BoardState` is a `class` but mutable —
 the one deliberate exception (see "Mutability exception" below).
 Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
 attributes: `JsonStringEnumConverter` on `CubeOwner`, `CubeAction`,
-`AnalysisMode`, and `AnalysisLevel`, `PlayJsonConverter` on `Play`, and
-`DecisionIdJsonConverter` on `DecisionId`. Consumers do not need to
+`AnalysisMode`, and `AnalysisLevel`, `PlayJsonConverter` on `Play`,
+`DecisionIdJsonConverter` on `DecisionId`, and `DiceRollJsonConverter`
+on `DiceRoll`. Consumers do not need to
 register any of these converters on their `JsonSerializerOptions` — the
 attributes carry the contract on the types themselves.
 
@@ -122,6 +126,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — unstamped/legacy JSON, including JSON stamped with the retired flat class (unrecognized property, ignored on read), deserializes to it. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Trial counts stay label-only. |
 | `AnalysisLevel` | enum: `Unknown`, `Ply1`–`Ply7`, `XgRoller`, `XgRollerPlus`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — unstamped/legacy JSON deserializes to it. Declared in ascending-rigor order, plies below the Roller family; the UI renders levels in declaration order (informational, not contractual — filter by membership; `DepthRank` orders). Every member carries a `[Description]` display label; variants sharing a level keep their finer identity only in the label strings ("3-ply red" is `Ply3`). |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
+| `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
 | `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint (an intermediate hit splits the trajectory into two chains). |
@@ -324,7 +329,10 @@ otherwise `UserPlayError`. `AnalysisMode` / `AnalysisLevel` derive per the
 report the `BestPlayIndex` candidate's pair (`Unknown`/`Unknown` when
 `BestPlayIndex` does not identify a candidate — empty `Plays`, or an
 out-of-range index from malformed data); a shared private lookup guarantees
-both axes read the same candidate.
+both axes read the same candidate. `Dice` forwards `Decision.Dice` in
+canonical `DiceRoll` form — null for cube decisions, fail-loud on malformed
+stored faces — and is `[JsonIgnore]`d so the throwing derivation never runs
+during serialization and `Decision.Dice` stays the JSON wire form.
 
 ### After-boards (PlayOutcomeData)
 
@@ -347,7 +355,10 @@ by the XG → JSON conversion pipeline, for different consumers. Implements
 same layout as `PositionData.Mop` — with flipped POV on the after-boards).
 All three board fields serialize to JSON but are **excluded from CSV output**,
 as are `AnalysisMode` / `AnalysisLevel` (the taxonomy form of
-`AnalysisDepth`, which remains the CSV depth column).
+`AnalysisDepth`, which remains the CSV depth column). `Dice` is derived from
+the int `Roll` column (`Roll == 0` → null; malformed digits fail loud) and is
+`[JsonIgnore]`d like `IsCube` / `MatchScore` — `Roll` stays the wire form on
+both CSV and JSON.
 
 ### Mop layout
 
@@ -376,6 +387,7 @@ public interface IDecisionFilterData
     bool IsStandardStart { get; }                 // false for non-standard openings
     AnalysisMode AnalysisMode { get; }            // cube analysis for cubes, best-play candidate for checkers
     AnalysisLevel AnalysisLevel { get; }          // level axis of the same analysis AnalysisMode reports
+    DiceRoll? Dice { get; }                       // canonical roll; null for cube decisions
     double? FilterError { get; }                  // ≥ 0 or null
     IReadOnlyList<int> Board { get; }             // 26 elements, see Mop layout
     IReadOnlyList<int> AfterBestBoard { get; }    // POV flipped; empty for cubes
@@ -519,6 +531,30 @@ public enum AnalysisLevel
     XgRoller, XgRollerPlus, XgRollerPlusPlus
 }
 
+// Canonical unordered dice roll: the ctor accepts either order and
+// canonicalizes to High ≥ Low, each face validated 1–6
+// (ArgumentOutOfRangeException). Equality is over the canonical form
+// (3-1 ≡ 1-3); ordering is ascending High-then-Low (= ascending canonical
+// token). Parse/TryParse read the two-digit token in either spelling;
+// ToString emits it high-first ("31"). JSON round-trips as that token via
+// bundled DiceRollJsonConverter. default is non-meaningful (see Pitfalls).
+public readonly record struct DiceRoll :
+    IComparable, IComparable<DiceRoll>, IComparisonOperators<DiceRoll, DiceRoll, bool>,
+    IParsable<DiceRoll>, ISpanParsable<DiceRoll>
+{
+    public int High { get; }                      // 1–6; ≥ Low
+    public int Low { get; }                       // 1–6
+    public DiceRoll(int die1, int die2);          // either order; canonicalizes
+    public bool IsDouble { get; }
+    public void Deconstruct(out int high, out int low);
+    public override string ToString();            // "31", "55"
+    public static DiceRoll Parse(string s, IFormatProvider? provider = null);
+    public static DiceRoll Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null);
+    public static bool TryParse(string? s, IFormatProvider? provider, out DiceRoll result);
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out DiceRoll result);
+    public int CompareTo(DiceRoll other);         // + <, <=, >, >= operators
+}
+
 // Validated halves: Doubler ∈ {NoDouble, Double}, Taker ∈ {Take, Pass};
 // a cross-half value throws ArgumentOutOfRangeException. default is
 // non-meaningful (see Pitfalls).
@@ -541,8 +577,9 @@ Serialization contract: round-trips cleanly through `System.Text.Json` —
 no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
 `AnalysisMode`, and `AnalysisLevel` bundle `JsonStringEnumConverter` via attribute;
 `Play` bundles `PlayJsonConverter`; `DecisionId` bundles
-`DecisionIdJsonConverter`. Tested without any options-level registration in
-`BgDecisionDataSerializationTests` and `DecisionRowSerializationTests`.
+`DecisionIdJsonConverter`; `DiceRoll` bundles `DiceRollJsonConverter`. Tested
+without any options-level registration in `BgDecisionDataSerializationTests`,
+`DecisionRowSerializationTests`, and `DiceRollTests`.
 
 ## Pitfalls
 
@@ -651,6 +688,23 @@ no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
   ordering surface for consumers that compare depths. Do not strip a member's
   `[Description]` label: downstream label readers (XgFilter_Lib's
   `EnumLabel.ToLabel`) throw on a member without one.
+- **`IDecisionFilterData.Dice` is null for cube decisions, fail-loud on
+  malformed storage.** Null means "no dice apply" (a cube is offered before
+  the roll — the `FilterError` null-when-inapplicable convention), never
+  "data was bad": a checker play whose stored roll is malformed
+  (`DecisionRow.Roll` digits outside 1–6, e.g. `70`; `DecisionData.Dice`
+  left at its `{0, 0}` default) throws `ArgumentOutOfRangeException` from
+  the `DiceRoll` constructor on access. Both derivations are `[JsonIgnore]`d
+  so the throwing getter never runs during serialization — the
+  `BestDoublerAction` precedent — and the stored forms (`Roll`,
+  `Decision.Dice`) remain the wire. Deliberately unlike the
+  `AnalysisMode`/`AnalysisLevel` graceful `Unknown`: legacy data genuinely
+  lacks a depth stamp, but no legitimate data lacks dice on a checker play,
+  so a soft null here could only mask a producer bug.
+- **`default(DiceRoll)` is non-meaningful.** A `record struct` cannot run
+  its face validation on `default`, so `default(DiceRoll)` carries faces of
+  0. "No roll" is modelled as `DiceRoll?` null, never as `default`. The
+  standard value-type caveat, shared with `Play` and `CubeDecisionPair`.
 - **`PlayCandidate.EquityLoss` is non-nullable; `0.0` means no loss
   vs. best.** Identifying the best candidate uses
   `DecisionData.BestPlayIndex`; testing membership in the best-equity
@@ -672,7 +726,8 @@ no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
   cannot run its half-guards on `default`, so `default(CubeDecisionPair)`
   is `(NoDouble, NoDouble)` — whose `Taker` is not a valid taker action.
   Construct pairs explicitly; do not treat `default` as a "no decision"
-  sentinel. This is the standard value-type caveat, shared with `Play`.
+  sentinel. This is the standard value-type caveat, shared with `Play`
+  and `DiceRoll`.
 
 ## Subproject-internal next steps
 

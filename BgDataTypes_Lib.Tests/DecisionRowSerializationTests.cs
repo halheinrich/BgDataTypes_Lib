@@ -392,6 +392,85 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
+    //  Dice — canonical roll derived from Roll
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_Dice_CheckerPlay_DerivedFromRoll()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 63 };
+
+        Assert.Equal(new DiceRoll(6, 3), row.Dice);
+    }
+
+    [Fact]
+    public void DecisionRow_Dice_RolledOrderCanonicalized()
+    {
+        // The XG parser stamps dice in rolled order, so Roll carries both
+        // spellings of a 3-1 (31 and 13); Dice canonicalizes high-first.
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 13 };
+
+        Assert.Equal(new DiceRoll(3, 1), row.Dice);
+        Assert.Equal(3, row.Dice!.Value.High);
+        Assert.Equal(1, row.Dice!.Value.Low);
+    }
+
+    [Fact]
+    public void DecisionRow_Dice_CubeDecision_IsNull()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 0 };
+
+        Assert.True(row.IsCube);
+        Assert.Null(row.Dice);
+    }
+
+    [Theory]
+    // Digits outside 1–6, or not two digits at all — corrupt data fails loud.
+    [InlineData(70)]
+    [InlineData(7)]
+    [InlineData(-13)]
+    [InlineData(315)]
+    public void DecisionRow_Dice_MalformedRoll_Throws(int badRoll)
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = badRoll };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => row.Dice);
+    }
+
+    [Fact]
+    public void DecisionRow_Dice_NotSerialized_RollRemainsTheWire()
+    {
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 63 };
+        var json = JsonSerializer.Serialize(original, Options);
+
+        Assert.DoesNotContain("\"Dice\"", json);
+        Assert.Contains("\"Roll\":63", json);
+
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        Assert.Equal(new DiceRoll(6, 3), restored.Dice);
+    }
+
+    [Fact]
+    public void DecisionRow_Dice_NotInCsvOutput()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 63 };
+
+        Assert.DoesNotContain("Dice", DecisionRow.CsvHeader);
+        // Column count unchanged: 11 columns → 10 commas.
+        Assert.Equal(10, row.ToCsvLine().Count(c => c == ','));
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_Dice()
+    {
+        IDecisionFilterData play = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 52 };
+        IDecisionFilterData cube = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 0 };
+
+        Assert.Equal(new DiceRoll(5, 2), play.Dice);
+        Assert.Null(cube.Dice);
+    }
+
+    // -----------------------------------------------------------------------
     //  After-boards — JSON only, excluded from CSV (matches Board)
     // -----------------------------------------------------------------------
 

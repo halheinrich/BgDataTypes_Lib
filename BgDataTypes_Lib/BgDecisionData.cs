@@ -1,4 +1,6 @@
-﻿namespace BgDataTypes_Lib;
+﻿using System.Text.Json.Serialization;
+
+namespace BgDataTypes_Lib;
 
 /// <summary>
 /// The composite decision record — one analysed backgammon decision as the
@@ -103,6 +105,22 @@ public class BgDecisionData : IDecisionFilterData
         Decision.BestPlayIndex >= 0 && Decision.BestPlayIndex < Decision.Plays.Count
             ? Decision.Plays[Decision.BestPlayIndex]
             : null;
+    /// <summary>
+    /// Forwards <see cref="DecisionData.Dice"/> in canonical unordered form
+    /// (<see cref="IDecisionFilterData.Dice"/>): null for cube decisions —
+    /// no dice apply — otherwise the two producer-stamped faces
+    /// canonicalized by <see cref="DiceRoll"/>. Malformed stored dice (faces
+    /// outside 1–6, including a checker play left at the unstamped default)
+    /// fail loud in the <see cref="DiceRoll"/> constructor; the
+    /// <c>[JsonIgnore]</c> keeps that throwing derivation out of
+    /// serialization (the <see cref="DecisionData.BestDoublerAction"/>
+    /// precedent) — <see cref="DecisionData.Dice"/> remains the JSON wire
+    /// form.
+    /// </summary>
+    [JsonIgnore]
+    public DiceRoll? Dice => Decision.IsCube
+        ? null
+        : new DiceRoll(Decision.Dice[0], Decision.Dice[1]);
     /// <inheritdoc/>
     /// <remarks>
     /// Cube decisions route to <see cref="DecisionData.UserDoubleError"/>,
