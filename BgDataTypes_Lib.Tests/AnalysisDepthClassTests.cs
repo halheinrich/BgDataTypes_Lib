@@ -35,14 +35,13 @@ public class AnalysisDepthClassTests
     [Fact]
     public void MembersAreInAscendingRigorOrder()
     {
-        // Mirrors the producer's rank ordering (Book/unknown 0, N-ply 1-7,
-        // XG Roller family 20-22, rollouts 100 for unknown inner ply through
-        // 107). Informational, not contractual — filtering uses membership,
-        // DepthRank orders.
+        // Mirrors the producer's rank ordering (unknown 0, N-ply 1-7, XG Roller
+        // family 20-22, then the rollout tier: Book at 99, rollouts 100 for
+        // unknown inner ply through 107). Informational, not contractual —
+        // filtering uses membership, DepthRank orders.
         AnalysisDepthClass[] expected =
         [
             AnalysisDepthClass.Unknown,
-            AnalysisDepthClass.Book,
             AnalysisDepthClass.Ply1,
             AnalysisDepthClass.Ply2,
             AnalysisDepthClass.Ply3,
@@ -53,6 +52,7 @@ public class AnalysisDepthClassTests
             AnalysisDepthClass.XgRoller,
             AnalysisDepthClass.XgRollerPlus,
             AnalysisDepthClass.XgRollerPlusPlus,
+            AnalysisDepthClass.Book,
             AnalysisDepthClass.Rollout,
             AnalysisDepthClass.RolloutPly1,
             AnalysisDepthClass.RolloutPly2,
@@ -95,6 +95,17 @@ public class AnalysisDepthClassTests
     }
 
     [Fact]
+    public void LegacyBookWireString_DeserializesToBook()
+    {
+        // The wire form is the member NAME ("Book"), not the [Description]
+        // label — so relocating Book in the declaration order and relabeling
+        // it "Book (rollout)" must not disturb existing JSON. Legacy data
+        // stamped "Book" must keep deserializing to AnalysisDepthClass.Book.
+        var restored = JsonSerializer.Deserialize<AnalysisDepthClass>("\"Book\"", Options);
+        Assert.Equal(AnalysisDepthClass.Book, restored);
+    }
+
+    [Fact]
     public void EveryMember_HasANonEmptyDescriptionLabel()
     {
         // Display text is owned here; downstream label readers (e.g.
@@ -114,6 +125,7 @@ public class AnalysisDepthClassTests
     [InlineData(AnalysisDepthClass.Ply3, "3-ply")]
     [InlineData(AnalysisDepthClass.XgRollerPlus, "XG Roller+")]
     [InlineData(AnalysisDepthClass.XgRollerPlusPlus, "XG Roller++")]
+    [InlineData(AnalysisDepthClass.Book, "Book (rollout)")]
     [InlineData(AnalysisDepthClass.Rollout, "Rollout")]
     [InlineData(AnalysisDepthClass.RolloutPly3, "Rollout (3-ply)")]
     public void DescriptionLabels_MatchDisplayForms(AnalysisDepthClass depthClass, string expectedLabel)

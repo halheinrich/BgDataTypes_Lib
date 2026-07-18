@@ -117,7 +117,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
-| `AnalysisDepthClass` | enum: `Unknown`, `Book`, `Ply1`–`Ply7`, `XgRoller`, `XgRollerPlus`, `XgRollerPlusPlus`, `Rollout`, `RolloutPly1`–`RolloutPly7` — depth class of an XG analysis, serializes as string. The taxonomy SSOT for depth filtering; classification is producer-side (ConvertXgToJson_Lib maps XG level codes onto it). `Unknown = 0` deliberately — unstamped/legacy JSON deserializes to it. Declared in ascending-rigor order mirroring the producer's ranks (informational, not contractual — filter by membership; `DepthRank` orders). Rollout inner ply is a taxonomy axis: `RolloutPly1`–`RolloutPly7` mirror the producer's 100 + inner-ply rank ladder, with `Rollout` as the floor for a rollout whose inner ply is unknown (the producer's no-context rank-100 sentinel). Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Variants sharing a class keep their finer identity only in the label strings ("3-ply red" is `Ply3`; Book V1/V2 are both `Book`; rollout trial counts are label-only). |
+| `AnalysisDepthClass` | enum: `Unknown`, `Ply1`–`Ply7`, `XgRoller`, `XgRollerPlus`, `XgRollerPlusPlus`, `Book`, `Rollout`, `RolloutPly1`–`RolloutPly7` — depth class of an XG analysis, serializes as string. The taxonomy SSOT for depth filtering; classification is producer-side (ConvertXgToJson_Lib maps XG level codes onto it). `Unknown = 0` deliberately — unstamped/legacy JSON deserializes to it. Declared in ascending-rigor order mirroring the producer's ranks (informational, not contractual — filter by membership; `DepthRank` orders). Rollout inner ply is a taxonomy axis: `RolloutPly1`–`RolloutPly7` mirror the producer's 100 + inner-ply rank ladder, with `Rollout` as the floor for a rollout whose inner ply is unknown (the producer's no-context rank-100 sentinel). `Book` is rollout-backed (XG's opening book is rollout-derived), so it sits in the rollout tier at rank 99 — just below the explicit-rollout floor, since a cached rollout of unrecorded parameters ranks under a rollout the file actually records. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Variants sharing a class keep their finer identity only in the label strings ("3-ply red" is `Ply3`; Book V1/V2 are both `Book`; rollout trial counts are label-only). |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
@@ -496,15 +496,16 @@ public enum CubeAction { NoDouble, Double, Take, Pass }
 
 // Ascending-rigor order mirroring the producer's ranks (informational —
 // filter by membership; DepthRank orders). Unknown = 0 deliberately:
-// unstamped/legacy JSON deserializes to it. Rollout is the floor of the
-// rollout tier (inner ply unknown); RolloutPly1-RolloutPly7 mirror the
-// producer's 100 + inner-ply ladder. Every member carries a [Description]
+// unstamped/legacy JSON deserializes to it. Book is rollout-backed and sits
+// in the rollout tier at rank 99, just below the explicit-rollout floor.
+// Rollout is that floor (inner ply unknown); RolloutPly1-RolloutPly7 mirror
+// the producer's 100 + inner-ply ladder. Every member carries a [Description]
 // display label.
 public enum AnalysisDepthClass
 {
-    Unknown, Book, Ply1, Ply2, Ply3, Ply4, Ply5, Ply6, Ply7,
+    Unknown, Ply1, Ply2, Ply3, Ply4, Ply5, Ply6, Ply7,
     XgRoller, XgRollerPlus, XgRollerPlusPlus,
-    Rollout, RolloutPly1, RolloutPly2, RolloutPly3, RolloutPly4,
+    Book, Rollout, RolloutPly1, RolloutPly2, RolloutPly3, RolloutPly4,
     RolloutPly5, RolloutPly6, RolloutPly7
 }
 

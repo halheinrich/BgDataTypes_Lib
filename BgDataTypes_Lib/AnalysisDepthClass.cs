@@ -16,12 +16,16 @@ namespace BgDataTypes_Lib;
 /// <remarks>
 /// <para>
 /// Members are declared in ascending-rigor order, mirroring the producer's
-/// ordinal ranks (Book and unknown rank 0, N-ply 1–7, the XG Roller family
-/// 20–22, rollouts 100 for unknown inner ply through 107 for a 7-ply
-/// inner evaluation). That ordering is informational, not contractual:
-/// depth filtering works by membership, and nothing guarantees the numeric
-/// values stay stable if the taxonomy grows. <see cref="PlayCandidate.DepthRank"/>
-/// remains the ordering surface for consumers that compare depths.
+/// ordinal ranks (unknown rank 0, N-ply 1–7, the XG Roller family 20–22, then
+/// the rollout tier: Book at rank 99, and explicit rollouts 100 for unknown
+/// inner ply through 107 for a 7-ply inner evaluation). Book sits in the
+/// rollout tier because XG's opening book is rollout-derived; it ranks just
+/// below the explicit-rollout floor of 100 because a cached rollout of
+/// unrecorded parameters ranks under a rollout the file actually records.
+/// That ordering is informational, not contractual: depth filtering works by
+/// membership, and nothing guarantees the numeric values stay stable if the
+/// taxonomy grows. <see cref="PlayCandidate.DepthRank"/> remains the ordering
+/// surface for consumers that compare depths.
 /// </para>
 /// <para>
 /// <see cref="Unknown"/> is deliberately the zero value: JSON written before
@@ -48,11 +52,6 @@ public enum AnalysisDepthClass
     /// code the producer does not recognize.</summary>
     [Description("Unknown")]
     Unknown = 0,
-
-    /// <summary>Static opening-book lookup (Book V1 or V2) — a table hit,
-    /// not a search of the position.</summary>
-    [Description("Book")]
-    Book,
 
     /// <summary>1-ply search.</summary>
     [Description("1-ply")]
@@ -93,6 +92,15 @@ public enum AnalysisDepthClass
     /// <summary>XG Roller++ evaluation.</summary>
     [Description("XG Roller++")]
     XgRollerPlusPlus,
+
+    /// <summary>Static opening-book lookup (Book V1 or V2) — a table hit rather
+    /// than a search of the position, but rollout-backed: XG's opening book is
+    /// derived from rollouts, so a book hit stands in for a rollout whose inner
+    /// ply and trial count are never recorded in the file. Classed in the
+    /// rollout tier for that reason, at the floor just below the explicit
+    /// rollouts that do record their parameters.</summary>
+    [Description("Book (rollout)")]
+    Book,
 
     /// <summary>Full rollout whose inner evaluation ply is unknown — the
     /// producer's no-context rollout sentinel (rank 100). The floor of the
