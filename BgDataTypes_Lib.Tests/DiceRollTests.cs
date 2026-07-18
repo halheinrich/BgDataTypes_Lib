@@ -244,6 +244,50 @@ public class DiceRollTests
     }
 
     // ---------------------------------------------------------------------
+    //  All — the 21-roll SSOT enumeration
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public void All_ContainsTwentyOneRolls()
+    {
+        Assert.Equal(21, DiceRoll.All.Count);
+    }
+
+    [Fact]
+    public void All_RollsAreDistinct()
+    {
+        Assert.Equal(DiceRoll.All.Count, DiceRoll.All.Distinct().Count());
+    }
+
+    [Fact]
+    public void All_IsAscendingByComparer()
+    {
+        var sorted = DiceRoll.All.OrderBy(r => r).ToList();
+
+        Assert.Equal(sorted, DiceRoll.All);
+    }
+
+    [Fact]
+    public void All_IncludesEveryDouble()
+    {
+        for (int face = 1; face <= 6; face++)
+            Assert.Contains(new DiceRoll(face, face), DiceRoll.All);
+
+        Assert.Equal(6, DiceRoll.All.Count(r => r.IsDouble));
+    }
+
+    [Fact]
+    public void All_IsExactlyTheDistinctRollSet()
+    {
+        var expected = new List<DiceRoll>();
+        for (int high = 1; high <= 6; high++)
+            for (int low = 1; low <= high; low++)
+                expected.Add(new DiceRoll(high, low));
+
+        Assert.Equal(expected, DiceRoll.All);
+    }
+
+    // ---------------------------------------------------------------------
     //  Ordering — CompareTo + comparison operators
     // ---------------------------------------------------------------------
 

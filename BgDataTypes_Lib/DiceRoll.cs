@@ -79,6 +79,33 @@ public readonly record struct DiceRoll :
     /// <summary>True when both dice show the same face.</summary>
     public bool IsDouble => High == Low;
 
+    // -----------------------------------------------------------------------
+    //  Enumeration
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The 21 distinct dice rolls, in ascending canonical order — the same
+    /// order <see cref="CompareTo(DiceRoll)"/> imposes
+    /// (11 &lt; 21 &lt; 22 &lt; 31 &lt; … &lt; 66), the six doubles included.
+    /// </summary>
+    /// <remarks>
+    /// This is the single source for the full roll set: consumers that
+    /// enumerate every possible roll — a filter grid, a distribution table —
+    /// read it here rather than rebuilding the nested face loop. That
+    /// enumeration is domain knowledge this type owns.
+    /// </remarks>
+    public static IReadOnlyList<DiceRoll> All { get; } = BuildAll();
+
+    private static DiceRoll[] BuildAll()
+    {
+        var all = new DiceRoll[21];
+        int i = 0;
+        for (int high = 1; high <= 6; high++)
+            for (int low = 1; low <= high; low++)
+                all[i++] = new DiceRoll(high, low);
+        return all;
+    }
+
     /// <summary>Deconstructs into (<see cref="High"/>, <see cref="Low"/>).</summary>
     /// <param name="high">The higher die face.</param>
     /// <param name="low">The lower die face.</param>
