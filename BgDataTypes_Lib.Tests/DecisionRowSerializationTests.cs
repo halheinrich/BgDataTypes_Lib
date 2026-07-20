@@ -203,6 +203,71 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
+    //  IsMoneyGame — derived from MatchLength, feeds MatchScore
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_IsMoneyGame_MoneyRow()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0 };
+
+        Assert.True(row.IsMoneyGame);
+        Assert.Equal("money", row.MatchScore);
+    }
+
+    [Fact]
+    public void DecisionRow_IsMoneyGame_OnePointMatch()
+    {
+        // The shortest possible match — the boundary case next to money's 0.
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 1, OnRollNeeds = 1, OpponentNeeds = 1 };
+
+        Assert.False(row.IsMoneyGame);
+        Assert.Equal("1a1a", row.MatchScore);
+    }
+
+    [Fact]
+    public void DecisionRow_IsMoneyGame_StandardMatch()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5 };
+
+        Assert.False(row.IsMoneyGame);
+        Assert.Equal("3a5a", row.MatchScore);
+    }
+
+    [Fact]
+    public void DecisionRow_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire()
+    {
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0 };
+        var json = JsonSerializer.Serialize(original, Options);
+
+        Assert.DoesNotContain("IsMoneyGame", json);
+        Assert.Contains("\"MatchLength\":0", json);
+
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        Assert.True(restored.IsMoneyGame);
+    }
+
+    [Fact]
+    public void DecisionRow_IsMoneyGame_NotInCsvOutput()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0 };
+
+        Assert.DoesNotContain("IsMoneyGame", DecisionRow.CsvHeader);
+        // Column count unchanged: 11 columns → 10 commas.
+        Assert.Equal(10, row.ToCsvLine().Count(c => c == ','));
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_IsMoneyGame()
+    {
+        IDecisionFilterData money = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0 };
+        IDecisionFilterData match = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9 };
+
+        Assert.True(money.IsMoneyGame);
+        Assert.False(match.IsMoneyGame);
+    }
+
+    // -----------------------------------------------------------------------
     //  MatchScore reconstruction
     // -----------------------------------------------------------------------
 

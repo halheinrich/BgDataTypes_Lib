@@ -27,6 +27,19 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <summary>Match length (0 = unlimited/money).</summary>
     public int MatchLength { get; init; }
 
+    /// <summary>
+    /// True for an unlimited (money) session
+    /// (<see cref="IDecisionFilterData.IsMoneyGame"/>). Redeclared concretely
+    /// over the interface default so the predicate is visible on the type
+    /// itself — <see cref="MatchScore"/> and other concrete-typed consumers
+    /// read it here; the type's single spelling of the rule. Derived from
+    /// <see cref="MatchLength"/>, so excluded from JSON like
+    /// <see cref="IsCube"/>; <see cref="MatchLength"/> remains the CSV and
+    /// JSON wire form.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsMoneyGame => MatchLength == 0;
+
     /// <summary>Name of the player who made the decision.</summary>
     public string Player { get; init; } = string.Empty;
 
@@ -99,10 +112,10 @@ public sealed class DecisionRow : IDecisionFilterData
 
     /// <summary>
     /// Match score string derived from <see cref="OnRollNeeds"/>, <see cref="OpponentNeeds"/>,
-    /// <see cref="IsCrawford"/>, and <see cref="MatchLength"/>. Used for CSV output only.
+    /// <see cref="IsCrawford"/>, and <see cref="IsMoneyGame"/>. Used for CSV output only.
     /// </summary>
     [JsonIgnore]
-    public string MatchScore => MatchLength == 0
+    public string MatchScore => IsMoneyGame
         ? "money"
         : IsCrawford
             ? $"{OnRollNeeds}a{OpponentNeeds}aC"

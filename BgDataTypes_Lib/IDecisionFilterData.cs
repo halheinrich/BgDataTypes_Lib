@@ -23,6 +23,16 @@ public interface IDecisionFilterData
     /// <summary>Match length (0 = unlimited/money).</summary>
     int MatchLength { get; }
 
+    /// <summary>
+    /// True for an unlimited (money) session. This default implementation is
+    /// the contract's single spelling of the money-game rule — derived from
+    /// <see cref="MatchLength"/>, the same rule <see cref="IMatchInfo.IsMoneyGame"/>
+    /// states at match scope. An implementation redeclares it only to surface
+    /// the predicate on its concrete type (see
+    /// <see cref="DecisionRow.IsMoneyGame"/>), never to change the derivation.
+    /// </summary>
+    bool IsMoneyGame => MatchLength == 0;
+
     /// <summary>1-based move number within the game.</summary>
     int MoveNumber { get; }
 

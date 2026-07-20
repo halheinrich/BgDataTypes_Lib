@@ -858,6 +858,53 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(11, data.MatchLength);
     }
 
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_IsMoneyGame_MoneySession()
+    {
+        // BgDecisionData declares no IsMoneyGame of its own — the interface
+        // default (MatchLength == 0) is what answers here.
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Descriptive = new DescriptiveData { MatchLength = 0 }
+        };
+
+        Assert.True(data.IsMoneyGame);
+    }
+
+    [Theory]
+    [InlineData(1)]  // shortest possible match
+    [InlineData(11)]
+    public void BgDecisionData_IDecisionFilterData_IsMoneyGame_FalseForAnyMatchLength(int matchLength)
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Descriptive = new DescriptiveData { MatchLength = matchLength }
+        };
+
+        Assert.False(data.IsMoneyGame);
+    }
+
+    [Fact]
+    public void BgDecisionData_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire()
+    {
+        // Interface default implementations never reach the JSON — the wire
+        // shape carries Descriptive.MatchLength only.
+        var data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Descriptive = new DescriptiveData { MatchLength = 0 }
+        };
+        var json = JsonSerializer.Serialize(data, Options);
+
+        Assert.DoesNotContain("IsMoneyGame", json);
+        Assert.Contains("\"MatchLength\":0", json);
+
+        var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
+        Assert.True(((IDecisionFilterData)restored).IsMoneyGame);
+    }
+
     // -----------------------------------------------------------------------
     //  IDecisionFilterData — AnalysisMode / AnalysisLevel derivation
     // -----------------------------------------------------------------------
