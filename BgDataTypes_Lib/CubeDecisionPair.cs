@@ -18,10 +18,13 @@ namespace BgDataTypes_Lib;
 /// <see cref="ArgumentOutOfRangeException"/>.
 /// </para>
 /// <para>
-/// The aggregate verdict — whether the pair is correct, and the mapping from
-/// pair to verdict — is intentionally absent. It returns later alongside
-/// <c>CubeVerdict</c> on a cleaner footing; see the umbrella
-/// <c>INSTRUCTIONS.md</c> Deferred section.
+/// The valid domain is a closed 2×2: exactly four pairs, each with a named
+/// canonical instance — <see cref="NoDoubleTake"/>, <see cref="TooGood"/>,
+/// <see cref="DoubleTake"/>, <see cref="DoublePass"/>. The Too-Good
+/// classification lives here as <see cref="IsTooGood"/>: (NoDouble, Pass)
+/// means the doubler is too good to double. The aggregate verdict type
+/// (<c>CubeVerdict</c>) and its scoring semantics remain deferred; see the
+/// umbrella <c>INSTRUCTIONS.md</c> Deferred section.
 /// </para>
 /// <para>
 /// <c>default(CubeDecisionPair)</c> is <strong>not meaningful</strong>: the
@@ -61,4 +64,58 @@ public readonly record struct CubeDecisionPair(CubeAction Doubler, CubeAction Ta
             ? Taker
             : throw new ArgumentOutOfRangeException(nameof(Taker), Taker,
                 "CubeDecisionPair.Taker requires a taker-half action (Take or Pass).");
+
+    // -----------------------------------------------------------------------
+    //  Canonical instances — the closed 2×2 of valid pairs
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The "no double, take" pair —
+    /// (<see cref="CubeAction.NoDouble"/>, <see cref="CubeAction.Take"/>):
+    /// the doubler should not double, and a double would be taken.
+    /// </summary>
+    public static CubeDecisionPair NoDoubleTake { get; } =
+        new(CubeAction.NoDouble, CubeAction.Take);
+
+    /// <summary>
+    /// The "too good to double" pair —
+    /// (<see cref="CubeAction.NoDouble"/>, <see cref="CubeAction.Pass"/>):
+    /// playing on is worth more than cashing, so the doubler should not
+    /// double, and a double would be passed. See <see cref="IsTooGood"/>.
+    /// </summary>
+    public static CubeDecisionPair TooGood { get; } =
+        new(CubeAction.NoDouble, CubeAction.Pass);
+
+    /// <summary>
+    /// The "double, take" pair —
+    /// (<see cref="CubeAction.Double"/>, <see cref="CubeAction.Take"/>):
+    /// the doubler should double, and the taker should take.
+    /// </summary>
+    public static CubeDecisionPair DoubleTake { get; } =
+        new(CubeAction.Double, CubeAction.Take);
+
+    /// <summary>
+    /// The "double, pass" pair —
+    /// (<see cref="CubeAction.Double"/>, <see cref="CubeAction.Pass"/>):
+    /// the doubler should double, and the taker should pass.
+    /// </summary>
+    public static CubeDecisionPair DoublePass { get; } =
+        new(CubeAction.Double, CubeAction.Pass);
+
+    // -----------------------------------------------------------------------
+    //  Classification
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether this pair is the "too good to double" case — equal to
+    /// <see cref="TooGood"/>, i.e. (<see cref="CubeAction.NoDouble"/>,
+    /// <see cref="CubeAction.Pass"/>): the doubler wins more by playing on
+    /// (typically for a gammon) than by doubling and cashing.
+    /// </summary>
+    /// <remarks>
+    /// On the non-meaningful <c>default(CubeDecisionPair)</c> —
+    /// (NoDouble, NoDouble) — this returns <see langword="false"/>; the
+    /// default-value caveat in the type remarks still applies.
+    /// </remarks>
+    public bool IsTooGood => this == TooGood;
 }

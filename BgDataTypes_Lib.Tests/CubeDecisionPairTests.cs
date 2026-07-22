@@ -89,4 +89,50 @@ public class CubeDecisionPairTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new CubeDecisionPair(CubeAction.Double, invalidTaker));
     }
+
+    // ---------------------------------------------------------------------
+    //  Canonical instances — the closed 2×2 of valid pairs
+    // ---------------------------------------------------------------------
+
+    public static TheoryData<CubeDecisionPair, CubeAction, CubeAction> CanonicalInstances => new()
+    {
+        { CubeDecisionPair.NoDoubleTake, CubeAction.NoDouble, CubeAction.Take },
+        { CubeDecisionPair.TooGood,      CubeAction.NoDouble, CubeAction.Pass },
+        { CubeDecisionPair.DoubleTake,   CubeAction.Double,   CubeAction.Take },
+        { CubeDecisionPair.DoublePass,   CubeAction.Double,   CubeAction.Pass },
+    };
+
+    [Theory]
+    [MemberData(nameof(CanonicalInstances))]
+    public void CanonicalInstance_HasExpectedHalves(
+        CubeDecisionPair instance, CubeAction doubler, CubeAction taker)
+    {
+        Assert.Equal(doubler, instance.Doubler);
+        Assert.Equal(taker, instance.Taker);
+    }
+
+    // ---------------------------------------------------------------------
+    //  Too-Good classification — true for (NoDouble, Pass) only
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(CubeAction.NoDouble, CubeAction.Take, false)]
+    [InlineData(CubeAction.NoDouble, CubeAction.Pass, true)]
+    [InlineData(CubeAction.Double,   CubeAction.Take, false)]
+    [InlineData(CubeAction.Double,   CubeAction.Pass, false)]
+    public void IsTooGood_TrueForNoDoublePassOnly(
+        CubeAction doubler, CubeAction taker, bool expected)
+    {
+        var pair = new CubeDecisionPair(doubler, taker);
+
+        Assert.Equal(expected, pair.IsTooGood);
+    }
+
+    [Fact]
+    // Locks the documented caveat: the non-meaningful default —
+    // (NoDouble, NoDouble) — is not classified as too good.
+    public void IsTooGood_DefaultValue_IsFalse()
+    {
+        Assert.False(default(CubeDecisionPair).IsTooGood);
+    }
 }
