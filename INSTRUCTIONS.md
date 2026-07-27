@@ -732,6 +732,10 @@ without any options-level registration in `BgDecisionDataSerializationTests`,
 
 ## Subproject-internal next steps
 
-None — subproject complete. Cross-cutting work (consumer migrations,
-downstream refactors) is tracked in the umbrella `INSTRUCTIONS.md`
-"Next up" / "Pending" sections, not here.
+Cross-cutting work (consumer migrations, downstream refactors) is tracked in
+the umbrella `INSTRUCTIONS.md` "Next up" / "Deferred" sections, not here.
+
+- **`DecisionRow` factory split.** Test-helper duplication around cube-row
+  construction (`DecisionRowBuilder.Build` / `BuildCube` shapes that consumers
+  re-implement) hints at missing factories on `DecisionRow` for the common
+  shapes (checker row, cube row). Library gap; consumer glue.
