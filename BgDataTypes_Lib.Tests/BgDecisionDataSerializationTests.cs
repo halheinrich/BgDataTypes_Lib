@@ -760,6 +760,79 @@ public class BgDecisionDataSerializationTests
     }
 
     // -----------------------------------------------------------------------
+    //  UserDoublerAction / UserTakerAction — played cube actions
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionData_UserCubeActions_RoundTrip_DoubleWithResponse()
+    {
+        var original = new DecisionData
+        {
+            Dice = [0, 0],
+            IsCube = true,
+            NoDoubleEquity = 0.312,
+            DoubleTakeEquity = 0.287,
+            UserDoublerAction = CubeAction.Double,
+            UserTakerAction = CubeAction.Take
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        // String form via CubeAction's bundled converter — no options-level
+        // registration.
+        Assert.Contains("\"UserDoublerAction\":\"Double\"", json);
+        Assert.Contains("\"UserTakerAction\":\"Take\"", json);
+        Assert.Equal(CubeAction.Double, restored.UserDoublerAction);
+        Assert.Equal(CubeAction.Take, restored.UserTakerAction);
+    }
+
+    [Fact]
+    public void DecisionData_UserCubeActions_RoundTrip_UndoubledGame()
+    {
+        // No double was offered, so no taker decision exists — the taker half
+        // stays null by shape while the doubler half records the NoDouble.
+        var original = new DecisionData
+        {
+            Dice = [0, 0],
+            IsCube = true,
+            NoDoubleEquity = 0.312,
+            DoubleTakeEquity = 0.287,
+            UserDoublerAction = CubeAction.NoDouble
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.Equal(CubeAction.NoDouble, restored.UserDoublerAction);
+        Assert.Null(restored.UserTakerAction);
+    }
+
+    [Fact]
+    public void DecisionData_UserCubeActions_DefaultToNull()
+    {
+        var d = new DecisionData();
+        Assert.Null(d.UserDoublerAction);
+        Assert.Null(d.UserTakerAction);
+    }
+
+    [Fact]
+    public void DecisionData_LegacyJsonWithoutUserCubeActions_DeserializesToNull()
+    {
+        // JSON written before the played-action fields existed carries
+        // neither property; both read back null — played action not
+        // recorded, never an error.
+        var json = "{\"Dice\":[0,0],\"IsCube\":true,\"NoDoubleEquity\":0.312,"
+            + "\"DoubleTakeEquity\":0.287,\"UserDoubleError\":0.025}";
+        var restored = JsonSerializer.Deserialize<DecisionData>(json, Options)!;
+
+        Assert.True(restored.IsCube);
+        Assert.Equal(0.025, restored.UserDoubleError);
+        Assert.Null(restored.UserDoublerAction);
+        Assert.Null(restored.UserTakerAction);
+    }
+
+    // -----------------------------------------------------------------------
     //  IDecisionFilterData — BgDecisionData
     // -----------------------------------------------------------------------
 

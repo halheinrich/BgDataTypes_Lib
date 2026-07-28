@@ -156,6 +156,65 @@ public class DecisionData
     public double? UserTakeError { get; init; }
 
     // -----------------------------------------------------------------------
+    //  Played cube actions
+    // -----------------------------------------------------------------------
+    //
+    //  The record of what was actually played, carried explicitly: the played
+    //  action cannot be recovered from UserDoubleError / UserTakeError alone,
+    //  because a zero error does not identify the action when the two cube
+    //  equities tie. Each half is guarded to its own action domain, mirroring
+    //  CubeDecisionPair's half-guards. Cross-half consistency (a recorded
+    //  taker response implies the doubler doubled) is a producer contract,
+    //  not guarded here — init-only halves are set independently.
+
+    private readonly CubeAction? _userDoublerAction;
+    private readonly CubeAction? _userTakerAction;
+
+    /// <summary>
+    /// The doubler action the player on roll actually played —
+    /// <see cref="CubeAction.NoDouble"/> or <see cref="CubeAction.Double"/>.
+    /// Null when the played action is not recorded — which is retroactively
+    /// true of all JSON written before this field existed — or when
+    /// <see cref="IsCube"/> is false.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown on init when the value is not <see cref="CubeAction.NoDouble"/>,
+    /// <see cref="CubeAction.Double"/> or null.
+    /// </exception>
+    public CubeAction? UserDoublerAction
+    {
+        get => _userDoublerAction;
+        init => _userDoublerAction =
+            value is null or CubeAction.NoDouble or CubeAction.Double
+                ? value
+                : throw new ArgumentOutOfRangeException(nameof(UserDoublerAction), value,
+                    "UserDoublerAction requires a doubler-half action (Double or NoDouble).");
+    }
+
+    /// <summary>
+    /// The taker action the opponent actually played —
+    /// <see cref="CubeAction.Take"/> or <see cref="CubeAction.Pass"/>.
+    /// Present only when a double was offered and a response recorded: in an
+    /// undoubled game no taker decision exists, so this stays null even when
+    /// <see cref="UserDoublerAction"/> is recorded. Null also when the played
+    /// actions are not recorded (all JSON written before this field existed)
+    /// or when <see cref="IsCube"/> is false.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown on init when the value is not <see cref="CubeAction.Take"/>,
+    /// <see cref="CubeAction.Pass"/> or null.
+    /// </exception>
+    public CubeAction? UserTakerAction
+    {
+        get => _userTakerAction;
+        init => _userTakerAction =
+            value is null or CubeAction.Take or CubeAction.Pass
+                ? value
+                : throw new ArgumentOutOfRangeException(nameof(UserTakerAction), value,
+                    "UserTakerAction requires a taker-half action (Take or Pass).");
+    }
+
+    // -----------------------------------------------------------------------
     //  Cube-decision scoring helpers
     // -----------------------------------------------------------------------
     //
