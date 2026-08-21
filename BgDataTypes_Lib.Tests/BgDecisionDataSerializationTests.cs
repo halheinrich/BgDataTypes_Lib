@@ -497,6 +497,47 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.IsCrawford, restored.IsCrawford);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PositionData_IsJacoby_RoundTrips(bool? isJacoby)
+    {
+        // Three states on the wire, not two: null is "the producer did not
+        // supply the fact", which ProblemKey's no-key rung reads on a money
+        // record (halheinrich/backgammon#120).
+        var original = new PositionData { IsJacoby = isJacoby };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<PositionData>(json, Options)!;
+
+        Assert.Equal(isJacoby, restored.IsJacoby);
+    }
+
+    [Fact]
+    public void PositionData_IsJacoby_AbsentFromJson_ReadsAsNotSupplied()
+    {
+        // A record written before the fact existed carries no such property.
+        // It must read back as null — "unknown" — never as a silent "off",
+        // which on a money record would key it wrongly.
+        const string legacyJson =
+            "{\"Mop\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"
+            + "\"OnRollNeeds\":0,\"OpponentNeeds\":0,\"CubeSize\":1,"
+            + "\"CubeOwner\":\"Centered\",\"IsCrawford\":false}";
+
+        var restored = JsonSerializer.Deserialize<PositionData>(legacyJson, Options)!;
+
+        Assert.Null(restored.IsJacoby);
+    }
+
+    [Fact]
+    public void PositionData_IsJacoby_SerializesUnderItsOwnName()
+    {
+        var json = JsonSerializer.Serialize(new PositionData { IsJacoby = true }, Options);
+
+        Assert.Contains("\"IsJacoby\":true", json);
+    }
+
     // -----------------------------------------------------------------------
     //  DecisionData
     // -----------------------------------------------------------------------

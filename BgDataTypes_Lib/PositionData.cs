@@ -61,4 +61,43 @@ public class PositionData
     /// barred).
     /// </summary>
     public bool IsCrawford { get; init; }
+
+    /// <summary>
+    /// Whether the Jacoby rule was in force — <b>a money-game fact
+    /// only</b>. Under Jacoby, gammons and backgammons count as a single
+    /// point until the cube has been turned; with a centered cube that voids
+    /// undoubled gammons outright and shifts the doubling window, so it can
+    /// change the correct answer and participates in
+    /// <see cref="ProblemKey"/> identity for money records
+    /// (SPEC-stats-identity.md §1, amended 2026-08-20;
+    /// halheinrich/backgammon#120).
+    ///
+    /// <para>
+    /// <b>Three states, deliberately.</b> <see langword="null"/> means the
+    /// producer did not supply the fact — not "off". Whether the record
+    /// is a money game is <em>not</em> encoded here: that remains the
+    /// away-scores pair (<see cref="OnRollNeeds"/> and
+    /// <see cref="OpponentNeeds"/> both <c>0</c>), the single source of that
+    /// truth. So the three meaningful readings are: match record (away
+    /// scores non-zero) — the question does not arise and this member
+    /// is ignored wherever it matters; money record with a value — the
+    /// fact, which the key spells; money record with
+    /// <see langword="null"/> — unknown, which is
+    /// <see cref="ProblemKey"/>'s no-key rung (a money record whose Jacoby
+    /// fact is missing yields no key rather than a guessed one).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Producer-stamped, never parsed back out of the XGID.</b> The
+    /// converting parser (<c>ConvertXgToJson_Lib</c>) stamps this from the
+    /// source record. The same information sits in bit 0 of XGID field 7
+    /// (a Jacoby + 2×Beaver bitmask, never the raw value), but the XGID
+    /// string is display and provenance only — it is an identity
+    /// nowhere, so nothing downstream re-derives this from
+    /// <see cref="BgDecisionData.Xgid"/>. A stamp on a match record is
+    /// harmless and expected (XG carries the bit regardless of match play);
+    /// it simply means nothing there.
+    /// </para>
+    /// </summary>
+    public bool? IsJacoby { get; init; }
 }

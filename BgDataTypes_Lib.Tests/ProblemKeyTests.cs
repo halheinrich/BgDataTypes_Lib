@@ -22,7 +22,17 @@ public class ProblemKeyTests
     private const string PinnedPlayKey = StandardBoardToken + "/7a7/1c/31";
     private const string PinnedCubeKey = StandardBoardToken + "/5a2/2o";
     private const string PinnedCrawfordPlayKey = StandardBoardToken + "/1a3cr/1c/52";
-    private const string PinnedMoneyPlayKey = StandardBoardToken + "/0a0/1c/31";
+
+    // Money keys carry the v3 Jacoby suffix; both values are spelled, so the
+    // v2 money spelling below is simply not in the grammar (#120).
+    private const string PinnedMoneyPlayKeyJacoby = StandardBoardToken + "/0a0j/1c/31";
+    private const string PinnedMoneyPlayKeyNoJacoby = StandardBoardToken + "/0a0nj/1c/31";
+    private const string PinnedMoneyCubeKey = StandardBoardToken + "/0a0j/2o";
+
+    // The retired v2 money spelling. Pinned as a REJECTION: a v2 money key
+    // must not parse under the v3 grammar (the stats document's schema
+    // version retires it — SPEC-stats-identity.md §3).
+    private const string RetiredV2MoneyPlayKey = StandardBoardToken + "/0a0/1c/31";
 
     private static int[] StandardMop() =>
         [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0];
@@ -34,6 +44,7 @@ public class ProblemKeyTests
         bool isCrawford = false,
         int cubeSize = 1,
         CubeOwner cubeOwner = CubeOwner.Centered,
+        bool? isJacoby = null,
         int[]? dice = null,
         DescriptiveData? descriptive = null) => new()
     {
@@ -47,6 +58,7 @@ public class ProblemKeyTests
             IsCrawford = isCrawford,
             CubeSize = cubeSize,
             CubeOwner = cubeOwner,
+            IsJacoby = isJacoby,
         },
         Decision = new DecisionData { IsCube = false, Dice = dice ?? [3, 1] },
         Descriptive = descriptive ?? new DescriptiveData(),
@@ -59,6 +71,7 @@ public class ProblemKeyTests
         bool isCrawford = false,
         int cubeSize = 2,
         CubeOwner cubeOwner = CubeOwner.OnRoll,
+        bool? isJacoby = null,
         DescriptiveData? descriptive = null) => new()
     {
         Id = new XgpDecisionId("fixture.xgp"),
@@ -71,10 +84,18 @@ public class ProblemKeyTests
             IsCrawford = isCrawford,
             CubeSize = cubeSize,
             CubeOwner = cubeOwner,
+            IsJacoby = isJacoby,
         },
         Decision = new DecisionData { IsCube = true },
         Descriptive = descriptive ?? new DescriptiveData(),
     };
+
+    /// <summary>
+    /// A money-game (0-away/0-away) checker play carrying the Jacoby fact —
+    /// the shape whose key the v3 money suffix spells.
+    /// </summary>
+    private static BgDecisionData MoneyPlay(bool? isJacoby, int[]? dice = null) =>
+        PlayDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby, dice: dice);
 
     private static ProblemKey Derive(BgDecisionData data)
     {
@@ -218,9 +239,22 @@ public class ProblemKeyTests
     [Fact]
     public void CanonicalForm_MoneyPlayKey_Pinned()
     {
-        var key = Derive(PlayDecision(onRollNeeds: 0, opponentNeeds: 0));
+        var jacoby = Derive(MoneyPlay(isJacoby: true));
+        var noJacoby = Derive(MoneyPlay(isJacoby: false));
 
-        Assert.Equal(PinnedMoneyPlayKey, key.ToString());
+        Assert.Equal(PinnedMoneyPlayKeyJacoby, jacoby.ToString());
+        Assert.Equal(PinnedMoneyPlayKeyNoJacoby, noJacoby.ToString());
+    }
+
+    [Fact]
+    public void CanonicalForm_MoneyCubeKey_Pinned()
+    {
+        // The suffix rides the score field, so it is orthogonal to the kind
+        // discriminant: a money cube key carries it and still has no dice.
+        var key = Derive(CubeDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: true));
+
+        Assert.Equal(PinnedMoneyCubeKey, key.ToString());
+        Assert.True(key.IsCubeDecision);
     }
 
     [Fact]
@@ -268,7 +302,27 @@ public class ProblemKeyTests
     public void RoundTrip_CrawfordAndMoneyKeys()
     {
         Assert.Equal(PinnedCrawfordPlayKey, ProblemKey.Parse(PinnedCrawfordPlayKey).ToString());
-        Assert.Equal(PinnedMoneyPlayKey, ProblemKey.Parse(PinnedMoneyPlayKey).ToString());
+        Assert.Equal(
+            PinnedMoneyPlayKeyJacoby, ProblemKey.Parse(PinnedMoneyPlayKeyJacoby).ToString());
+        Assert.Equal(
+            PinnedMoneyPlayKeyNoJacoby, ProblemKey.Parse(PinnedMoneyPlayKeyNoJacoby).ToString());
+        Assert.Equal(PinnedMoneyCubeKey, ProblemKey.Parse(PinnedMoneyCubeKey).ToString());
+    }
+
+    [Fact]
+    public void RoundTrip_MoneyKeys_DeriveParseDerive()
+    {
+        // Full circuit for both Jacoby values: derive → string → parse →
+        // equal key, same kind.
+        foreach (bool jacoby in new[] { true, false })
+        {
+            var derived = Derive(MoneyPlay(isJacoby: jacoby));
+            var parsed = ProblemKey.Parse(derived.ToString());
+
+            Assert.Equal(derived, parsed);
+            Assert.Equal(derived.ToString(), parsed.ToString());
+            Assert.False(parsed.IsCubeDecision);
+        }
     }
 
     [Fact]
@@ -355,7 +409,7 @@ public class ProblemKeyTests
     [InlineData("0,-16,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0/7a7/1c/31")]   // per-point out of range
     [InlineData(StandardBoardToken + "/0a7/1c/31")]         // one-sided zero away
     [InlineData(StandardBoardToken + "/7a0/1c/31")]         // one-sided zero away
-    [InlineData(StandardBoardToken + "/0a0cr/1c/31")]       // crawford in money
+    [InlineData(StandardBoardToken + "/0a0crj/1c/31")]      // crawford in money
     [InlineData(StandardBoardToken + "/3a2cr/1c/31")]       // crawford with no 1-away side
     [InlineData(StandardBoardToken + "/7a7/0c/31")]         // cube size zero
     [InlineData(StandardBoardToken + "/7a7/3c/31")]         // cube size not a power of two
@@ -548,8 +602,11 @@ public class ProblemKeyTests
     [InlineData(3, 2)]      // crawford with neither side 1-away
     public void NoKey_InconsistentCrawford(int onRollNeeds, int opponentNeeds)
     {
+        // The money case supplies the Jacoby fact deliberately, so the
+        // crawford rung is what rejects it — not the money-needs-Jacoby rung.
         AssertNoKey(PlayDecision(
-            onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isCrawford: true));
+            onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isCrawford: true,
+            isJacoby: true));
     }
 
     [Theory]
@@ -585,6 +642,151 @@ public class ProblemKeyTests
             Position = template.Position,
             Decision = null!,
         });
+    }
+
+    // -----------------------------------------------------------------------
+    //  The Jacoby fact — money-only identity (SPEC-stats-identity.md §1/§2,
+    //  amended 2026-08-20, halheinrich/backgammon#120)
+    //
+    //  Three postures, pinned: money keys spell the fact and split on it;
+    //  match keys ignore it and stay byte-identical to v2; a money record
+    //  that does not carry it gets no key.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Jacoby_MoneyKeys_ToggleSplitsIdentity()
+    {
+        var jacoby = Derive(MoneyPlay(isJacoby: true));
+        var noJacoby = Derive(MoneyPlay(isJacoby: false));
+
+        Assert.NotEqual(jacoby, noJacoby);
+        Assert.NotEqual(jacoby.GetHashCode(), noJacoby.GetHashCode());
+    }
+
+    [Fact]
+    public void Jacoby_MoneyCubeKeys_ToggleSplitsIdentity()
+    {
+        Assert.NotEqual(
+            Derive(CubeDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: true)),
+            Derive(CubeDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: false)));
+    }
+
+    [Fact]
+    public void Jacoby_MatchKeys_FactIsIgnored()
+    {
+        // Off money the question does not arise, so a stamped value must not
+        // reach the key — and must not cost the record its key either
+        // (producers carry XG's field-7 bit on every record).
+        var stampedOn = Derive(PlayDecision(isJacoby: true));
+        var stampedOff = Derive(PlayDecision(isJacoby: false));
+        var unstamped = Derive(PlayDecision(isJacoby: null));
+
+        Assert.Equal(unstamped, stampedOn);
+        Assert.Equal(unstamped, stampedOff);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Jacoby_MatchKeys_ByteIdenticalToV2(bool? isJacoby)
+    {
+        // The v3 grammar's compatibility pin: every match key's canonical
+        // string is exactly what v2 emitted, whatever the fact says. The
+        // literals are the v2 wire-contract pins declared above.
+        Assert.Equal(
+            PinnedPlayKey,
+            Derive(PlayDecision(isJacoby: isJacoby)).ToString());
+        Assert.Equal(
+            PinnedCubeKey,
+            Derive(CubeDecision(isJacoby: isJacoby)).ToString());
+        Assert.Equal(
+            PinnedCrawfordPlayKey,
+            Derive(PlayDecision(
+                onRollNeeds: 1, opponentNeeds: 3, isCrawford: true, isJacoby: isJacoby,
+                dice: [5, 2])).ToString());
+    }
+
+    [Fact]
+    public void NoKey_MoneyRecordWithoutJacobyFact()
+    {
+        // The underivable rung extended: same posture as unstamped dice —
+        // the fact the money grammar spells is absent, so guessing "off"
+        // is forbidden and there is no key.
+        AssertNoKey(MoneyPlay(isJacoby: null));
+        AssertNoKey(CubeDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: null));
+    }
+
+    [Fact]
+    public void Jacoby_DerivationNeverReadsTheXgidString()
+    {
+        // SSOT pin: bit 0 of XGID field 7 holds the same information, and the
+        // factory must not consult it. Contradictory XGIDs over one stamped
+        // fact yield one key; one XGID over two stamped facts yields two.
+        const string jacobyBitSet = "XGID=-b----E-C---eE---c-e----B-:0:0:1:31:0:0:1:0:10";
+        const string jacobyBitClear = "XGID=-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:0:10";
+
+        Assert.Equal(
+            Derive(WithXgid(MoneyPlay(isJacoby: true), jacobyBitClear)),
+            Derive(WithXgid(MoneyPlay(isJacoby: true), jacobyBitSet)));
+        Assert.NotEqual(
+            Derive(WithXgid(MoneyPlay(isJacoby: true), jacobyBitSet)),
+            Derive(WithXgid(MoneyPlay(isJacoby: false), jacobyBitSet)));
+    }
+
+    /// <summary>
+    /// Rebuilds a fixture under a different <see cref="BgDecisionData.Xgid"/>,
+    /// leaving every decomposed fact untouched.
+    /// </summary>
+    private static BgDecisionData WithXgid(BgDecisionData data, string xgid) => new()
+    {
+        Id = data.Id,
+        Xgid = xgid,
+        Position = data.Position,
+        Decision = data.Decision,
+        Descriptive = data.Descriptive,
+    };
+
+    [Fact]
+    public void TryParse_RetiredV2MoneySpelling_Rejected()
+    {
+        // The v2 money key is not in the v3 grammar — it must fail parse
+        // rather than read back as "Jacoby off". The stats document's schema
+        // version is what retires the v2 file (SPEC-stats-identity.md §3).
+        Assert.False(ProblemKey.TryParse(RetiredV2MoneyPlayKey, null, out _));
+        Assert.Throws<FormatException>(() => ProblemKey.Parse(RetiredV2MoneyPlayKey));
+
+        // …and the same for a v2 money cube key (no dice field).
+        Assert.False(ProblemKey.TryParse(StandardBoardToken + "/0a0/2o", null, out _));
+    }
+
+    [Theory]
+    // Match keys never carry the suffix.
+    [InlineData(StandardBoardToken + "/7a7j/1c/31")]
+    [InlineData(StandardBoardToken + "/7a7nj/1c/31")]
+    [InlineData(StandardBoardToken + "/1a3crj/1c/52")]
+    // One spelling per value, on the money suffix too.
+    [InlineData(StandardBoardToken + "/0a0J/1c/31")]        // uppercase
+    [InlineData(StandardBoardToken + "/0a0NJ/1c/31")]       // uppercase
+    [InlineData(StandardBoardToken + "/0a0n/1c/31")]        // truncated "nj"
+    [InlineData(StandardBoardToken + "/0a0jj/1c/31")]       // doubled token
+    [InlineData(StandardBoardToken + "/0a0njj/1c/31")]      // both tokens
+    [InlineData(StandardBoardToken + "/0a0jnj/1c/31")]      // both tokens
+    [InlineData(StandardBoardToken + "/0a0jcr/1c/31")]      // token order
+    [InlineData(StandardBoardToken + "/0a0 j/1c/31")]       // internal space
+    public void TryParse_NonCanonicalJacobySpelling_Rejected(string input)
+    {
+        Assert.False(ProblemKey.TryParse(input, null, out _));
+    }
+
+    [Fact]
+    public void Json_MoneyKeyRoundTripsWithSuffix()
+    {
+        var key = Derive(MoneyPlay(isJacoby: true));
+
+        string json = JsonSerializer.Serialize(key);
+        Assert.Equal($"\"{PinnedMoneyPlayKeyJacoby}\"", json);
+        Assert.Equal(key, JsonSerializer.Deserialize<ProblemKey>(json));
     }
 
     // -----------------------------------------------------------------------
@@ -708,8 +910,16 @@ public class ProblemKeyTests
                     onRollNeeds: 1, opponentNeeds: 3, isCrawford: true, dice: [5, 2]))
                     .ToString());
 
+            Assert.Equal(
+                PinnedMoneyPlayKeyJacoby, Derive(MoneyPlay(isJacoby: true)).ToString());
+            Assert.Equal(
+                PinnedMoneyPlayKeyNoJacoby, Derive(MoneyPlay(isJacoby: false)).ToString());
+
             Assert.Equal(ProblemKey.Parse(PinnedPlayKey), Derive(PlayDecision()));
             Assert.Equal(PinnedCubeKey, ProblemKey.Parse(PinnedCubeKey).ToString());
+            Assert.Equal(
+                PinnedMoneyPlayKeyJacoby,
+                ProblemKey.Parse(PinnedMoneyPlayKeyJacoby).ToString());
         }
         finally
         {
