@@ -24,60 +24,51 @@ rest on; introducing a subproject dependency here would either create a
 circular reference or force the dependency on every consumer transitively.
 `System.Text.Json` is the only runtime dependency; the serialized types
 that need converters (`CubeOwner`, `CubeAction`, `AnalysisMode`,
-`AnalysisLevel`, `Play`, `DecisionId`, `DiceRoll`) each bundle their own
+`AnalysisLevel`, `Play`, `DecisionId`, `ProblemKey`, `DiceRoll`) each bundle their own
 `[JsonConverter]` attribute so consumers do not have to register
 converters on their `JsonSerializerOptions`.
 
-## Directory tree
+## Layout
 
-```
-BgDataTypes_Lib.slnx
-Directory.Build.props       — repo-wide build policy (TFM, TWaE, XML docs)
-Directory.Packages.props
-BgDataTypes_Lib/
-  BgDataTypes_Lib.csproj
-  AnalysisLevel.cs          — enum (string-serialized): depth taxonomy, level axis
-  AnalysisMode.cs           — enum (string-serialized): depth taxonomy, mode axis
-  BgDecisionData.cs         — composite: Position + Decision + Descriptive + Outcome
-  BoardState.cs             — mutable int[26] + HighPointOccupied + apply/undo/ApplyPlay
-  CanonicalPlay.cs          — canonical chain form of Play; the play-equivalence SSOT
-  CubeAction.cs             — enum (string-serialized)
-  CubeDecisionPair.cs       — readonly record struct (Doubler, Taker), validated halves
-  CubeOwner.cs              — enum (string-serialized)
-  DecisionData.cs
-  DecisionId.cs             — abstract record + XgpDecisionId / XgDecisionId, IParsable + ISpanParsable
-  DecisionIdJsonConverter.cs — canonical-string JSON converter for DecisionId
-  DecisionRow.cs            — flat CSV export record
-  DescriptiveData.cs
-  DiceRoll.cs               — readonly record struct: canonical unordered (High, Low)
-  DiceRollJsonConverter.cs  — two-digit-token JSON converter for DiceRoll
-  IDecisionFilterData.cs    — shared filter contract
-  Move.cs                   — (FrPt, ToPt) record struct
-  Play.cs                   — fixed 4-slot Move buffer
-  PlayCandidate.cs
-  PlayChain.cs              — (FrPt, ToPt) record struct: one collapsed trajectory
-  PlayJsonConverter.cs      — JSON-array converter for Play
-  PlayOutcomeData.cs        — after-boards derived from play choices
-  PositionData.cs
-BgDataTypes_Lib.Tests/
-  BgDataTypes_Lib.Tests.csproj
-  AnalysisLevelTests.cs
-  AnalysisModeTests.cs
-  BgDecisionDataFilterErrorTests.cs
-  BgDecisionDataSerializationTests.cs
-  BoardStateTests.cs
-  CanonicalPlayTests.cs
-  CubeActionTests.cs
-  CubeDecisionPairTests.cs
-  DecisionDataCubeScoringTests.cs
-  DecisionIdTests.cs
-  DecisionRowSerializationTests.cs
-  DiceRollTests.cs
-  MoveTests.cs
-  PipCountTests.cs
-  PlayTests.cs
-  RaceTests.cs
-```
+Two projects under `BgDataTypes_Lib.slnx`, governed by repo-root
+`Directory.Build.props` (TFM, `TreatWarningsAsErrors`, XML doc generation)
+and `Directory.Packages.props` (Central Package Management — no inline
+`Version=` anywhere).
+
+**`BgDataTypes_Lib/`** — the library. Six areas, one file per type:
+
+- **The decision record and its categories** — `BgDecisionData`, the
+  composite every consumer passes around, plus the four orthogonal category
+  types it holds (`PositionData`, `DecisionData`, `DescriptiveData`,
+  `PlayOutcomeData`) and `PlayCandidate` beneath `DecisionData`. `DecisionRow`
+  is the flat sibling shape for CSV/JSON export.
+- **Identity** — two distinct keys, deliberately not one. `DecisionId`
+  (with `DecisionIdJsonConverter`) is the file-navigation identity: *where
+  did this record come from*. `ProblemKey` (with `ProblemKeyJsonConverter`)
+  is the content identity: *which problem is this* — the key stats and
+  dedupe recognise across files.
+- **Move and board primitives** — `Move`, `Play`, `PlayChain`,
+  `CanonicalPlay` (the play-equivalence SSOT), and `BoardState`, the one
+  mutable type in the library. Value types here inherit hot-path zero-alloc
+  constraints from move generation.
+- **Enums and the depth taxonomy** — `CubeOwner`, `CubeAction`, and
+  `AnalysisMode` × `AnalysisLevel` (the two-axis depth taxonomy), alongside
+  the small validated value types `CubeDecisionPair` (a `CubeAction` pair
+  with per-half guards) and `DiceRoll` (a canonical unordered roll).
+- **Shared consumer contracts** — `IDecisionFilterData`, the filter-layer
+  view implemented by `BgDecisionData` and `DecisionRow`; `IGameInfo` and
+  `IMatchInfo`, implemented by producers so filter layers never reference a
+  producer's concrete types.
+- **JSON converters** — `PlayJsonConverter`, `DiceRollJsonConverter`,
+  `DecisionIdJsonConverter`, `ProblemKeyJsonConverter`. Each is bundled onto
+  its type by a type-level `[JsonConverter]` attribute; consumers register
+  nothing.
+
+**`BgDataTypes_Lib.Tests/`** — xUnit, one test class per type or per
+behaviour area of a type (`ProblemKeyTests`, `BoardStateTests`,
+`PipCountTests`, `RaceTests`, the `*SerializationTests` pair, …). Fixtures
+are constructed in code — pure data types need no corpus, so this project
+does not reach into the umbrella `TestData/`.
 
 ## Architecture
 
@@ -89,7 +80,8 @@ the one deliberate exception (see "Mutability exception" below).
 Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
 attributes: `JsonStringEnumConverter` on `CubeOwner`, `CubeAction`,
 `AnalysisMode`, and `AnalysisLevel`, `PlayJsonConverter` on `Play`,
-`DecisionIdJsonConverter` on `DecisionId`, and `DiceRollJsonConverter`
+`DecisionIdJsonConverter` on `DecisionId`, `ProblemKeyJsonConverter` on
+`ProblemKey`, and `DiceRollJsonConverter`
 on `DiceRoll`. Consumers do not need to
 register any of these converters on their `JsonSerializerOptions` — the
 attributes carry the contract on the types themselves.
@@ -133,6 +125,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, full equality surface (`IEquatable`, `==`/`!=`, hash). The canonical chain form of a `Play` and the single source of play equivalence. Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
+| `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `TryDerive` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. Both doors run the same fact validation, and facts that would force a guess get **no key** rather than a wrong one (see "ProblemKey" below and Pitfalls). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
 ### Move encoding
 
@@ -275,6 +268,65 @@ JSON shape: round-trips as the canonical string via the bundled
 Not added to `IDecisionFilterData`: the filter passes records through
 unchanged and never needs to see the id; adding it would force every
 test-fake implementation to construct one.
+
+### ProblemKey
+
+The content-identity key: the key under which lifetime stats and position
+dedupe recognise "the same problem" across files. `DecisionId` and
+`ProblemKey` are deliberately different questions — provenance versus
+content — and neither substitutes for the other.
+
+**The grammar is not restated here.** `SPEC-stats-identity.md` §1 owns the
+fact table (which facts participate in identity, and why "iff it can change
+the correct answer" is the whole rule) and §2 owns the key type's contract;
+the canonical string grammar itself lives in one place only, the
+`<remarks>` on `ProblemKey`. Copying either into this file would create a
+second source that rots silently — and the grammar is a pinned wire
+contract, so a rotted copy is worse than no copy.
+
+Design points a maintainer needs before touching the type:
+
+- **Two doors, no constructor.** `TryDerive(BgDecisionData, out ProblemKey)`
+  is the single producer-side factory; `Parse`/`TryParse` is the wire
+  read-back. Both run the same fact validation, and the type is a sealed
+  class rather than a record precisely so no `with`-expression hatch
+  exists. Consumers never assemble a key — repeated consumer glue would be
+  a library gap.
+- **The no-key rung.** Derivation that would guess is forbidden: a record
+  filed under a wrong key is corruption. Malformed, degenerate, or
+  inconsistent facts yield `false` and no key, never a throw
+  (degrade, never block) — `TryDerive`'s `<returns>` carries the full
+  rejection list.
+- **Strict parse, deliberately unlike `DiceRoll`.** `DiceRoll` canonicalizes
+  human input; `ProblemKey` is a wire format, where two spellings of one key
+  would split a problem's tallies. Enforcement is structural — the parser
+  re-formats the parsed facts and demands ordinal equality with the input.
+- **The Jacoby suffix is money-only, by ruling** (amended 2026-08-20,
+  `halheinrich/backgammon#120`). It rides the money score field (`0a0`) and
+  nothing else, so every match key stays byte-identical to what the previous
+  grammar emitted. Both values are spelled rather than presence-encoding one
+  (unlike Crawford's `cr`), because the absent spelling was the old money
+  key and admitting it would give one value two spellings — one silently
+  wrong. A money record whose `PositionData.IsJacoby` is `null` therefore
+  gets no key; a stamp on a *match* record is ignored, not rejected.
+- **No version token inside the key.** The containing stats document's
+  schema version pins the grammar, and that version is the document's fact
+  (BgGame_Lib's), not this library's. A fact entering identity bumps the
+  document version rather than the key's shape — the Jacoby suffix is that
+  mechanism's first exercise (`SPEC-stats-identity.md` §3).
+- **Real-board posture.** Fact validation requires a physically possible
+  position (≤15 checkers per side, per-point counts within ±15, own-side
+  bars only, non-empty board). `BoardState.FromMop` tolerates pseudoboards
+  because a general board utility should; `ProblemKey` identifies real
+  analysed decisions, so a violation is corruption and corruption gets no
+  key.
+
+JSON shape: round-trips as the canonical string via the bundled
+`ProblemKeyJsonConverter` (type-level `[JsonConverter]` attribute on
+`ProblemKey`). Unlike `DecisionIdJsonConverter` it also implements the
+property-name overloads, because the stats document keys its per-problem
+map by `ProblemKey` and `Dictionary<ProblemKey, …>` must round-trip
+without a consumer-side key converter.
 
 ### Cube-decision scoring on DecisionData
 
@@ -572,15 +624,52 @@ public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<Decisio
 public sealed record XgpDecisionId(string Filename) : DecisionId;
 public sealed record XgDecisionId(
     string Filename, int Game, int MoveNumber, bool IsCube) : DecisionId;
+
+// Content identity — "which problem is this". Sealed class, no public
+// constructor and no `with` hatch: the only two doors are TryDerive
+// (producer-side) and Parse/TryParse (wire read-back), both guarded by the
+// same fact validation. Canonical string form is a pinned wire contract
+// with one spelling per value, so equality/hash/ordering are all ordinal
+// over it. Parse is strict — no canonicalizing, unlike DiceRoll. Grammar
+// lives in the type's XML remarks; the identity rulings live in
+// SPEC-stats-identity.md §1/§2. JSON round-trips as the canonical string
+// via bundled ProblemKeyJsonConverter, including as a dictionary key.
+public sealed class ProblemKey :
+    IEquatable<ProblemKey>, IComparable, IComparable<ProblemKey>,
+    IParsable<ProblemKey>, ISpanParsable<ProblemKey>
+{
+    public bool IsCubeDecision { get; }           // decision kind rides on the dice field
+
+    // The single derivation site in the ecosystem. false = no key, per the
+    // no-key rung (malformed / degenerate / inconsistent facts — including a
+    // money record whose IsJacoby is null). Never throws on bad facts;
+    // throws ArgumentNullException on a null record (a caller bug).
+    public static bool TryDerive(BgDecisionData data, out ProblemKey? key);
+
+    public static ProblemKey Parse(string s, IFormatProvider? provider = null);
+    public static ProblemKey Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null);
+    public static bool TryParse(string? s, IFormatProvider? provider, out ProblemKey result);
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out ProblemKey result);
+
+    public override string ToString();            // the canonical string
+    public bool Equals(ProblemKey? other);        // ordinal over the canonical string
+    public override bool Equals(object? obj);
+    public override int GetHashCode();
+    public static bool operator ==(ProblemKey? left, ProblemKey? right);
+    public static bool operator !=(ProblemKey? left, ProblemKey? right);
+    public int CompareTo(ProblemKey? other);      // ordinal; any key > null
+}
 ```
 
 Serialization contract: round-trips cleanly through `System.Text.Json` —
 no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
 `AnalysisMode`, and `AnalysisLevel` bundle `JsonStringEnumConverter` via attribute;
 `Play` bundles `PlayJsonConverter`; `DecisionId` bundles
-`DecisionIdJsonConverter`; `DiceRoll` bundles `DiceRollJsonConverter`. Tested
+`DecisionIdJsonConverter`; `DiceRoll` bundles `DiceRollJsonConverter`;
+`ProblemKey` bundles `ProblemKeyJsonConverter` (the only one implementing
+the property-name overloads, so it also works as a dictionary key). Tested
 without any options-level registration in `BgDecisionDataSerializationTests`,
-`DecisionRowSerializationTests`, and `DiceRollTests`.
+`DecisionRowSerializationTests`, `DiceRollTests`, and `ProblemKeyTests`.
 
 ## Pitfalls
 
@@ -597,6 +686,16 @@ without any options-level registration in `BgDecisionDataSerializationTests`,
   (`ConvertXgToJson_Lib`'s `Build*` sites) must stamp it; tests that
   construct decision records directly must set it. Aligns with the
   "producer-supplied identity" contract — no silent default IDs.
+- **A money record with `IsJacoby == null` has no `ProblemKey`, silently.**
+  `PositionData.IsJacoby` is not `required` — it cannot be, since match
+  records legitimately carry `null` — so the omission compiles, constructs,
+  and serializes fine, and only shows up as `TryDerive` returning `false`.
+  That is the ratified no-key rung working as designed (guessing "Jacoby
+  off" would file the record under a wrong key), but it means a money
+  fixture is not a money fixture until it stamps the flag: any test or
+  producer building a record with `OnRollNeeds == 0` and
+  `OpponentNeeds == 0` must set `IsJacoby` explicitly. The reverse is not a
+  hazard — a stamp on a match record is ignored, not rejected.
 - **`DecisionRow.MatchScore` is computed, not stored.** It is derived from
   `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, and `MatchLength` on every
   access. Do not try to set it, and do not cache it across mutations of

@@ -17,7 +17,7 @@ public class ProblemKeyTests
     private const string StandardBoardToken =
         "0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0";
 
-    // Pinned wire-contract literals. These are regression pins on the v2
+    // Pinned wire-contract literals. These are regression pins on the
     // stats document's key grammar — a change here is a wire-format break.
     private const string PinnedPlayKey = StandardBoardToken + "/7a7/1c/31";
     private const string PinnedCubeKey = StandardBoardToken + "/5a2/2o";
@@ -675,8 +675,9 @@ public class ProblemKeyTests
     public void Jacoby_MatchKeys_FactIsIgnored()
     {
         // Off money the question does not arise, so a stamped value must not
-        // reach the key — and must not cost the record its key either
-        // (producers carry XG's field-7 bit on every record).
+        // reach the key — and must not cost the record its key either. The
+        // in-tree producer stamps money records only; tolerating a stamp here
+        // is deliberate slack for any laxer producer.
         var stampedOn = Derive(PlayDecision(isJacoby: true));
         var stampedOff = Derive(PlayDecision(isJacoby: false));
         var unstamped = Derive(PlayDecision(isJacoby: null));
@@ -865,7 +866,7 @@ public class ProblemKeyTests
     [Fact]
     public void Json_WorksAsDictionaryKey()
     {
-        // The v2 stats document keys its per-problem map by ProblemKey — the
+        // The stats document keys its per-problem map by ProblemKey — the
         // converter's property-name overloads must round-trip it.
         var map = new Dictionary<ProblemKey, int>
         {

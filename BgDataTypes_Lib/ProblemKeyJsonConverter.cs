@@ -5,8 +5,10 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// Serialises <see cref="ProblemKey"/> as its canonical string form (see the
-/// <see cref="ProblemKey"/> remarks) — the pinned wire shape of the v2 stats
-/// document. Default property-based serialisation would leak the private
+/// <see cref="ProblemKey"/> remarks) — the pinned wire shape of the stats
+/// document, whose schema version pins the grammar and is that document's
+/// own fact, not this library's (SPEC-stats-identity.md §3).
+/// Default property-based serialisation would leak the private
 /// canonical field arrangement with no path back; the string is the intended
 /// on-wire shape regardless. Bundled via type-level <c>[JsonConverter]</c>
 /// attribute on <see cref="ProblemKey"/> so consumers do not need to register
@@ -14,7 +16,7 @@ namespace BgDataTypes_Lib;
 ///
 /// <para>
 /// Unlike <see cref="DecisionIdJsonConverter"/>, this converter also
-/// implements the property-name overloads: the v2 stats document keys its
+/// implements the property-name overloads: the stats document keys its
 /// per-problem map by <see cref="ProblemKey"/>, so
 /// <c>Dictionary&lt;ProblemKey, …&gt;</c> must round-trip without a
 /// consumer-side key converter.

@@ -74,7 +74,8 @@ public class PositionData
     ///
     /// <para>
     /// <b>Three states, deliberately.</b> <see langword="null"/> means the
-    /// producer did not supply the fact — not "off". Whether the record
+    /// fact is not carried — because it does not apply (a match record) or
+    /// because the producer did not supply it — never "off". Whether the record
     /// is a money game is <em>not</em> encoded here: that remains the
     /// away-scores pair (<see cref="OnRollNeeds"/> and
     /// <see cref="OpponentNeeds"/> both <c>0</c>), the single source of that
@@ -94,9 +95,19 @@ public class PositionData
     /// (a Jacoby + 2×Beaver bitmask, never the raw value), but the XGID
     /// string is display and provenance only — it is an identity
     /// nowhere, so nothing downstream re-derives this from
-    /// <see cref="BgDecisionData.Xgid"/>. A stamp on a match record is
-    /// harmless and expected (XG carries the bit regardless of match play);
-    /// it simply means nothing there.
+    /// <see cref="BgDecisionData.Xgid"/>.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What a producer stamps.</b> A money record carries the value; a
+    /// match record carries <see langword="null"/>, because the fact does
+    /// not apply there — the producer stamps XG's field-7 bit onto money
+    /// records only, rather than passing it through on every record
+    /// (<c>ConvertXgToJson_Lib</c>'s <c>MatchContext.JacobyStamp</c>). A
+    /// non-null value on a match record is nonetheless tolerated, not
+    /// rejected: <see cref="ProblemKey.TryDerive"/> ignores it and the
+    /// match key is unaffected, so a record from a laxer producer still
+    /// gets its key.
     /// </para>
     /// </summary>
     public bool? IsJacoby { get; init; }

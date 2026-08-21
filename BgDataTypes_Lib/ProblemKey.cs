@@ -32,7 +32,7 @@ namespace BgDataTypes_Lib;
 ///
 /// <para>
 /// <b>Canonical string form — a pinned wire contract.</b> The grammar below
-/// keys the v2 stats document; it is derived from the decomposed facts and
+/// keys the stats document; it is derived from the decomposed facts and
 /// deliberately neither derived from nor resembling the raw XGID string
 /// (XGID is display and provenance only). Grammar:
 /// <code>
@@ -278,8 +278,8 @@ public sealed class ProblemKey :
         // Jacoby: the money grammar spells it, so a money record must carry
         // it — an absent fact is the no-key rung, never a guessed "off".
         // Off money the question does not arise: a stamped value there is
-        // ignored (not rejected), since producers carry XG's field-7 bit on
-        // every record and a meaningless member must not cost a match key.
+        // ignored (not rejected) — the in-tree producer stamps money records
+        // only, but a meaningless member must never cost a match key.
         if (onRollAway == 0 && isJacoby is null)
             return false;
 
