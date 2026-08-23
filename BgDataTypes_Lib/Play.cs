@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
@@ -5,6 +6,14 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// A complete play: the sequence of moves for one turn.
 /// Uses a fixed-size buffer (max 4 moves for doubles) to avoid heap allocation.
+///
+/// Construct with <see cref="Create"/> or, equivalently, a collection
+/// expression — <c>Play play = [new(13, 10), new(10, 8)];</c> — when the
+/// moves are known up front; <c>[]</c> is the empty play, a forced pass.
+/// <see cref="Add"/> / <see cref="RemoveLast"/> are the incremental build
+/// primitives for callers that discover moves one at a time
+/// (move-generation recursion). Read with <c>foreach</c> (see
+/// <see cref="GetEnumerator"/>) or the indexer.
 ///
 /// Equality is notation-level, not encoding-level: two plays are equal iff
 /// their canonical chain forms (<see cref="ToCanonical"/>) are equal —
@@ -19,6 +28,7 @@ namespace BgDataTypes_Lib;
 /// serialiser.
 /// </summary>
 [JsonConverter(typeof(PlayJsonConverter))]
+[CollectionBuilder(typeof(Play), nameof(Create))]
 public struct Play : IEquatable<Play>
 {
     // Fixed buffer: max 4 moves (doubles)
@@ -26,6 +36,35 @@ public struct Play : IEquatable<Play>
 
     /// <summary>Number of moves in the play (0–4). 0 is the empty play — a forced pass.</summary>
     public int Count { get; private set; }
+
+    /// <summary>
+    /// Creates a play holding <paramref name="moves"/>, in the given order —
+    /// the intent-level construction path for moves known up front:
+    /// <c>Play.Create(new(13, 10), new(10, 8))</c>, or equivalently the
+    /// collection expression <c>[new(13, 10), new(10, 8)]</c> (this method is
+    /// the type's <see cref="CollectionBuilderAttribute"/> target). No
+    /// arguments — <c>Play.Create()</c> / <c>[]</c> — is the empty play,
+    /// a forced pass. A <em>single</em>-move call must spell the element
+    /// type — <c>Play.Create(new Move(13, 7))</c> — or use a collection
+    /// expression: one lone target-typed <c>new(…)</c> argument binds in
+    /// normal form to the span parameter itself and fails to compile (a
+    /// dedicated <c>Create(Move)</c> overload cannot fix this — a typeless
+    /// <c>new(…)</c> is ambiguous between the two).
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="moves"/> holds more than 4 moves (the doubles maximum).
+    /// </exception>
+    public static Play Create(params ReadOnlySpan<Move> moves)
+    {
+        if (moves.Length > 4)
+            throw new ArgumentException(
+                $"A play has at most 4 moves, got {moves.Length}.", nameof(moves));
+
+        var play = new Play();
+        foreach (var move in moves)
+            play.Add(move);
+        return play;
+    }
 
     /// <summary>The move at <paramref name="index"/> (0 to <see cref="Count"/> − 1), in insertion order.</summary>
     public readonly Move this[int index] => index switch
@@ -106,4 +145,38 @@ public struct Play : IEquatable<Play>
     public static bool operator ==(Play left, Play right) => left.Equals(right);
     /// <summary>Negation of <see cref="op_Equality"/>.</summary>
     public static bool operator !=(Play left, Play right) => !left.Equals(right);
+
+    /// <summary>
+    /// An allocation-free enumerator over the moves in insertion order,
+    /// making <c>foreach (var move in play)</c> the read idiom. The
+    /// enumerator carries its own copy of the play (the value-type copy any
+    /// assignment already makes), so mutating the source mid-enumeration
+    /// cannot affect the sequence. The type deliberately implements the
+    /// <c>foreach</c> pattern rather than <see cref="IEnumerable{T}"/> —
+    /// the interface would box on every use.
+    /// </summary>
+    public readonly Enumerator GetEnumerator() => new(in this);
+
+    /// <summary>
+    /// Move enumerator for <see cref="Play"/> — see <see cref="GetEnumerator"/>.
+    /// </summary>
+    public struct Enumerator
+    {
+        private readonly Play _play;
+        private int _index;
+
+        internal Enumerator(in Play play)
+        {
+            _play = play;
+            _index = -1;
+        }
+
+        /// <summary>The move at the enumerator's current position.</summary>
+        public readonly Move Current => _play[_index];
+
+        /// <summary>
+        /// Advances to the next move; false once the play is exhausted.
+        /// </summary>
+        public bool MoveNext() => ++_index < _play.Count;
+    }
 }

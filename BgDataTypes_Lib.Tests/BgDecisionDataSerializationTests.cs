@@ -258,9 +258,7 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void PlayCandidate_Play_RoundTrip_Populated()
     {
-        var play = new Play();
-        play.Add(new Move(13, 7));
-        play.Add(new Move(8, 5));
+        Play play = [new(13, 7), new(8, 5)];
 
         var original = new PlayCandidate
         {
@@ -280,8 +278,7 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void PlayCandidate_Play_RoundTrip_PreservesHitEncoding()
     {
-        var play = new Play();
-        play.Add(new Move(13, -7));   // hit on the 7-point
+        Play play = [new(13, -7)];   // hit on the 7-point
 
         var original = new PlayCandidate
         {
@@ -300,9 +297,7 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void PlayCandidate_Play_NestedInBgDecisionData_RoundTrip()
     {
-        var play = new Play();
-        play.Add(new Move(24, 18));
-        play.Add(new Move(13, 9));
+        Play play = [new(24, 18), new(13, 9)];
 
         var original = new BgDecisionData
         {

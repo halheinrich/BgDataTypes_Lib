@@ -54,9 +54,7 @@ public class PipCountTests
         //   PipCount         = previous opponent's pip count, untouched = 167
         //   OpponentPipCount = previous on-roll's reduced count             = 157
         var s = BoardState.Standard();
-        var play = new Play();
-        play.Add(new Move(24, 18));
-        play.Add(new Move(13, 9));
+        Play play = [new(24, 18), new(13, 9)];
 
         s.ApplyPlay(play);
 

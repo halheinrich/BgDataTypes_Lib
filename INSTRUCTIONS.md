@@ -120,7 +120,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
-| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
+| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create(params ReadOnlySpan<Move>)` (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass; `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
 | `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint (an intermediate hit splits the trajectory into two chains). |
 | `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, full equality surface (`IEquatable`, `==`/`!=`, hash). The canonical chain form of a `Play` and the single source of play equivalence. Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
@@ -499,14 +499,21 @@ public readonly record struct Move(int FrPt, int ToPt);
 
 public readonly record struct PlayChain(int FrPt, int ToPt);
 
+[CollectionBuilder(typeof(Play), nameof(Create))]
 public struct Play : IEquatable<Play>
 {
+    public static Play Create(params ReadOnlySpan<Move> moves);
+                                                  // intent-level construction + collection-builder
+                                                  // target ([m1, m2] / [] both work); > 4 moves
+                                                  // throws ArgumentException
     public int Count { get; private set; }
     public Move this[int index] { get; }          // readonly
     public void Add(Move move);
     public void RemoveLast();
     public Play Snapshot();                       // readonly
     public CanonicalPlay ToCanonical();           // readonly; equality SSOT
+    public Enumerator GetEnumerator();            // readonly; foreach pattern, allocation-free
+    public struct Enumerator { /* Current, MoveNext() */ }
     public bool Equals(Play other);               // canonical equivalence
     public override bool Equals(object? obj);
     public override int GetHashCode();
@@ -729,7 +736,19 @@ without any options-level registration in `BgDecisionDataSerializationTests`,
   retains a reference into a `List<Play>` slot and mutates it later is
   modifying the local copy, not the list element. Use `Snapshot()` when
   the intent is an explicit independent copy, and re-assign back to the
-  list slot when mutation is intended.
+  list slot when mutation is intended. `foreach` likewise enumerates a
+  value copy — a mid-loop `Add` on the source is invisible to the
+  iteration (pinned by test).
+- **A one-move `Play.Create` call must spell `new Move(…)`.**
+  `Play.Create(new(13, 7))` does not compile: a lone target-typed
+  `new(…)` argument binds in normal form to the
+  `params ReadOnlySpan<Move>` parameter itself and resolves against the
+  span's constructors. A dedicated `Create(Move)` overload cannot fix
+  this — a typeless `new(…)` is then ambiguous between the two — so none
+  exists (tried and reverted; the rationale lives in the XML docs on
+  `Create`). Spell the element type, or use a collection expression
+  (`Play p = [new(13, 7)];`), whose element target type is unambiguous.
+  Calls with two or more moves are unaffected.
 - **`Play` equality is notation-level, not encoding-level.** Equality /
   hash / `==` delegate to `ToCanonical()`: insensitive to move order *and*
   to hop decomposition (`{(13,10),(10,8)}` equals `{(13,8)}`; a one-hop

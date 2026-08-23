@@ -389,9 +389,7 @@ public class BoardStateTests
     public void ApplyPlay_StandardOpening_FlipsAndAppliesAtomically()
     {
         var s = BoardState.Standard();
-        var play = new Play();
-        play.Add(new Move(24, 18));
-        play.Add(new Move(13, 9));
+        Play play = [new(24, 18), new(13, 9)];
 
         s.ApplyPlay(play);
 
@@ -419,9 +417,7 @@ public class BoardStateTests
     public void ApplyPlay_PreservesCheckerConservation()
     {
         var s = BoardState.Standard();
-        var play = new Play();
-        play.Add(new Move(24, 18));
-        play.Add(new Move(13, 9));
+        Play play = [new(24, 18), new(13, 9)];
 
         s.ApplyPlay(play);
 
@@ -446,14 +442,10 @@ public class BoardStateTests
         //         signs must remain consistent (positive = new on-roll).
         var s = BoardState.Standard();
 
-        var p1 = new Play();
-        p1.Add(new Move(24, 18));
-        p1.Add(new Move(13, 9));
+        Play p1 = [new(24, 18), new(13, 9)];
         s.ApplyPlay(p1);
 
-        var p2 = new Play();
-        p2.Add(new Move(24, 18));
-        p2.Add(new Move(13, 9));
+        Play p2 = [new(24, 18), new(13, 9)];
         s.ApplyPlay(p2);
 
         int onRoll = 0, opp = 0;
@@ -482,7 +474,7 @@ public class BoardStateTests
     {
         // Forced pass — Play is empty but turn boundary still flips.
         var s = BoardState.Standard();
-        var empty = new Play();
+        Play empty = [];
 
         s.ApplyPlay(empty);
 

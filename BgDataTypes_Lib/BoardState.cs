@@ -428,8 +428,8 @@ public class BoardState
     /// </summary>
     public void ApplyPlay(Play play)
     {
-        for (int i = 0; i < play.Count; i++)
-            ApplyMove(play[i]);
+        foreach (var move in play)
+            ApplyMove(move);
         Flip();
     }
 

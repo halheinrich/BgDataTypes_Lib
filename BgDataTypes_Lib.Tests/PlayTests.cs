@@ -52,11 +52,119 @@ public class PlayTests
     [Fact]
     public void Indexer_OutOfRange_Throws()
     {
-        var p = new Play();
-        p.Add(new Move(13, 7));
+        Play p = [new(13, 7)];
 
         Assert.Throws<IndexOutOfRangeException>(() => p[4]);
         Assert.Throws<IndexOutOfRangeException>(() => p[-1]);
+    }
+
+    [Fact]
+    public void Create_NoMoves_IsEmptyPlay()
+    {
+        var p = Play.Create();
+
+        Assert.Equal(0, p.Count);
+        Assert.Equal(new Play(), p);
+    }
+
+    [Fact]
+    public void Create_StoresMovesInOrder()
+    {
+        var p = Play.Create(new(13, 7), new(8, 5));
+
+        Assert.Equal(2, p.Count);
+        Assert.Equal(new Move(13, 7), p[0]);
+        Assert.Equal(new Move(8, 5), p[1]);
+    }
+
+    [Fact]
+    public void Create_FourMoves_FillsBuffer()
+    {
+        var p = Play.Create(new(8, 5), new(8, 5), new(6, 3), new(6, 3));
+
+        Assert.Equal(4, p.Count);
+        Assert.Equal(new Move(8, 5), p[0]);
+        Assert.Equal(new Move(6, 3), p[3]);
+    }
+
+    [Fact]
+    public void Create_FiveMoves_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>("moves",
+            () => Play.Create(new(8, 5), new(8, 5), new(6, 3), new(6, 3), new(5, 2)));
+    }
+
+    [Fact]
+    public void Create_MatchesAddBuiltPlay()
+    {
+        var added = new Play();
+        added.Add(new Move(13, 7));
+        added.Add(new Move(8, 5));
+
+        var created = Play.Create(new(13, 7), new(8, 5));
+
+        Assert.Equal(added.Count, created.Count);
+        Assert.Equal(added[0], created[0]);
+        Assert.Equal(added[1], created[1]);
+        Assert.True(added == created);
+    }
+
+    [Fact]
+    public void CollectionExpression_BuildsPlay()
+    {
+        Play p = [new(13, 7), new(8, 5)];
+
+        Assert.Equal(2, p.Count);
+        Assert.Equal(new Move(13, 7), p[0]);
+        Assert.Equal(new Move(8, 5), p[1]);
+    }
+
+    [Fact]
+    public void CollectionExpression_Empty_IsForcedPass()
+    {
+        Play p = [];
+
+        Assert.Equal(0, p.Count);
+        Assert.Equal(new Play(), p);
+    }
+
+    [Fact]
+    public void Foreach_YieldsMovesInInsertionOrder()
+    {
+        Play p = [new(13, 7), new(8, 5), new(6, 3)];
+
+        var seen = new List<Move>();
+        foreach (var move in p)
+            seen.Add(move);
+
+        Assert.Equal([new(13, 7), new(8, 5), new(6, 3)], seen);
+    }
+
+    [Fact]
+    public void Foreach_EmptyPlay_YieldsNothing()
+    {
+        Play p = [];
+
+        foreach (var move in p)
+            Assert.Fail($"Empty play yielded {move}.");
+    }
+
+    [Fact]
+    public void Foreach_EnumeratesCopy_SourceMutationInvisible()
+    {
+        // The enumerator carries its own value-type copy of the play, so a
+        // mid-enumeration Add on the source cannot extend the sequence.
+        Play p = [new(13, 7)];
+
+        var seen = 0;
+        foreach (var _ in p)
+        {
+            p.Add(new Move(8, 5));
+            seen++;
+        }
+
+        Assert.Equal(1, seen);
+        Assert.Equal(2, p.Count);
     }
 
     [Fact]
@@ -94,13 +202,8 @@ public class PlayTests
     [Fact]
     public void Equals_AndHashCode_AreOrderInvariant()
     {
-        var p1 = new Play();
-        p1.Add(new Move(13, 7));
-        p1.Add(new Move(8, 5));
-
-        var p2 = new Play();
-        p2.Add(new Move(8, 5));
-        p2.Add(new Move(13, 7));
+        Play p1 = [new(13, 7), new(8, 5)];
+        Play p2 = [new(8, 5), new(13, 7)];
 
         Assert.True(p1.Equals(p2));
         Assert.True(p1 == p2);
@@ -113,12 +216,8 @@ public class PlayTests
         // The quiz-entry repro: a user enters 13/8 as two clicks (13/10, then
         // 10/8); the candidate list stores the collapsed encoding {(13,8)}.
         // Both canonicalize to the single chain 13/8, so they are equal.
-        var decomposed = new Play();
-        decomposed.Add(new Move(13, 10));
-        decomposed.Add(new Move(10, 8));
-
-        var combined = new Play();
-        combined.Add(new Move(13, 8));
+        Play decomposed = [new(13, 10), new(10, 8)];
+        Play combined = [new(13, 8)];
 
         Assert.True(decomposed == combined);
         Assert.Equal(decomposed.GetHashCode(), combined.GetHashCode());
@@ -133,12 +232,8 @@ public class PlayTests
         // hit-less encoding of a hitting play validate and apply without
         // barring the blot (the booked ApplyPlay/IsLegalPlay board-corruption
         // hazard). Equality is now fully hit-sensitive.
-        var hitting = new Play();
-        hitting.Add(new Move(13, -10));
-        hitting.Add(new Move(10, 8));
-
-        var quiet = new Play();
-        quiet.Add(new Move(13, 8));
+        Play hitting = [new(13, -10), new(10, 8)];
+        Play quiet = [new(13, 8)];
 
         Assert.True(hitting != quiet);
     }
@@ -148,12 +243,8 @@ public class PlayTests
     {
         // A hit at the trajectory's final landing point does not block the
         // collapse: 13/10 + 10/8* and the combined 13/8* are the same play.
-        var decomposed = new Play();
-        decomposed.Add(new Move(13, 10));
-        decomposed.Add(new Move(10, -8));
-
-        var combined = new Play();
-        combined.Add(new Move(13, -8));
+        Play decomposed = [new(13, 10), new(10, -8)];
+        Play combined = [new(13, -8)];
 
         Assert.True(decomposed == combined);
         Assert.Equal(decomposed.GetHashCode(), combined.GetHashCode());
@@ -162,11 +253,8 @@ public class PlayTests
     [Fact]
     public void Equals_HitVsNonHit_SameTrajectory_NotEqual()
     {
-        var hit = new Play();
-        hit.Add(new Move(13, -7));
-
-        var noHit = new Play();
-        noHit.Add(new Move(13, 7));
+        Play hit = [new(13, -7)];
+        Play noHit = [new(13, 7)];
 
         Assert.True(hit != noHit);
     }
@@ -174,11 +262,8 @@ public class PlayTests
     [Fact]
     public void Equals_DifferentPlays_NotEqual()
     {
-        var p1 = new Play();
-        p1.Add(new Move(13, 7));
-
-        var p2 = new Play();
-        p2.Add(new Move(13, 5));
+        Play p1 = [new(13, 7)];
+        Play p2 = [new(13, 5)];
 
         Assert.False(p1.Equals(p2));
         Assert.True(p1 != p2);
@@ -187,11 +272,9 @@ public class PlayTests
     [Fact]
     public void Equals_EmptyPlays_Equal_AndDistinctFromNonEmpty()
     {
-        var e1 = new Play();
-        var e2 = new Play();
-
-        var p = new Play();
-        p.Add(new Move(13, 7));
+        Play e1 = [];
+        Play e2 = [];
+        Play p = [new(13, 7)];
 
         Assert.True(e1 == e2);
         Assert.Equal(e1.GetHashCode(), e2.GetHashCode());

@@ -39,8 +39,8 @@ internal sealed class PlayJsonConverter : JsonConverter<Play>
         JsonSerializerOptions options)
     {
         writer.WriteStartArray();
-        for (int i = 0; i < value.Count; i++)
-            JsonSerializer.Serialize(writer, value[i], options);
+        foreach (var move in value)
+            JsonSerializer.Serialize(writer, move, options);
         writer.WriteEndArray();
     }
 }
