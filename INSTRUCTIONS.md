@@ -452,6 +452,7 @@ public interface IDecisionFilterData
     int OpponentNeeds { get; }
     bool IsCrawford { get; }
     int MatchLength { get; }
+    bool IsMoneyGame => MatchLength == 0;         // the interface's only default implementation
     bool? IsJacoby { get; }                       // tri-state; null on a money record matches neither money token
     int MoveNumber { get; }                       // 1-based within the game
     bool IsStandardStart { get; }                 // false for non-standard openings

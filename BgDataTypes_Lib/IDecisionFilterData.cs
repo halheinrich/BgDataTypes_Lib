@@ -43,7 +43,11 @@ public interface IDecisionFilterData
     /// Filter-layer consequence of that last rung: a money record whose fact
     /// is <see langword="null"/> matches <em>neither</em> money score token —
     /// not <c>moneyJ</c> and not <c>moneyNJ</c>. An unknown rule is never
-    /// guessed into one of them.
+    /// guessed into one of them. Consumers spell that conjunction themselves
+    /// as <c>IsMoneyGame &amp;&amp; IsJacoby == true</c> / <c>== false</c>;
+    /// the near-miss spellings <c>!= false</c> and <c>!= true</c> silently
+    /// admit the unknown record into one side, which is the thing a
+    /// consumer's tests must pin against.
     /// </para>
     /// </summary>
     bool? IsJacoby { get; }
