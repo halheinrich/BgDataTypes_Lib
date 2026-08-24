@@ -71,6 +71,11 @@ public struct Play : IEquatable<Play>
     /// <exception cref="ArgumentException">
     /// <paramref name="moves"/> holds more than 4 moves (the doubles maximum).
     /// </exception>
+    // Load-bearing: demotes this overload so a typeless new(...)
+    // single-argument call binds Create(Move) instead of tying with the
+    // params span expansion (CS0121). Deleting this attribute breaks those
+    // call sites — Play.Create(new(13, 7)) is one, pinned by
+    // PlayTests.Create_OneMove_TypelessNew_Compiles.
     [OverloadResolutionPriority(-1)]
     public static Play Create(params ReadOnlySpan<Move> moves)
     {
