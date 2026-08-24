@@ -33,6 +33,21 @@ public interface IDecisionFilterData
     /// </summary>
     bool IsMoneyGame => MatchLength == 0;
 
+    /// <summary>
+    /// Whether the Jacoby rule was in force, in the tri-state contract
+    /// <see cref="PositionData.IsJacoby"/> owns and states — money records
+    /// carry the fact, match records carry <see langword="null"/> because the
+    /// question does not arise there, and <see langword="null"/> on a money
+    /// record means the rule was never stamped.
+    /// <para>
+    /// Filter-layer consequence of that last rung: a money record whose fact
+    /// is <see langword="null"/> matches <em>neither</em> money score token —
+    /// not <c>moneyJ</c> and not <c>moneyNJ</c>. An unknown rule is never
+    /// guessed into one of them.
+    /// </para>
+    /// </summary>
+    bool? IsJacoby { get; }
+
     /// <summary>1-based move number within the game.</summary>
     int MoveNumber { get; }
 

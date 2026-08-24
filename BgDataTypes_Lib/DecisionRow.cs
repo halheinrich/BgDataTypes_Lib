@@ -111,12 +111,41 @@ public sealed class DecisionRow : IDecisionFilterData
     public bool IsCrawford { get; init; }
 
     /// <summary>
+    /// Whether the Jacoby rule was in force
+    /// (<see cref="IDecisionFilterData.IsJacoby"/>), in the tri-state contract
+    /// <see cref="PositionData.IsJacoby"/> owns and states. Stored rather than
+    /// derived — the CSV shape carries the fact, so the row must too:
+    /// <see cref="MatchScore"/> spells it as a suffix on the money token, the
+    /// way <see cref="IsCrawford"/> spells itself as the <c>C</c> suffix on a
+    /// match score.
+    /// </summary>
+    public bool? IsJacoby { get; init; }
+
+    /// <summary>
     /// Match score string derived from <see cref="OnRollNeeds"/>, <see cref="OpponentNeeds"/>,
-    /// <see cref="IsCrawford"/>, and <see cref="IsMoneyGame"/>. Used for CSV output only.
+    /// <see cref="IsCrawford"/>, <see cref="IsMoneyGame"/>, and <see cref="IsJacoby"/>.
+    /// Used for CSV output only.
+    /// <para>
+    /// A money row spells the Jacoby rule as a suffix on the money token —
+    /// <c>moneyJ</c> or <c>moneyNJ</c> — the same in-grammar shape Crawford's
+    /// <c>C</c> suffix uses on a match score. When the rule is unknown
+    /// (<see cref="IsJacoby"/> <see langword="null"/> on a money row) the
+    /// token is the bare <c>money</c>: it states what is known and withholds
+    /// what is not, and it is neither of the two rule-bearing tokens, which is
+    /// exactly the filter-layer contract
+    /// (<see cref="IDecisionFilterData.IsJacoby"/>). Read back through a
+    /// filter surface it fails loud rather than quietly matching, <c>money</c>
+    /// being the retired token there.
+    /// </para>
     /// </summary>
     [JsonIgnore]
     public string MatchScore => IsMoneyGame
-        ? "money"
+        ? IsJacoby switch
+        {
+            true  => "moneyJ",
+            false => "moneyNJ",
+            null  => "money"
+        }
         : IsCrawford
             ? $"{OnRollNeeds}a{OpponentNeeds}aC"
             : $"{OnRollNeeds}a{OpponentNeeds}a";

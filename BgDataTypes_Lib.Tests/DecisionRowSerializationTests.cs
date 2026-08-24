@@ -26,6 +26,7 @@ public class DecisionRowSerializationTests
             OnRollNeeds = 3,
             OpponentNeeds = 5,
             IsCrawford = false,
+            IsJacoby = null,
             Player = "Mochy",
             SourceFile = "mochy-falafel.xg",
             Game = 2,
@@ -45,6 +46,7 @@ public class DecisionRowSerializationTests
         Assert.Equal(original.OnRollNeeds, restored.OnRollNeeds);
         Assert.Equal(original.OpponentNeeds, restored.OpponentNeeds);
         Assert.Equal(original.IsCrawford, restored.IsCrawford);
+        Assert.Equal(original.IsJacoby, restored.IsJacoby);
         Assert.Equal(original.Player, restored.Player);
         Assert.Equal(original.SourceFile, restored.SourceFile);
         Assert.Equal(original.Game, restored.Game);
@@ -212,6 +214,7 @@ public class DecisionRowSerializationTests
         var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0 };
 
         Assert.True(row.IsMoneyGame);
+        // IsJacoby unset, so the bare (rule-unknown) money token.
         Assert.Equal("money", row.MatchScore);
     }
 
@@ -272,10 +275,44 @@ public class DecisionRowSerializationTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_MatchScore_Money()
+    public void DecisionRow_MatchScore_Money_JacobyUnknown()
     {
+        // No IsJacoby stamp — the bare token, which is neither moneyJ nor moneyNJ.
         var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0 };
         Assert.Equal("money", row.MatchScore);
+    }
+
+    [Fact]
+    public void DecisionRow_MatchScore_Money_Jacoby()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0, IsJacoby = true };
+        Assert.Equal("moneyJ", row.MatchScore);
+    }
+
+    [Fact]
+    public void DecisionRow_MatchScore_Money_NoJacoby()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0, IsJacoby = false };
+        Assert.Equal("moneyNJ", row.MatchScore);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public void DecisionRow_MatchScore_MatchRow_IgnoresIsJacoby(bool? isJacoby)
+    {
+        // The suffix is money-only: a match score is unchanged by the stamp,
+        // stray or otherwise, exactly as PositionData.IsJacoby's contract says.
+        var row = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            MatchLength = 9,
+            OnRollNeeds = 3,
+            OpponentNeeds = 5,
+            IsJacoby = isJacoby
+        };
+        Assert.Equal("3a5a", row.MatchScore);
     }
 
     [Fact]
@@ -749,5 +786,97 @@ public class DecisionRowSerializationTests
 
         Assert.DoesNotContain("Id", DecisionRow.CsvHeader);
         Assert.DoesNotContain("match.xg:g2:m17:cube", row.ToCsvLine());
+    }
+
+    // -----------------------------------------------------------------------
+    //  IsJacoby — tri-state field, CSV via MatchScore
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_IsJacoby_DefaultsToNull()
+    {
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        Assert.Null(row.IsJacoby);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public void DecisionRow_RoundTrip_IsJacoby(bool? isJacoby)
+    {
+        var original = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            MatchLength = 0,
+            IsJacoby = isJacoby
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+
+        Assert.Equal(isJacoby, restored.IsJacoby);
+        Assert.Equal(original.MatchScore, restored.MatchScore);
+    }
+
+    [Fact]
+    public void DecisionRow_IsJacoby_AbsentFromJson_ReadsAsNotSupplied()
+    {
+        // A row written before the fact existed still reads — as unknown.
+        var json = "{\"Id\":\"test.xgp\",\"MatchLength\":0}";
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+
+        Assert.Null(restored.IsJacoby);
+        Assert.Equal("money", restored.MatchScore);
+    }
+
+    [Theory]
+    [InlineData(true, "moneyJ")]
+    [InlineData(false, "moneyNJ")]
+    [InlineData(null, "money")]
+    public void DecisionRow_IDecisionFilterData_IsJacoby(bool? isJacoby, string expectedScore)
+    {
+        IDecisionFilterData data = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            MatchLength = 0,
+            IsJacoby = isJacoby
+        };
+
+        Assert.True(data.IsMoneyGame);
+        Assert.Equal(isJacoby, data.IsJacoby);
+        Assert.Equal(expectedScore, ((DecisionRow)data).MatchScore);
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_IsJacoby_MatchRow_IsNull()
+    {
+        IDecisionFilterData data = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9 };
+
+        Assert.False(data.IsMoneyGame);
+        Assert.Null(data.IsJacoby);
+    }
+
+    [Theory]
+    [InlineData(true, "moneyJ")]
+    [InlineData(false, "moneyNJ")]
+    [InlineData(null, "money")]
+    public void DecisionRow_ToCsvLine_IsJacoby_RidesTheMatchScoreColumn(bool? isJacoby, string expectedToken)
+    {
+        var row = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Xgid = "XGID=x",
+            MatchLength = 0,
+            IsJacoby = isJacoby
+        };
+        var line = row.ToCsvLine();
+
+        // Header: Xgid,Error,MatchScore,MatchLength,... — MatchScore is column
+        // index 2 (0-based). No column is added; the token carries the fact.
+        Assert.Equal(expectedToken, line.Split(',')[2]);
+        Assert.DoesNotContain("IsJacoby", DecisionRow.CsvHeader);
+        Assert.Equal(10, line.Count(c => c == ','));
+        Assert.DoesNotContain("null", line);
     }
 }

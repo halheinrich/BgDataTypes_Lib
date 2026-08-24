@@ -65,6 +65,8 @@ public class BgDecisionData : IDecisionFilterData
     /// <inheritdoc/>
     public bool IsCrawford => Position.IsCrawford;
     /// <inheritdoc/>
+    public bool? IsJacoby => Position.IsJacoby;
+    /// <inheritdoc/>
     public int MatchLength => Descriptive.MatchLength;
     /// <inheritdoc/>
     public int MoveNumber => Descriptive.MoveNumber;

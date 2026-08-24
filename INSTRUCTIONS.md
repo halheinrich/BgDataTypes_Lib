@@ -56,9 +56,11 @@ and `Directory.Packages.props` (Central Package Management — no inline
   the small validated value types `CubeDecisionPair` (a `CubeAction` pair
   with per-half guards) and `DiceRoll` (a canonical unordered roll).
 - **Shared consumer contracts** — `IDecisionFilterData`, the filter-layer
-  view implemented by `BgDecisionData` and `DecisionRow`; `IGameInfo` and
-  `IMatchInfo`, implemented by producers so filter layers never reference a
-  producer's concrete types.
+  view implemented by `BgDecisionData` and `DecisionRow`, carrying the score
+  context a filter needs (`OnRollNeeds`/`OpponentNeeds`, `IsCrawford`,
+  `IsMoneyGame`, and the tri-state `IsJacoby?` the money score tokens read);
+  `IGameInfo` and `IMatchInfo`, implemented by producers so filter layers
+  never reference a producer's concrete types.
 - **JSON converters** — `PlayJsonConverter`, `DiceRollJsonConverter`,
   `DecisionIdJsonConverter`, `ProblemKeyJsonConverter`. Each is bundled onto
   its type by a type-level `[JsonConverter]` attribute; consumers register
@@ -418,6 +420,15 @@ the int `Roll` column (`Roll == 0` → null; malformed digits fail loud) and is
 `[JsonIgnore]`d like `IsCube` / `MatchScore` — `Roll` stays the wire form on
 both CSV and JSON.
 
+`IsJacoby` (`bool?`) is stored, not derived — the tri-state fact
+`PositionData.IsJacoby` owns, carried here because the CSV shape spells it
+(`halheinrich/backgammon#121`). It reaches CSV the way `IsCrawford` does:
+through the computed `MatchScore` token, as an in-grammar suffix on the money
+score. A money row is `moneyJ` or `moneyNJ`; a money row whose rule is unknown
+(`IsJacoby` `null`) is the bare `money`, which is deliberately neither
+rule-bearing token. No CSV column is added — the column set and count are
+unchanged. Like `IsCrawford`, it also serializes to JSON.
+
 ### Mop layout
 
 26-element `IReadOnlyList<int>` from the on-roll player's perspective:
@@ -441,6 +452,7 @@ public interface IDecisionFilterData
     int OpponentNeeds { get; }
     bool IsCrawford { get; }
     int MatchLength { get; }
+    bool? IsJacoby { get; }                       // tri-state; null on a money record matches neither money token
     int MoveNumber { get; }                       // 1-based within the game
     bool IsStandardStart { get; }                 // false for non-standard openings
     AnalysisMode AnalysisMode { get; }            // cube analysis for cubes, best-play candidate for checkers
@@ -468,7 +480,8 @@ public sealed class DecisionRow : IDecisionFilterData
 {
     public required DecisionId Id { get; init; }    // producer-stamped; throws at ctor if omitted
     // Flat init-only properties — see DecisionRow.cs for the full set.
-    public string MatchScore { get; }   // computed from needs/Crawford/length
+    public bool? IsJacoby { get; init; }  // stored tri-state; suffixes the money MatchScore token
+    public string MatchScore { get; }   // computed from needs/Crawford/length/Jacoby
     public static string CsvHeader { get; }
     public string ToCsvLine();
     // IsCube, MatchScore, and FilterError are [JsonIgnore]d (computed /
@@ -769,10 +782,21 @@ measure" is not a valid comparison on this hardware.
   producer building a record with `OnRollNeeds == 0` and
   `OpponentNeeds == 0` must set `IsJacoby` explicitly. The reverse is not a
   hazard — a stamp on a match record is ignored, not rejected.
+- **The bare `money` CSV token means "rule unknown", not "no Jacoby".** With
+  `DecisionRow.IsJacoby` unset, `MatchScore` writes `money` — the same string
+  the pre-`halheinrich/backgammon#121` shape wrote for *every* money row. It
+  is the honest spelling (it states the session and withholds the rule, and
+  is neither `moneyJ` nor `moneyNJ`, which is the ruled filter behaviour),
+  but it is trap-shaped two ways: a producer that forgets to stamp emits
+  rows indistinguishable from legacy output, and a reader who reads `money`
+  as "Jacoby off" is silently wrong. Fed back through a filter surface it at
+  least fails loud — `money` is the retired token there. Same discipline as
+  the no-key rung above: any producer building a money row must stamp
+  `IsJacoby` explicitly.
 - **`DecisionRow.MatchScore` is computed, not stored.** It is derived from
-  `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, and `MatchLength` on every
-  access. Do not try to set it, and do not cache it across mutations of
-  those fields (though init-only semantics make mutation unusual anyway).
+  `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, `MatchLength`, and
+  `IsJacoby` on every access. Do not try to set it, and do not cache it
+  across mutations of those fields (though init-only semantics make mutation unusual anyway).
 - **CSV methods live on `DecisionRow`.** This is a deliberate, accepted
   deviation from the "pure data, no behavior" principle — the CSV format
   is tightly coupled to the column order and travels with the type. Do

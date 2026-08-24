@@ -995,6 +995,76 @@ public class BgDecisionDataSerializationTests
         Assert.False(data.IsMoneyGame);
     }
 
+    // -----------------------------------------------------------------------
+    //  IDecisionFilterData — IsJacoby forwarding (tri-state)
+    // -----------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BgDecisionData_IDecisionFilterData_IsJacoby_MoneyRecord_CarriesTheValue(bool isJacoby)
+    {
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Position = new PositionData { OnRollNeeds = 0, OpponentNeeds = 0, IsJacoby = isJacoby },
+            Descriptive = new DescriptiveData { MatchLength = 0 }
+        };
+
+        Assert.True(data.IsMoneyGame);
+        Assert.Equal(isJacoby, data.IsJacoby);
+    }
+
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_IsJacoby_MatchRecord_IsNull()
+    {
+        // A match record carries null because the question does not arise —
+        // the producer stamps the fact onto money records only.
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Position = new PositionData { OnRollNeeds = 3, OpponentNeeds = 5 },
+            Descriptive = new DescriptiveData { MatchLength = 9 }
+        };
+
+        Assert.False(data.IsMoneyGame);
+        Assert.Null(data.IsJacoby);
+    }
+
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_IsJacoby_MoneyRecordUnstamped_IsNull()
+    {
+        // The unknown rung: a money record whose rule was never stamped. The
+        // forwarder reports null rather than defaulting to either rule — which
+        // is what makes it match neither money score token downstream.
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Position = new PositionData { OnRollNeeds = 0, OpponentNeeds = 0 },
+            Descriptive = new DescriptiveData { MatchLength = 0 }
+        };
+
+        Assert.True(data.IsMoneyGame);
+        Assert.Null(data.IsJacoby);
+    }
+
+    [Fact]
+    public void BgDecisionData_IDecisionFilterData_IsJacoby_ForwardsPositionVerbatim()
+    {
+        // A stray non-null stamp on a match record is tolerated, not rejected
+        // (PositionData.IsJacoby's contract). The forwarder passes it through
+        // unchanged rather than nulling it out — the interface is a view of
+        // the stored fact, not a second place the rule is decided.
+        IDecisionFilterData data = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Position = new PositionData { OnRollNeeds = 3, OpponentNeeds = 5, IsJacoby = true },
+            Descriptive = new DescriptiveData { MatchLength = 9 }
+        };
+
+        Assert.True(data.IsJacoby);
+    }
+
     [Fact]
     public void BgDecisionData_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire()
     {
