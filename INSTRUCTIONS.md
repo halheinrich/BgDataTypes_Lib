@@ -6,7 +6,7 @@
 
 ## Stack
 
-C# / .NET 10 / Class Library / xUnit. Pure data types — no parsing, no rendering, no I/O beyond `System.Text.Json` serialization.
+C# / .NET 10 / Class Library / xUnit / BenchmarkDotNet. Pure data types — no parsing, no rendering, no I/O beyond `System.Text.Json` serialization.
 
 ## Solution
 
@@ -30,7 +30,7 @@ converters on their `JsonSerializerOptions`.
 
 ## Layout
 
-Two projects under `BgDataTypes_Lib.slnx`, governed by repo-root
+Three projects under `BgDataTypes_Lib.slnx`, governed by repo-root
 `Directory.Build.props` (TFM, `TreatWarningsAsErrors`, XML doc generation)
 and `Directory.Packages.props` (Central Package Management — no inline
 `Version=` anywhere).
@@ -63,6 +63,12 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `DecisionIdJsonConverter`, `ProblemKeyJsonConverter`. Each is bundled onto
   its type by a type-level `[JsonConverter]` attribute; consumers register
   nothing.
+
+**`BgDataTypes_Lib.Benchmarks/`** — BenchmarkDotNet harness, an executable
+(`OutputType=Exe`) excluded from `dotnet test` by `IsTestProject=false`.
+`Program.cs` is the `BenchmarkSwitcher` entry point;
+`PlayConstructionBenchmarks.cs` measures every `Play` construction path
+against the incremental `Add` spelling. See Benchmarks below.
 
 **`BgDataTypes_Lib.Tests/`** — xUnit, one test class per type or per
 behaviour area of a type (`ProblemKeyTests`, `BoardStateTests`,
@@ -120,7 +126,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
-| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create(params ReadOnlySpan<Move>)` (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass; `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
+| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
 | `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint (an intermediate hit splits the trajectory into two chains). |
 | `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, full equality surface (`IEquatable`, `==`/`!=`, hash). The canonical chain form of a `Play` and the single source of play equivalence. Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
@@ -502,10 +508,19 @@ public readonly record struct PlayChain(int FrPt, int ToPt);
 [CollectionBuilder(typeof(Play), nameof(Create))]
 public struct Play : IEquatable<Play>
 {
+    public static Play Create(Move m0);           // fixed-arity: parity with Add, no argument
+    public static Play Create(Move m0, Move m1);  // buffer. Overload resolution picks these for
+    public static Play Create(Move m0,            // any literal call site.
+                              Move m1, Move m2);
+    public static Play Create(Move m0, Move m1, Move m2, Move m3);
+
+    [OverloadResolutionPriority(-1)]
     public static Play Create(params ReadOnlySpan<Move> moves);
-                                                  // intent-level construction + collection-builder
-                                                  // target ([m1, m2] / [] both work); > 4 moves
-                                                  // throws ArgumentException
+                                                  // general arity + collection-builder target
+                                                  // ([m1, m2] / [] both work); for moves already
+                                                  // in a span or array. > 4 throws
+                                                  // ArgumentException. Deprioritised so a literal
+                                                  // list binds fixed-arity — including one move.
     public int Count { get; private set; }
     public Move this[int index] { get; }          // readonly
     public void Add(Move move);
@@ -678,6 +693,57 @@ the property-name overloads, so it also works as a dictionary key). Tested
 without any options-level registration in `BgDecisionDataSerializationTests`,
 `DecisionRowSerializationTests`, `DiceRollTests`, and `ProblemKeyTests`.
 
+## Benchmarks
+
+`BgDataTypes_Lib.Benchmarks` is a BenchmarkDotNet harness over `Play`
+construction — the one place in this library with a hot-path performance
+contract, because BgMoveGen's generator builds a `Play` per candidate
+several million times per BgRLEngine training run.
+
+`PlayConstructionBenchmarks` groups its cases by move count (1–4), with the
+incremental `Add` spelling as each group's baseline, and covers four
+construction paths per group: `Add`, the fixed-arity `Create` overload, the
+span overload from an existing array, and a collection expression.
+`[MemoryDiagnoser]` is on — every path must allocate exactly nothing.
+
+**The fixed-arity rows are gated at parity with `Add`; the span and
+collection-expression rows are documented, not gated** (they carry a
+caller-side argument buffer that is outside the method — see Pitfalls). The
+`*_Add` baselines are themselves regression guards on `Add`'s own codegen.
+
+Measured on an idle machine, .NET 10.0.11, x64 RyuJIT
+(halheinrich/backgammon#137):
+
+| Arity | `Add` | `Create` fixed-arity | `Create` span | collection expr |
+|---|---|---|---|---|
+| 1 | 1.00 | **0.88** | 1.37 | 1.31 |
+| 2 | 1.00 | **0.85** | 1.60 | 1.53 |
+| 3 | 1.00 | **0.96** | 1.69 | 1.66 |
+| 4 | 1.00 | **0.91** | 1.82 | 2.05 |
+
+Allocation is zero on every row. A `--disasm` pass on the four-move
+fixed-arity case confirms the mechanism directly: `Create` inlines fully,
+the slot switch folds to direct field writes, and `Count` is stored as a
+literal — 126 bytes of code against the raw `Add` site's 107, with no
+branch or jump table in either.
+
+Run it in Release:
+
+```
+dotnet run -c Release --project BgDataTypes_Lib.Benchmarks
+```
+
+Add `--filter '*FourMoves*'` to narrow, or `--disasm` to inspect codegen.
+Excluded from `dotnet test` via `IsTestProject=false` in its csproj — a run
+takes minutes and asserts nothing, so it is measured on demand, never as
+part of the suite.
+
+**Numbers off this machine are contended.** eXtremeGammon rollouts routinely
+run here and inflate BenchmarkDotNet's mean by up to 1.8x. Only ever read
+the sibling comparison *within* one run — the grouped `Ratio` column — never
+one run's absolute means against another's. Sequential "measure, edit,
+measure" is not a valid comparison on this hardware.
+
 ## Pitfalls
 
 - **`DecisionId.Filename` must not contain `':'`.** The canonical-form
@@ -739,16 +805,27 @@ without any options-level registration in `BgDecisionDataSerializationTests`,
   list slot when mutation is intended. `foreach` likewise enumerates a
   value copy — a mid-loop `Add` on the source is invisible to the
   iteration (pinned by test).
-- **A one-move `Play.Create` call must spell `new Move(…)`.**
-  `Play.Create(new(13, 7))` does not compile: a lone target-typed
-  `new(…)` argument binds in normal form to the
-  `params ReadOnlySpan<Move>` parameter itself and resolves against the
-  span's constructors. A dedicated `Create(Move)` overload cannot fix
-  this — a typeless `new(…)` is then ambiguous between the two — so none
-  exists (tried and reverted; the rationale lives in the XML docs on
-  `Create`). Spell the element type, or use a collection expression
-  (`Play p = [new(13, 7)];`), whose element target type is unambiguous.
-  Calls with two or more moves are unaffected.
+- **`Play.Create`'s cost depends on which overload you reach.** The four
+  fixed-arity overloads construct at parity with the incremental `Add`
+  spelling (0.85–0.96x measured, allocation-identical) and are what a
+  literal argument list binds to. `Create(params ReadOnlySpan<Move>)` and
+  collection expressions cost 1.3–2.1x — not because of anything inside
+  the method, but because the *caller* materialises an argument buffer
+  before the call, which no change to `Play` can remove. That is fine for
+  tests and readability sites and wrong for a move-generation inner loop:
+  in a hot path, pass the moves as separate arguments (or keep using
+  `Add`), and do not "tidy" such a site into a collection expression.
+  Numbers and the standing guard live in Benchmarks.
+- **The slot-write seam is private and must stay the only one.** `Add` and
+  all five `Create` overloads write moves through one private `SetSlot`
+  primitive, which owns both the ordinal → field mapping and the `Count`
+  maintenance that goes with it; no other member touches a slot field or
+  `Count`. It carries `[MethodImpl(AggressiveInlining)]` deliberately and
+  measurably: without it `Add` does not fold its slot switch and costs
+  **8x** (caught by the `*_Add` benchmark rows, which exist as that
+  regression guard). A future construction path adds an overload that
+  calls `SetSlot` with literal indices — it does not write slots itself,
+  and it does not loop over `Add`.
 - **`Play` equality is notation-level, not encoding-level.** Equality /
   hash / `==` delegate to `ToCanonical()`: insensitive to move order *and*
   to hop decomposition (`{(13,10),(10,8)}` equals `{(13,8)}`; a one-hop

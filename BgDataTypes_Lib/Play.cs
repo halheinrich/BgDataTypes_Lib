@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
@@ -7,9 +8,14 @@ namespace BgDataTypes_Lib;
 /// A complete play: the sequence of moves for one turn.
 /// Uses a fixed-size buffer (max 4 moves for doubles) to avoid heap allocation.
 ///
-/// Construct with <see cref="Create"/> or, equivalently, a collection
-/// expression — <c>Play play = [new(13, 10), new(10, 8)];</c> — when the
-/// moves are known up front; <c>[]</c> is the empty play, a forced pass.
+/// Construct with <c>Play.Create(…)</c> when the moves are known up front —
+/// the fixed-arity overloads (<see cref="Create(Move)"/> through
+/// <see cref="Create(Move, Move, Move, Move)"/>) for a literal call site,
+/// <see cref="Create(ReadOnlySpan{Move})"/> for moves already in a span or
+/// array — or, equivalently, a collection expression:
+/// <c>Play play = [new(13, 10), new(10, 8)];</c>, with <c>[]</c> the empty
+/// play, a forced pass. The fixed-arity overloads construct at parity with
+/// <see cref="Add"/>; see their remarks for when that matters.
 /// <see cref="Add"/> / <see cref="RemoveLast"/> are the incremental build
 /// primitives for callers that discover moves one at a time
 /// (move-generation recursion). Read with <c>foreach</c> (see
@@ -39,32 +45,165 @@ public struct Play : IEquatable<Play>
 
     /// <summary>
     /// Creates a play holding <paramref name="moves"/>, in the given order —
-    /// the intent-level construction path for moves known up front:
-    /// <c>Play.Create(new(13, 10), new(10, 8))</c>, or equivalently the
-    /// collection expression <c>[new(13, 10), new(10, 8)]</c> (this method is
-    /// the type's <see cref="CollectionBuilderAttribute"/> target). No
-    /// arguments — <c>Play.Create()</c> / <c>[]</c> — is the empty play,
-    /// a forced pass. A <em>single</em>-move call must spell the element
-    /// type — <c>Play.Create(new Move(13, 7))</c> — or use a collection
-    /// expression: one lone target-typed <c>new(…)</c> argument binds in
-    /// normal form to the span parameter itself and fails to compile (a
-    /// dedicated <c>Create(Move)</c> overload cannot fix this — a typeless
-    /// <c>new(…)</c> is ambiguous between the two).
+    /// the general-arity construction door, and the type's
+    /// <see cref="CollectionBuilderAttribute"/> target, so collection
+    /// expressions land here: <c>Play p = [new(13, 10), new(10, 8)];</c>,
+    /// with <c>[]</c> — equivalently <c>Play.Create()</c> — the empty play,
+    /// a forced pass.
     /// </summary>
+    /// <remarks>
+    /// <b>Division of labour with the fixed-arity overloads.</b> Reach for
+    /// this one when the moves are already a span, an array, or a collection
+    /// expression. When they are separate values at the call site, the
+    /// fixed-arity overloads (<see cref="Create(Move)"/> through
+    /// <see cref="Create(Move, Move, Move, Move)"/>) are the ones to call,
+    /// and overload resolution picks them without help. A <c>params</c> span
+    /// argument list is materialised into a buffer by the <em>caller</em>
+    /// before the call, and that buffer round-trip is the one cost this
+    /// method cannot optimise away — it happens outside the method.
+    /// Measured against the incremental <see cref="Add"/> spelling on
+    /// <c>PlayConstructionBenchmarks</c>, the fixed-arity overloads run at
+    /// parity (0.85–0.96x across arities 1–4) while this one costs
+    /// 1.3–1.8x; both allocate nothing. Collection expressions necessarily
+    /// route here and carry the same overhead (1.3–2.1x) — they are a
+    /// readability idiom, not a hot-path one.
+    /// </remarks>
     /// <exception cref="ArgumentException">
     /// <paramref name="moves"/> holds more than 4 moves (the doubles maximum).
     /// </exception>
+    [OverloadResolutionPriority(-1)]
     public static Play Create(params ReadOnlySpan<Move> moves)
     {
         if (moves.Length > 4)
-            throw new ArgumentException(
-                $"A play has at most 4 moves, got {moves.Length}.", nameof(moves));
+            ThrowTooManyMoves(moves.Length, nameof(moves));
 
+        // Unrolled straight-line SetSlot calls with *literal* slot indices,
+        // deliberately, rather than the obvious loop over Add. Add reaches
+        // the same seam, so there is still exactly one encoding of how a
+        // move lands in a slot — but Add necessarily passes Count, a value
+        // the JIT can only fold when it knows it, and it does not know it
+        // here: the params span points into a caller-side stack buffer,
+        // which leaves the in-progress play address-exposed and Count a
+        // memory load. A literal index folds SetSlot's switch
+        // unconditionally. Measured on PlayConstructionBenchmarks
+        // (halheinrich/backgammon#137): the loop-over-Add original cost
+        // 3.94x the raw Add spelling at four moves; an unrolled *Add* ladder
+        // still cost 1.64x, because every Add re-read Count from memory and
+        // dispatched through a jump table; this shape costs 1.6x, all of it
+        // the caller's argument buffer.
         var play = new Play();
-        foreach (var move in moves)
-            play.Add(move);
+        if (moves.Length > 0) play.SetSlot(0, moves[0]);
+        if (moves.Length > 1) play.SetSlot(1, moves[1]);
+        if (moves.Length > 2) play.SetSlot(2, moves[2]);
+        if (moves.Length > 3) play.SetSlot(3, moves[3]);
         return play;
     }
+
+    /// <summary>Creates a one-move play.</summary>
+    /// <remarks>
+    /// Fixed-arity: the move goes straight into the play's slot, with no
+    /// argument buffer in between. See
+    /// <see cref="Create(ReadOnlySpan{Move})"/> for the division of labour
+    /// between these overloads and the general-arity one.
+    /// </remarks>
+    public static Play Create(Move move0)
+    {
+        var play = new Play();
+        play.SetSlot(0, move0);
+        return play;
+    }
+
+    /// <summary>Creates a two-move play, in the given order.</summary>
+    /// <inheritdoc cref="Create(Move)" path="/remarks"/>
+    public static Play Create(Move move0, Move move1)
+    {
+        var play = new Play();
+        play.SetSlot(0, move0);
+        play.SetSlot(1, move1);
+        return play;
+    }
+
+    /// <summary>Creates a three-move play, in the given order.</summary>
+    /// <inheritdoc cref="Create(Move)" path="/remarks"/>
+    public static Play Create(Move move0, Move move1, Move move2)
+    {
+        var play = new Play();
+        play.SetSlot(0, move0);
+        play.SetSlot(1, move1);
+        play.SetSlot(2, move2);
+        return play;
+    }
+
+    /// <summary>
+    /// Creates a four-move play, in the given order — the doubles maximum.
+    /// </summary>
+    /// <inheritdoc cref="Create(Move)" path="/remarks"/>
+    public static Play Create(Move move0, Move move1, Move move2, Move move3)
+    {
+        var play = new Play();
+        play.SetSlot(0, move0);
+        play.SetSlot(1, move1);
+        play.SetSlot(2, move2);
+        play.SetSlot(3, move3);
+        return play;
+    }
+
+    /// <summary>
+    /// Places <paramref name="move"/> in slot <paramref name="index"/> and
+    /// makes the play <paramref name="index"/> + 1 moves long — the single
+    /// source of both halves of "a move lands in the play": the ordinal →
+    /// field mapping and the <see cref="Count"/> maintenance that goes with
+    /// it. <see cref="Add"/> and all five <c>Create</c> overloads are its
+    /// only callers, and none of them touches a slot field or
+    /// <see cref="Count"/> itself, so no construction path can drift from
+    /// any other.
+    ///
+    /// <para>
+    /// Callers must fill slots densely from 0 upwards: the play's length is
+    /// taken from the last slot written, so writing slot 3 of an empty play
+    /// would claim four moves and expose three uninitialised ones.
+    /// </para>
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void SetSlot(int index, Move move)
+    {
+        switch (index)
+        {
+            case 0: _m0 = move; break;
+            case 1: _m1 = move; break;
+            case 2: _m2 = move; break;
+            case 3: _m3 = move; break;
+            default: ThrowSlotOutOfRange(index); break;
+        }
+        Count = index + 1;
+    }
+
+    /// <summary>
+    /// The <see cref="Create(ReadOnlySpan{Move})"/> overflow throw, out of
+    /// line. Kept out of that method's body deliberately: the interpolated
+    /// message costs enough IL to push it past the JIT's inlining budget,
+    /// and an un-inlined <c>Create</c> is exactly the regression this shape
+    /// exists to avoid. The parameter name travels in rather than being
+    /// spelled literally here, so a rename of <c>Create</c>'s parameter
+    /// cannot silently desync the exception contract.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowTooManyMoves(int count, string paramName) =>
+        throw new ArgumentException(
+            $"A play has at most 4 moves, got {count}.", paramName);
+
+    /// <summary>
+    /// The <see cref="SetSlot"/> guard, out of line for the same reason as
+    /// <see cref="ThrowTooManyMoves"/>. Unreachable through the public
+    /// surface — every caller bounds the index first — so this is a defect
+    /// trap for a future one, not a documented contract.
+    /// </summary>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowSlotOutOfRange(int index) =>
+        throw new ArgumentOutOfRangeException(
+            nameof(index), index, "A play has 4 slots, numbered 0 to 3.");
 
     /// <summary>The move at <paramref name="index"/> (0 to <see cref="Count"/> − 1), in insertion order.</summary>
     public readonly Move this[int index] => index switch
@@ -84,15 +223,9 @@ public struct Play : IEquatable<Play>
     /// </summary>
     public void Add(Move move)
     {
-        switch (Count)
-        {
-            case 0: _m0 = move; break;
-            case 1: _m1 = move; break;
-            case 2: _m2 = move; break;
-            case 3: _m3 = move; break;
-            default: throw new InvalidOperationException("Play already has 4 moves");
-        }
-        Count++;
+        if ((uint)Count >= 4)
+            throw new InvalidOperationException("Play already has 4 moves");
+        SetSlot(Count, move);
     }
 
     /// <summary>
