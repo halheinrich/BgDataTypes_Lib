@@ -124,7 +124,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
 | `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — unstamped/legacy JSON, including JSON stamped with the retired flat class (unrecognized property, ignored on read), deserializes to it. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Trial counts stay label-only. |
-| `AnalysisLevel` | enum: `Unknown`, `Ply1`–`Ply7`, `XgRoller`, `XgRollerPlus`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — unstamped/legacy JSON deserializes to it. Declared in ascending-rigor order, plies below the Roller family; the UI renders levels in declaration order (informational, not contractual — filter by membership; `DepthRank` orders). Every member carries a `[Description]` display label; variants sharing a level keep their finer identity only in the label strings ("3-ply red" is `Ply3`). |
+| `AnalysisLevel` | enum: `Unknown`, `Ply1`, `Ply2`, `Ply3Red`, `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`, `Ply6`, `Ply7`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — unstamped/legacy JSON deserializes to it. **Declaration order is contractual** (ruled 2026-08-28 on the authority of XG's own analysis-level menu, amended the same day): every member after `Unknown` ascends in rigor, and the ply and Roller families *interleave* rather than forming two blocks — `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`. Reordering, or inserting out of rigor order, is a breaking change; live consumers read the order (the diagram's level floor, the filter-panel and quiz level dropdowns). `Unknown` sits *outside* the rigor scale — not "least rigorous" but "not recorded": never excluded by a floor, never offered as a threshold; head-of-list is the zero-value requirement, not a rank. `DepthRank` / `CubeDepthRank` remain the ordering surface across the mode × level *pair*. Every member carries a `[Description]` display label. `Ply3Red` is XG's "3-ply Red" — its own member between `Ply2` and `Ply3` as of the same ruling, superseding the earlier collapse into `Ply3` as a label variant. |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
@@ -606,8 +606,10 @@ public enum CubeAction { NoDouble, Double, Take, Pass }
 // Unknown = 0 deliberately on both: unstamped/legacy JSON deserializes to
 // it. BookRollout + AnalysisLevel.Unknown is the graceful-degradation stamp
 // (no book DB, or a V1-book hit). The UI renders both enums in declaration
-// order; level ordering is informational — filter by membership; DepthRank
-// orders. Every member of both carries a [Description] display label.
+// order. AnalysisLevel's declaration order is CONTRACTUAL — ascending rigor
+// per XG's own menu, ply and Roller families interleaved; Unknown sits
+// outside the scale. DepthRank orders the mode × level pair. Every member
+// of both carries a [Description] display label.
 public enum AnalysisMode
 {
     Unknown, Evaluation, Rollout, BookRollout
@@ -615,8 +617,9 @@ public enum AnalysisMode
 
 public enum AnalysisLevel
 {
-    Unknown, Ply1, Ply2, Ply3, Ply4, Ply5, Ply6, Ply7,
-    XgRoller, XgRollerPlus, XgRollerPlusPlus
+    Unknown,                                  // outside the rigor scale
+    Ply1, Ply2, Ply3Red, Ply3, XgRoller, Ply4, XgRollerPlus,
+    Ply5, Ply6, Ply7, XgRollerPlusPlus        // ascending rigor; contractual
 }
 
 // Canonical unordered dice roll: the ctor accepts either order and
@@ -904,10 +907,13 @@ measure" is not a valid comparison on this hardware.
   `AnalysisLevel.Unknown` is additionally a live producer stamp (book hit
   without recoverable levels), so code must not treat `AnalysisLevel.Unknown`
   as implying `AnalysisMode.Unknown`. Declaration order is what the UI
-  renders and, for `AnalysisLevel`, is informational ascending rigor — depth
-  filtering must use membership; `DepthRank` / `CubeDepthRank` remain the
-  ordering surface for consumers that compare depths. Do not strip a member's
-  `[Description]` label: downstream label readers (XgFilter_Lib's
+  renders and, for `AnalysisLevel`, is *contractual* ascending rigor (ruled
+  2026-08-28 on XG's own menu): the ply and Roller families interleave, so a
+  reorder or out-of-order insertion breaks the diagram's level floor and the
+  level dropdowns. `Unknown` is outside that scale — never a floor, never a
+  threshold. `DepthRank` / `CubeDepthRank` remain the ordering surface for
+  consumers comparing whole analyses across the mode × level pair. Do not
+  strip a member's `[Description]` label: downstream label readers (XgFilter_Lib's
   `EnumLabel.ToLabel`) throw on a member without one.
 - **`IDecisionFilterData.Dice` is null for cube decisions, fail-loud on
   malformed storage.** Null means "no dice apply" (a cube is offered before
