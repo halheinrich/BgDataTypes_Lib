@@ -62,7 +62,8 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `IGameInfo` and `IMatchInfo`, implemented by producers so filter layers
   never reference a producer's concrete types.
 - **JSON converters** — `PlayJsonConverter`, `DiceRollJsonConverter`,
-  `DecisionIdJsonConverter`, `ProblemKeyJsonConverter`. Each is bundled onto
+  `DecisionIdJsonConverter`, `ProblemKeyJsonConverter`, and
+  `StrictJsonStringEnumConverter<TEnum>` (the four enums). Each is bundled onto
   its type by a type-level `[JsonConverter]` attribute; consumers register
   nothing.
 
@@ -86,8 +87,8 @@ move primitives `Move` (`readonly record struct`) and `Play` (mutable
 their move-generation origins. `BoardState` is a `class` but mutable —
 the one deliberate exception (see "Mutability exception" below).
 Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
-attributes: `JsonStringEnumConverter` on `CubeOwner`, `CubeAction`,
-`AnalysisMode`, and `AnalysisLevel`, `PlayJsonConverter` on `Play`,
+attributes: `StrictJsonStringEnumConverter<TEnum>` on `CubeOwner`,
+`CubeAction`, `AnalysisMode`, and `AnalysisLevel`, `PlayJsonConverter` on `Play`,
 `DecisionIdJsonConverter` on `DecisionId`, `ProblemKeyJsonConverter` on
 `ProblemKey`, and `DiceRollJsonConverter`
 on `DiceRoll`. Consumers do not need to
@@ -702,13 +703,24 @@ public sealed class ProblemKey :
 
 Serialization contract: round-trips cleanly through `System.Text.Json` —
 no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
-`AnalysisMode`, and `AnalysisLevel` bundle `JsonStringEnumConverter` via attribute;
+`AnalysisMode`, and `AnalysisLevel` bundle
+`StrictJsonStringEnumConverter<TEnum>` via attribute;
 `Play` bundles `PlayJsonConverter`; `DecisionId` bundles
 `DecisionIdJsonConverter`; `DiceRoll` bundles `DiceRollJsonConverter`;
 `ProblemKey` bundles `ProblemKeyJsonConverter` (the only one implementing
 the property-name overloads, so it also works as a dictionary key). Tested
 without any options-level registration in `BgDecisionDataSerializationTests`,
 `DecisionRowSerializationTests`, `DiceRollTests`, and `ProblemKeyTests`.
+
+The four enums are **string-token-exact in both directions**: they write their
+declared member names and read only those names — a numeric ordinal is a
+`JsonException`, not a value. `AnalysisLevel`'s declaration order is contractual
+and its members interleave, so an inserted member renumbers everything after it;
+a reader that accepted ordinals would re-couple stored JSON to that numbering
+(halheinrich/backgammon#164). Consumers that build their own
+`JsonSerializerOptions` inherit this from the attribute and need add nothing —
+but an options-level `JsonStringEnumConverter` registration of their own would
+*loosen* it back, because an options converter outranks the type attribute.
 
 ## Benchmarks
 

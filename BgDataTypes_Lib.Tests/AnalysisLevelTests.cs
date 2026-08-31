@@ -7,8 +7,9 @@ namespace BgDataTypes_Lib.Tests;
 
 public class AnalysisLevelTests
 {
-    // No explicit JsonStringEnumConverter registration: AnalysisLevel bundles
-    // its own [JsonConverter(typeof(JsonStringEnumConverter))] attribute. The
+    // No explicit enum-converter registration: AnalysisLevel bundles
+    // its own [JsonConverter(typeof(StrictJsonStringEnumConverter<AnalysisLevel>))]
+    // attribute. The
     // tests rely on the attribute alone so that removing it from the type
     // would fail this suite loudly (rather than silently passing because an
     // option-level registration covered for it).

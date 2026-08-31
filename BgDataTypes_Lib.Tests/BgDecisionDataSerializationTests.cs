@@ -5,8 +5,9 @@ namespace BgDataTypes_Lib.Tests;
 
 public class BgDecisionDataSerializationTests
 {
-    // No explicit JsonStringEnumConverter registration: CubeOwner bundles its
-    // own [JsonConverter(typeof(JsonStringEnumConverter))] attribute. The test
+    // No explicit enum-converter registration: CubeOwner bundles its
+    // own [JsonConverter(typeof(StrictJsonStringEnumConverter<CubeOwner>))]
+    // attribute. The test
     // relies on the attribute alone so that removing it from the type would
     // fail this suite loudly (rather than silently passing because an
     // option-level registration covered for it).

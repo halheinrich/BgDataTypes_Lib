@@ -5,8 +5,9 @@ namespace BgDataTypes_Lib.Tests;
 
 public class CubeActionTests
 {
-    // No explicit JsonStringEnumConverter registration: CubeAction bundles its
-    // own [JsonConverter(typeof(JsonStringEnumConverter))] attribute. The tests
+    // No explicit enum-converter registration: CubeAction bundles its
+    // own [JsonConverter(typeof(StrictJsonStringEnumConverter<CubeAction>))]
+    // attribute. The tests
     // rely on the attribute alone so that removing it from the type would fail
     // this suite loudly (rather than silently passing because an option-level
     // registration covered for it).

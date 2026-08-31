@@ -8,7 +8,7 @@ namespace BgDataTypes_Lib;
 /// to the player on roll, not to a fixed seat or color. Serializes as the
 /// member name string via the bundled converter.
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter<CubeOwner>))]
 public enum CubeOwner
 {
     /// <summary>The player on roll owns the cube (only they may double).</summary>

@@ -48,7 +48,7 @@ namespace BgDataTypes_Lib;
 /// <c>[Description]</c> as an error.
 /// </para>
 /// </remarks>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter<AnalysisMode>))]
 public enum AnalysisMode
 {
     /// <summary>Mode not recorded — unstamped or legacy data (including JSON

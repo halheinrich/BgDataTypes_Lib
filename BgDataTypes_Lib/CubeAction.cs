@@ -11,7 +11,7 @@ namespace BgDataTypes_Lib;
 /// future addition and raccoon a possible one; both can be appended without
 /// disturbing the existing members or their serialized string forms.
 /// </remarks>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter<CubeAction>))]
 public enum CubeAction
 {
     /// <summary>The player on roll declines to double and proceeds to roll.</summary>

@@ -59,9 +59,13 @@ namespace BgDataTypes_Lib;
 /// </para>
 /// <para>
 /// The members serialize as their names, not their numbers
-/// (<see cref="JsonStringEnumConverter"/>, bundled on the type). That is what
-/// makes the ruled order safe to adopt and <see cref="Ply3Red"/> safe to
-/// insert: existing JSON carries tokens, so renumbering moves no wire value.
+/// (<see cref="StrictJsonStringEnumConverter{TEnum}"/>, bundled on the type).
+/// That is what makes the ruled order safe to adopt and <see cref="Ply3Red"/>
+/// safe to insert: existing JSON carries tokens, so renumbering moves no wire
+/// value. The converter is the strict one precisely because that safety is
+/// one-directional otherwise — a reader that also accepted ordinals would
+/// re-couple stored data to the numbering this contract reserves the right to
+/// change (halheinrich/backgammon#164).
 /// </para>
 /// <para>
 /// Every member carries a <see cref="DescriptionAttribute"/> — the UI-facing
@@ -70,7 +74,7 @@ namespace BgDataTypes_Lib;
 /// <c>[Description]</c> as an error.
 /// </para>
 /// </remarks>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter<AnalysisLevel>))]
 public enum AnalysisLevel
 {
     /// <summary>Level not recorded — unstamped or legacy data, an XG level
