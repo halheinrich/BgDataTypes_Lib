@@ -392,8 +392,18 @@ report the `BestPlayIndex` candidate's pair (`Unknown`/`Unknown` when
 out-of-range index from malformed data); a shared private lookup guarantees
 both axes read the same candidate. `Dice` forwards `Decision.Dice` in
 canonical `DiceRoll` form — null for cube decisions, fail-loud on malformed
-stored faces — and is `[JsonIgnore]`d so the throwing derivation never runs
-during serialization and `Decision.Dice` stays the JSON wire form.
+stored faces.
+
+The whole forwarding view carries `[JsonIgnore]`
+(halheinrich/backgammon#14): it is a read-side derivation of the category
+members, which are the wire form, so serializing it would write top-level
+duplicates of nested data with no read-back path (the members are
+get-only) — the same rule `DecisionRow` applies per-member to its derived
+properties. The top level of the JSON is therefore exactly the six stored
+members (`Id`, `Xgid`, `Position`, `Decision`, `Descriptive`, `Outcome`),
+pinned by test. For `Dice` the exclusion is load-bearing beyond
+deduplication — it keeps the throwing derivation from running during
+serialization, and `Decision.Dice` stays the JSON wire form.
 
 ### After-boards (PlayOutcomeData)
 

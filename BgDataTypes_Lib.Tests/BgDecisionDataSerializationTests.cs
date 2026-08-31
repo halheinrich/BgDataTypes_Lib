@@ -1544,4 +1544,57 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.Decision.CubelessNoDoubleEquity, restored.Decision.CubelessNoDoubleEquity);
         Assert.Equal(original.Decision.CubelessDoubleTakeEquity, restored.Decision.CubelessDoubleTakeEquity);
     }
+
+    // -----------------------------------------------------------------------
+    //  Wire shape — the IDecisionFilterData view is excluded from JSON
+    //  (halheinrich/backgammon#14)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void BgDecisionData_TopLevelJson_IsExactlyTheSixWireMembers()
+    {
+        // The filter view forwards into the category members, so serializing
+        // it would write top-level duplicates of nested data with no
+        // read-back path (the members are get-only). This pins the top-level
+        // wire shape as exactly the stored members, in declaration order — a
+        // forwarding member added without [JsonIgnore] fails here.
+        var mop = new int[26];
+        mop[6] = -5; mop[13] = 5;
+
+        var original = new BgDecisionData
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Xgid = "XGID=-b----E-C---eE---c-e----B-:0:0:1:00:0:0:0:0:10",
+            Position = new PositionData
+            {
+                Mop = mop,
+                OnRollNeeds = 3,
+                OpponentNeeds = 5,
+                IsCrawford = true
+            },
+            Decision = new DecisionData
+            {
+                Dice = [6, 4],
+                Plays = [new PlayCandidate { MoveNotation = "24/18 13/9", Equity = 0.198 }],
+                IsCube = false,
+                UserPlayError = 0.013
+            },
+            Descriptive = new DescriptiveData
+            {
+                MatchLength = 9,
+                OnRollName = "Hal",
+                MoveNumber = 12,
+                IsStandardStart = true
+            },
+            Outcome = new PlayOutcomeData { AfterBestBoard = mop, AfterPlayerBoard = mop }
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        using var doc = JsonDocument.Parse(json);
+        var topLevelNames = doc.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
+
+        Assert.Equal(
+            ["Id", "Xgid", "Position", "Decision", "Descriptive", "Outcome"],
+            topLevelNames);
+    }
 }

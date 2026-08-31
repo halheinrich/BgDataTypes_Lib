@@ -11,7 +11,9 @@ namespace BgDataTypes_Lib;
 /// Round-trips through <c>System.Text.Json</c> with no consumer-side
 /// converter registration — the member types bundle their own converters.
 /// Implements <see cref="IDecisionFilterData"/> by forwarding into the
-/// category members.
+/// category members; that view is a read-side derivation and is excluded
+/// from JSON — the category members are the wire form
+/// (halheinrich/backgammon#14).
 /// </summary>
 public class BgDecisionData : IDecisionFilterData
 {
@@ -52,25 +54,42 @@ public class BgDecisionData : IDecisionFilterData
 
     // -----------------------------------------------------------------------
     //  IDecisionFilterData
+    //
+    //  A derived filter view, not wire data: every member forwards into (or
+    //  derives from) the category members above, which are the JSON wire
+    //  form. The whole block therefore carries [JsonIgnore] — serialized, it
+    //  would write top-level duplicates of the nested category data, with no
+    //  read-back path (the members are get-only) and no reader
+    //  (halheinrich/backgammon#14). Same rule DecisionRow applies to its
+    //  derived members.
     // -----------------------------------------------------------------------
 
     /// <inheritdoc/>
+    [JsonIgnore]
     public string Player => Descriptive.OnRollName;
     /// <inheritdoc/>
+    [JsonIgnore]
     public bool IsCube => Decision.IsCube;
     /// <inheritdoc/>
+    [JsonIgnore]
     public int OnRollNeeds => Position.OnRollNeeds;
     /// <inheritdoc/>
+    [JsonIgnore]
     public int OpponentNeeds => Position.OpponentNeeds;
     /// <inheritdoc/>
+    [JsonIgnore]
     public bool IsCrawford => Position.IsCrawford;
     /// <inheritdoc/>
+    [JsonIgnore]
     public bool? IsJacoby => Position.IsJacoby;
     /// <inheritdoc/>
+    [JsonIgnore]
     public int MatchLength => Descriptive.MatchLength;
     /// <inheritdoc/>
+    [JsonIgnore]
     public int MoveNumber => Descriptive.MoveNumber;
     /// <inheritdoc/>
+    [JsonIgnore]
     public bool IsStandardStart => Descriptive.IsStandardStart;
     /// <summary>
     /// Derived per the <see cref="DecisionRow.AnalysisDepth"/> convention:
@@ -83,6 +102,7 @@ public class BgDecisionData : IDecisionFilterData
     /// malformed data) — depth-not-recorded rather than a throw, since this
     /// getter runs on every filter pass and serialization.
     /// </summary>
+    [JsonIgnore]
     public AnalysisMode AnalysisMode => Decision.IsCube
         ? Decision.CubeAnalysisMode
         : BestPlayCandidate?.AnalysisMode ?? AnalysisMode.Unknown;
@@ -95,6 +115,7 @@ public class BgDecisionData : IDecisionFilterData
     /// <see cref="DecisionData.BestPlayIndex"/> does not identify a
     /// candidate.
     /// </summary>
+    [JsonIgnore]
     public AnalysisLevel AnalysisLevel => Decision.IsCube
         ? Decision.CubeAnalysisLevel
         : BestPlayCandidate?.AnalysisLevel ?? AnalysisLevel.Unknown;
@@ -113,11 +134,11 @@ public class BgDecisionData : IDecisionFilterData
     /// no dice apply — otherwise the two producer-stamped faces
     /// canonicalized by <see cref="DiceRoll"/>. Malformed stored dice (faces
     /// outside 1–6, including a checker play left at the unstamped default)
-    /// fail loud in the <see cref="DiceRoll"/> constructor; the
-    /// <c>[JsonIgnore]</c> keeps that throwing derivation out of
-    /// serialization (the <see cref="DecisionData.BestDoublerAction"/>
-    /// precedent) — <see cref="DecisionData.Dice"/> remains the JSON wire
-    /// form.
+    /// fail loud in the <see cref="DiceRoll"/> constructor — so the block's
+    /// <c>[JsonIgnore]</c> is load-bearing here beyond deduplication: it
+    /// keeps that throwing derivation out of serialization (the
+    /// <see cref="DecisionData.BestDoublerAction"/> precedent).
+    /// <see cref="DecisionData.Dice"/> remains the JSON wire form.
     /// </summary>
     [JsonIgnore]
     public DiceRoll? Dice => Decision.IsCube
@@ -129,13 +150,17 @@ public class BgDecisionData : IDecisionFilterData
     /// falling back to <see cref="DecisionData.UserTakeError"/>; checker
     /// plays to <see cref="DecisionData.UserPlayError"/>.
     /// </remarks>
+    [JsonIgnore]
     public double? FilterError => Decision.IsCube
         ? Decision.UserDoubleError ?? Decision.UserTakeError
         : Decision.UserPlayError;
     /// <inheritdoc/>
+    [JsonIgnore]
     public IReadOnlyList<int> Board => Position.Mop;
     /// <inheritdoc/>
+    [JsonIgnore]
     public IReadOnlyList<int> AfterBestBoard => Outcome.AfterBestBoard;
     /// <inheritdoc/>
+    [JsonIgnore]
     public IReadOnlyList<int> AfterPlayerBoard => Outcome.AfterPlayerBoard;
 }
