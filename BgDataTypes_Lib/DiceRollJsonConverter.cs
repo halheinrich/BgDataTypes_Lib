@@ -11,9 +11,17 @@ namespace BgDataTypes_Lib;
 /// type-level <c>[JsonConverter]</c> attribute on <see cref="DiceRoll"/> so
 /// consumers do not need to register the converter on their
 /// <see cref="JsonSerializerOptions"/>.
+///
+/// <para>
+/// Public, like every converter a type-level <c>[JsonConverter]</c> here
+/// names — a downstream <see cref="JsonSerializerContext"/>
+/// whose documents embed the annotated type must instantiate the converter
+/// from its own generated code (see <see cref="PlayJsonConverter"/>).
+/// </para>
 /// </summary>
-internal sealed class DiceRollJsonConverter : JsonConverter<DiceRoll>
+public sealed class DiceRollJsonConverter : JsonConverter<DiceRoll>
 {
+    /// <inheritdoc/>
     public override DiceRoll Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -30,6 +38,7 @@ internal sealed class DiceRollJsonConverter : JsonConverter<DiceRoll>
         return result;
     }
 
+    /// <inheritdoc/>
     public override void Write(
         Utf8JsonWriter writer,
         DiceRoll value,

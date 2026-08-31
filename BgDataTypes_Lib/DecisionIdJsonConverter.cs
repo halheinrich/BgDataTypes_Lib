@@ -13,9 +13,17 @@ namespace BgDataTypes_Lib;
 /// <c>[JsonConverter]</c> attribute on <see cref="DecisionId"/> so consumers
 /// do not need to register the converter on their
 /// <see cref="JsonSerializerOptions"/>.
+///
+/// <para>
+/// Public, like every converter a type-level <c>[JsonConverter]</c> here
+/// names — a downstream <see cref="JsonSerializerContext"/>
+/// whose documents embed the annotated type must instantiate the converter
+/// from its own generated code (see <see cref="PlayJsonConverter"/>).
+/// </para>
 /// </summary>
-internal sealed class DecisionIdJsonConverter : JsonConverter<DecisionId>
+public sealed class DecisionIdJsonConverter : JsonConverter<DecisionId>
 {
+    /// <inheritdoc/>
     public override DecisionId? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -38,6 +46,7 @@ internal sealed class DecisionIdJsonConverter : JsonConverter<DecisionId>
         return result;
     }
 
+    /// <inheritdoc/>
     public override void Write(
         Utf8JsonWriter writer,
         DecisionId value,

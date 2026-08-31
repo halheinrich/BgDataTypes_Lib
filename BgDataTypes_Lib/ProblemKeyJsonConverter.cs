@@ -21,9 +21,17 @@ namespace BgDataTypes_Lib;
 /// <c>Dictionary&lt;ProblemKey, …&gt;</c> must round-trip without a
 /// consumer-side key converter.
 /// </para>
+///
+/// <para>
+/// Public, like every converter a type-level <c>[JsonConverter]</c> here
+/// names — a downstream <see cref="JsonSerializerContext"/>
+/// whose documents embed the annotated type must instantiate the converter
+/// from its own generated code (see <see cref="PlayJsonConverter"/>).
+/// </para>
 /// </summary>
-internal sealed class ProblemKeyJsonConverter : JsonConverter<ProblemKey>
+public sealed class ProblemKeyJsonConverter : JsonConverter<ProblemKey>
 {
+    /// <inheritdoc/>
     public override ProblemKey? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -39,6 +47,7 @@ internal sealed class ProblemKeyJsonConverter : JsonConverter<ProblemKey>
         return ParseOrThrow(reader.GetString());
     }
 
+    /// <inheritdoc/>
     public override void Write(
         Utf8JsonWriter writer,
         ProblemKey value,
@@ -47,6 +56,7 @@ internal sealed class ProblemKeyJsonConverter : JsonConverter<ProblemKey>
         writer.WriteStringValue(value.ToString());
     }
 
+    /// <inheritdoc/>
     public override ProblemKey ReadAsPropertyName(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -55,6 +65,7 @@ internal sealed class ProblemKeyJsonConverter : JsonConverter<ProblemKey>
         return ParseOrThrow(reader.GetString());
     }
 
+    /// <inheritdoc/>
     public override void WriteAsPropertyName(
         Utf8JsonWriter writer,
         ProblemKey value,

@@ -61,11 +61,16 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `IsMoneyGame`, and the tri-state `IsJacoby?` the money score tokens read);
   `IGameInfo` and `IMatchInfo`, implemented by producers so filter layers
   never reference a producer's concrete types.
-- **JSON converters** — `PlayJsonConverter`, `DiceRollJsonConverter`,
-  `DecisionIdJsonConverter`, `ProblemKeyJsonConverter`, and
-  `StrictJsonStringEnumConverter<TEnum>` (the four enums). Each is bundled onto
-  its type by a type-level `[JsonConverter]` attribute; consumers register
-  nothing.
+- **JSON converters and the serializer context** — `PlayJsonConverter`,
+  `DiceRollJsonConverter`, `DecisionIdJsonConverter`,
+  `ProblemKeyJsonConverter`, and `StrictJsonStringEnumConverter<TEnum>` (the
+  four enums). Each is bundled onto its type by a type-level
+  `[JsonConverter]` attribute; consumers register nothing. All are public —
+  a downstream `JsonSerializerContext` whose documents embed an annotated
+  type must instantiate its converter from generated code, so an internal
+  converter fails that generator outright (SYSLIB1220).
+  `BgDataTypesJsonContext` is the source-generated context over the whole
+  wire surface — see "Source generation & trimming" below.
 
 **`BgDataTypes_Lib.Benchmarks/`** — BenchmarkDotNet harness, an executable
 (`OutputType=Exe`) excluded from `dotnet test` by `IsTestProject=false`.
@@ -94,6 +99,60 @@ attributes: `StrictJsonStringEnumConverter<TEnum>` on `CubeOwner`,
 on `DiceRoll`. Consumers do not need to
 register any of these converters on their `JsonSerializerOptions` — the
 attributes carry the contract on the types themselves.
+
+### Source generation & trimming
+
+`BgDataTypesJsonContext` (halheinrich/backgammon#129 leg 1) is the public
+source-generated `JsonSerializerContext` over this library's wire surface:
+trim-safe serializer metadata produced at compile time, byte-identical to
+the reflection path (pinned by `BgDataTypesJsonContextTests`), every
+bundled converter honored. Its `[JsonSerializable]` roots are the wire
+units — the document roots (`BgDecisionData`, `DecisionRow`) and the
+converter-bearing token types (`Play`, `Move`, `DecisionId`, `ProblemKey`,
+`DiceRoll`, the four enums); composite parts ride the generator's graph
+walk. `Move` must stay declared explicitly: `Play`'s converter stops the
+generator's walk at `Play` and resolves `Move` through the active options
+at runtime. A completeness test (the halheinrich/backgammon#144
+intersection pattern) walks the serialized-property closure of the roots
+by reflection and asserts the context resolves every member.
+
+**The composition pattern** (the arc's standing shape, set here for every
+downstream leg — ConvertXgToJson_Lib, BgGame_Lib, XgFilter_Lib, BgQuiz):
+each producer repo owns one public context covering its own wire types; a
+consumer chains resolvers, most-derived-first:
+
+```csharp
+var options = new JsonSerializerOptions
+{
+    TypeInfoResolver = JsonTypeInfoResolver.Combine(
+        TheConsumersOwnContext.Default, BgDataTypesJsonContext.Default)
+};
+```
+
+Two rules keep the chain sound, both discovered and pinned here:
+
+1. **Converters named by type-level `[JsonConverter]` attributes stay
+   public.** A downstream context's generator must emit `new
+   PlayJsonConverter()`-style instantiations; internal converters fail it
+   with SYSLIB1220/SYSLIB1030 at the consumer's compile.
+2. **Every context in the chain declares
+   `[JsonSourceGenerationOptions(GenerationMode =
+   JsonSourceGenerationMode.Metadata)]`.** The default mode also emits
+   fast-path serialize handlers, and a fast-path handler binds nested type
+   resolution to the *declaring context's own private options* — bypassing
+   the chain. A downstream fast path reaching `Play` would look up `Move`
+   in its own options, where it cannot exist, and throw at runtime with
+   the chain correctly configured. Metadata-only generation keeps every
+   resolution on the combined options. The chained-consumer tests in
+   `BgDataTypesJsonContextTests` demonstrate both the failure and the
+   working shape.
+
+The library declares `IsTrimmable` and runs `EnableTrimAnalyzer` in its own
+build (its half of the arc's trim gate): with `TreatWarningsAsErrors`, a
+reflection-serialization regression is a build error here, not a
+publish-time warning in BgQuiz. `PlayJsonConverter` (de)serializes `Move`
+elements via `options.GetTypeInfo` — the trim-safe spelling — rather than
+the reflection-bound `JsonSerializer` overloads.
 
 ### Mutability exception
 
@@ -483,7 +542,9 @@ public class BgDecisionData : IDecisionFilterData
     public DecisionData    Decision    { get; init; }
     public DescriptiveData Descriptive { get; init; }
     public PlayOutcomeData Outcome     { get; init; }
-    // IDecisionFilterData members implemented as forwarding properties.
+    // IDecisionFilterData members implemented as forwarding properties —
+    // all [JsonIgnore]d; the category members are the wire form
+    // (halheinrich/backgammon#14).
 }
 
 public class PlayOutcomeData { /* AfterBestBoard, AfterPlayerBoard (each IReadOnlyList<int>) */ }
@@ -722,6 +783,12 @@ the property-name overloads, so it also works as a dictionary key). Tested
 without any options-level registration in `BgDecisionDataSerializationTests`,
 `DecisionRowSerializationTests`, `DiceRollTests`, and `ProblemKeyTests`.
 
+`BgDataTypesJsonContext` is the source-generated `JsonSerializerContext`
+over this wire surface, byte-identical to the reflection path and chained
+by downstream contexts — roots, the composition rules (public converters,
+metadata-only generation), and the trim posture are in "Source generation
+& trimming" above.
+
 The four enums are **string-token-exact in both directions**: they write their
 declared member names and read only those names — a numeric ordinal is a
 `JsonException`, not a value. `AnalysisLevel`'s declaration order is contractual
@@ -785,6 +852,16 @@ measure" is not a valid comparison on this hardware.
 
 ## Pitfalls
 
+- **A new wire unit must be declared three times, and the test only guards
+  two of them.** `BgDataTypesJsonContextTests`' completeness check derives
+  the wire closure from the declared roots, so a new *property* anywhere in
+  the graph is covered automatically — but a brand-new root (a new document
+  type, or a new converter-bearing token type) must be added to
+  `BgDataTypesJsonContext`'s `[JsonSerializable]` list *and* to the test's
+  root list, or the closure never sees it and the check passes vacuously.
+  Byte-identity and converter-respect tests for the new root complete the
+  gate. Keep its converter public and the context metadata-only — the
+  composition rules in "Source generation & trimming".
 - **`DecisionId.Filename` must not contain `':'`.** The canonical-form
   separator is the same character used to discriminate the two shapes at
   parse time. The guard is **symmetric** on both subtypes — without it
