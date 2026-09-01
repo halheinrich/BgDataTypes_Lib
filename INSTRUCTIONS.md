@@ -185,7 +185,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | Type | Fields |
 |---|---|
 | `PositionData` | `Mop`, `OnRollNeeds`, `OpponentNeeds`, `OnRollPipCount`, `OpponentPipCount`, `CubeSize`, `CubeOwner`, `IsCrawford`, `IsJacoby?` |
-| `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, `CubeDepthAbbreviation`, `CubeDepthRank`, `CubeAnalysisMode`, `CubeAnalysisLevel`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?` |
+| `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, `CubeDepthAbbreviation`, `CubeDepthRank`, `CubeAnalysisMode`, `CubeAnalysisLevel`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?`, `UserDoublerAction?`, `UserTakerAction?` |
 | `DescriptiveData` | `MatchLength`, `OnRollName`, `OpponentName`, `Title`, `Date`, `Event`, `SourceFile`, `MoveNumber`, `IsStandardStart` |
 | `PlayOutcomeData` | `AfterBestBoard`, `AfterPlayerBoard` |
 
@@ -409,6 +409,41 @@ property-name overloads, because the stats document keys its per-problem
 map by `ProblemKey` and `Dictionary<ProblemKey, …>` must round-trip
 without a consumer-side key converter.
 
+### Played cube actions on DecisionData
+
+Distinct from the scoring helpers below, `DecisionData` carries the record
+of what was *actually played* in a cube decision
+(`halheinrich/backgammon#123` documents; the fields shipped with the played-
+action record work):
+
+- **`UserDoublerAction`** (`CubeAction?`) — the doubler action the player
+  on roll played, `NoDouble` or `Double`. Null when the played action is
+  not recorded — retroactively true of all JSON written before the field
+  existed — or when `IsCube` is false.
+- **`UserTakerAction`** (`CubeAction?`) — the taker action the opponent
+  played, `Take` or `Pass`. Present only when a double was offered *and* a
+  response recorded: in an undoubled game no taker decision exists, so
+  this stays null even when `UserDoublerAction` is recorded.
+
+Both halves are guarded on `init` to their own action domain, mirroring
+`CubeDecisionPair`'s half-guards — a cross-half value throws
+`ArgumentOutOfRangeException`. Cross-half *consistency* (a recorded taker
+response implies the doubler doubled) is a producer contract, not guarded
+here: init-only halves are set independently. The fields exist because the
+played action cannot be recovered from `UserDoubleError` /
+`UserTakeError` alone — a zero error does not identify the action when
+the two cube equities tie. Both serialize (they are wire fields, unlike
+the computed members below).
+
+These are **actions, never claims**: a stamped game fact cannot carry the
+"too good" rationale, because a player can choose not to double in a
+position where he is not too good — the rationale is a property of the
+analysis, not of the played move (the `halheinrich/backgammon#86` intake's
+"analysis vs. stamped action" distinction). The claim layer (`CubeClaim`,
+`CubeClaimPair`, above) therefore neither supersedes nor touches this
+pair: claims live in quiz answers and derived truth, played actions in
+the game record. Do not infer a claim from a played action.
+
 ### Cube-decision scoring on DecisionData
 
 `DecisionData` carries the cube-decision scoring policy as computed members
@@ -531,6 +566,34 @@ score. A money row is `moneyJ` or `moneyNJ`; a money row whose rule is unknown
 rule-bearing token. No CSV column is added — the column set and count are
 unchanged. Like `IsCrawford`, it also serializes to JSON.
 
+### Shared consumer contracts: IMatchInfo and IGameInfo
+
+The skip-early counterparts of `IDecisionFilterData`
+(`halheinrich/backgammon#123` documents; the interfaces shipped with the
+filter-layer work): producers (e.g. the XG parser's match- and game-info
+types) implement them, and filter layers consume them **without
+referencing any producer's concrete types** — the same decoupling
+`IDecisionFilterData` provides at decision scope, moved up to the two
+scopes where a consumer can skip whole units before any decision is
+produced.
+
+- **`IMatchInfo`** — match scope: `Player1`, `Player2` (bottom/top player
+  in XG), `MatchLength` (0 = money session), and the default-implemented
+  `IsMoneyGame => MatchLength == 0` — the contract's single spelling of
+  the money-game rule. Producer contract: XG's raw sentinel for unlimited
+  sessions (99999) is normalized to 0 at the parse boundary, before the
+  contract ever sees it — which is what makes the `IsMoneyGame`
+  derivation valid.
+- **`IGameInfo`** — game scope: `IsStandardStart` (false for saved/custom
+  openings — the opening-move filter's input), `Away1`, `Away2` (points
+  still needed by each player), `IsCrawfordGame`. Money-session
+  convention: `Away1 == 0`, `Away2 == 0`, `IsCrawfordGame == false`.
+
+Both are minimal **by design** — members are added on demand, never
+mirrored wholesale from a producer. They carry no JSON contract (nothing
+serializes an `IMatchInfo`); they are purely the shape a consumer needs
+to decide "skip this match / skip this game".
+
 ### Mop layout
 
 26-element `IReadOnlyList<int>` from the on-roll player's perspective:
@@ -565,6 +628,24 @@ public interface IDecisionFilterData
     IReadOnlyList<int> Board { get; }             // 26 elements, see Mop layout
     IReadOnlyList<int> AfterBestBoard { get; }    // POV flipped; empty for cubes
     IReadOnlyList<int> AfterPlayerBoard { get; }  // POV flipped; empty for cubes
+}
+
+// Skip-early contracts (see "Shared consumer contracts" above): producers
+// implement, filter layers consume without producer-concrete types.
+public interface IMatchInfo
+{
+    string Player1 { get; }                       // bottom player in XG
+    string Player2 { get; }                       // top player in XG
+    int MatchLength { get; }                      // 0 = money (sentinel pre-normalized)
+    bool IsMoneyGame => MatchLength == 0;         // single spelling; never redeclare
+}
+
+public interface IGameInfo
+{
+    bool IsStandardStart { get; }                 // false for saved/custom openings
+    int Away1 { get; }                            // 0 for money sessions
+    int Away2 { get; }                            // 0 for money sessions
+    bool IsCrawfordGame { get; }                  // false for money sessions
 }
 
 public class BgDecisionData : IDecisionFilterData
@@ -608,6 +689,12 @@ public class DecisionData
     // CubeDepthRank, CubeAnalysisMode, CubeAnalysisLevel, NoDoubleEquity,
     // DoubleTakeEquity, the pct fields, ProbOfOpponentErrorJustifyingDouble,
     // UserDoubleError?, UserTakeError?).
+
+    // Played cube actions — game facts, guarded per half on init (see
+    // "Played cube actions on DecisionData"); serialized; null = not
+    // recorded (all pre-field JSON) or IsCube false.
+    public CubeAction? UserDoublerAction { get; init; }  // NoDouble/Double; wrong half throws
+    public CubeAction? UserTakerAction   { get; init; }  // Take/Pass; null in undoubled games
 
     // Cube-decision scoring (computed; throw InvalidOperationException when IsCube is false).
     [JsonIgnore] public CubeAction  BestDoublerAction { get; }   // Double or NoDouble
@@ -1115,6 +1202,29 @@ measure" is not a valid comparison on this hardware.
   `DoublerActionError(CubeAction)` accepts only `Double` / `NoDouble`;
   `TakerActionError(CubeAction)` accepts only `Take` / `Pass`. The
   other half throws `ArgumentOutOfRangeException`.
+- **`UserDoublerAction` / `UserTakerAction`: half-guarded on init,
+  cross-half consistency is NOT guarded.** Each rejects the other half's
+  actions with `ArgumentOutOfRangeException` at `init`, but "a recorded
+  taker response implies the doubler doubled" is a producer contract —
+  init-only halves are set independently, so nothing stops constructing
+  `(NoDouble, Take)`. Null means "not recorded" (all JSON written before
+  the fields existed, and every play decision), not "declined": a null
+  `UserTakerAction` alongside a recorded `NoDouble` is the normal
+  undoubled-game state — no taker decision ever existed — not missing
+  data. And they are *actions, never claims* —
+  do not infer `CubeClaim` from a played action (see "Played cube actions
+  on DecisionData"); the rationale is a property of the analysis.
+- **`IMatchInfo.IsMoneyGame` has exactly one spelling — the interface's
+  default implementation.** Implementers inherit it; redeclaring it with a
+  different derivation forks the money-game rule. The derivation is valid
+  only because producers normalize XG's unlimited-session sentinel (99999)
+  to 0 at the parse boundary — an implementation surfacing the raw
+  sentinel would break every `IsMoneyGame` consumer silently.
+- **`IGameInfo` money conventions are contractual, not incidental.**
+  `Away1 == 0`, `Away2 == 0`, `IsCrawfordGame == false` for money
+  sessions. New implementers must honor them — filter layers key off the
+  zeros the way `IDecisionFilterData.IsMoneyGame` keys off
+  `MatchLength == 0`.
 - **`default(CubeDecisionPair)` is non-meaningful.** A `record struct`
   cannot run its half-guards on `default`, so `default(CubeDecisionPair)`
   is `(NoDouble, NoDouble)` — whose `Taker` is not a valid taker action.
