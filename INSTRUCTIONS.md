@@ -23,7 +23,7 @@ not gain any. The shared-data layer is the foundation other subprojects
 rest on; introducing a subproject dependency here would either create a
 circular reference or force the dependency on every consumer transitively.
 `System.Text.Json` is the only runtime dependency; the serialized types
-that need converters (`CubeOwner`, `CubeAction`, `AnalysisMode`,
+that need converters (`CubeOwner`, `CubeAction`, `CubeClaim`, `AnalysisMode`,
 `AnalysisLevel`, `Play`, `DecisionId`, `ProblemKey`, `DiceRoll`) each bundle their own
 `[JsonConverter]` attribute so consumers do not have to register
 converters on their `JsonSerializerOptions`.
@@ -51,10 +51,13 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `CanonicalPlay` (the play-equivalence SSOT), and `BoardState`, the one
   mutable type in the library. Value types here inherit hot-path zero-alloc
   constraints from move generation.
-- **Enums and the depth taxonomy** — `CubeOwner`, `CubeAction`, and
+- **Enums and the depth taxonomy** — `CubeOwner`, `CubeAction`, `CubeClaim`
+  (the three-valued doubler claim of SPEC-scoring §3, with
+  `CubeClaimExtensions` for the claim→action collapse), and
   `AnalysisMode` × `AnalysisLevel` (the two-axis depth taxonomy), alongside
   the small validated value types `CubeDecisionPair` (a `CubeAction` pair
-  with per-half guards) and `DiceRoll` (a canonical unordered roll).
+  with per-half guards), `CubeClaimPair` (its claim-layer counterpart — the
+  two-part cube answer), and `DiceRoll` (a canonical unordered roll).
 - **Shared consumer contracts** — `IDecisionFilterData`, the filter-layer
   view implemented by `BgDecisionData` and `DecisionRow`, carrying the score
   context a filter needs (`OnRollNeeds`/`OpponentNeeds`, `IsCrawford`,
@@ -64,7 +67,7 @@ and `Directory.Packages.props` (Central Package Management — no inline
 - **JSON converters and the serializer context** — `PlayJsonConverter`,
   `DiceRollJsonConverter`, `DecisionIdJsonConverter`,
   `ProblemKeyJsonConverter`, and `StrictJsonStringEnumConverter<TEnum>` (the
-  four enums). Each is bundled onto its type by a type-level
+  five enums). Each is bundled onto its type by a type-level
   `[JsonConverter]` attribute; consumers register nothing. All are public —
   a downstream `JsonSerializerContext` whose documents embed an annotated
   type must instantiate its converter from generated code, so an internal
@@ -81,8 +84,14 @@ against the incremental `Add` spelling. See Benchmarks below.
 **`BgDataTypes_Lib.Tests/`** — xUnit, one test class per type or per
 behaviour area of a type (`ProblemKeyTests`, `BoardStateTests`,
 `PipCountTests`, `RaceTests`, the `*SerializationTests` pair, …). Fixtures
-are constructed in code — pure data types need no corpus, so this project
-does not reach into the umbrella `TestData/`.
+are constructed in code — pure data types need no corpus, so gating tests
+never reach into the umbrella `TestData/`. The one deliberate exception is
+local-only: `TooGoodCorpusExerciseTests` links `TestData/BgDecisionData/`
+into its output and checks the Too Good predicate is exercised by real
+converted data (SPEC-scoring §3's acceptance requirement,
+halheinrich/backgammon#86) — vacuous on an empty or absent corpus by
+design, per the AGENTS.md TestData rule, so it cannot gate and nothing on
+CI depends on it.
 
 ## Architecture
 
@@ -93,7 +102,8 @@ their move-generation origins. `BoardState` is a `class` but mutable —
 the one deliberate exception (see "Mutability exception" below).
 Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
 attributes: `StrictJsonStringEnumConverter<TEnum>` on `CubeOwner`,
-`CubeAction`, `AnalysisMode`, and `AnalysisLevel`, `PlayJsonConverter` on `Play`,
+`CubeAction`, `CubeClaim`, `AnalysisMode`, and `AnalysisLevel`,
+`PlayJsonConverter` on `Play`,
 `DecisionIdJsonConverter` on `DecisionId`, `ProblemKeyJsonConverter` on
 `ProblemKey`, and `DiceRollJsonConverter`
 on `DiceRoll`. Consumers do not need to
@@ -109,8 +119,10 @@ the reflection path (pinned by `BgDataTypesJsonContextTests`), every
 bundled converter honored. Its `[JsonSerializable]` roots are the wire
 units — the document roots (`BgDecisionData`, `DecisionRow`) and the
 converter-bearing token types (`Play`, `Move`, `DecisionId`, `ProblemKey`,
-`DiceRoll`, the four enums); composite parts ride the generator's graph
-walk. `Move` must stay declared explicitly: `Play`'s converter stops the
+`DiceRoll`, the five enums — `CubeClaim` declared ahead of its first
+embedding document so the claim vocabulary is born source-genned and
+downstream contexts chain rather than re-cover it); composite parts ride
+the generator's graph walk. `Move` must stay declared explicitly: `Play`'s converter stops the
 generator's walk at `Play` and resolves `Move` through the active options
 at runtime. A completeness test (the halheinrich/backgammon#144
 intersection pattern) walks the serialized-property closure of the roots
@@ -183,9 +195,10 @@ via `ApplyPlay`, never via raw point-array mutation.
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
-| `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — unstamped/legacy JSON, including JSON stamped with the retired flat class (unrecognized property, ignored on read), deserializes to it. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Trial counts stay label-only. |
+| `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the doubler half of a cube answer at the claim layer (SPEC-scoring §1/§3, `halheinrich/backgammon#86`), serializes as string. A claim about the position, not a board action: `NoDouble` and `TooGood` share the identical board action (`CubeAction.NoDouble`), and `CubeClaimExtensions.ToCubeAction` is the single spelling of that collapse. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, ruled claim-layer only. Declaration order is the ruled claim axis {No Double, Double, Too Good}, what a UI offering the claims renders. No reverse action→claim mapping exists: the claim is underdetermined by the action alone; the only equities→claim door is `DecisionData.BestDoublerClaim`. | — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — unstamped/legacy JSON, including JSON stamped with the retired flat class (unrecognized property, ignored on read), deserializes to it. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Trial counts stay label-only. |
 | `AnalysisLevel` | enum: `Unknown`, `Ply1`, `Ply2`, `Ply3Red`, `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`, `Ply6`, `Ply7`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — unstamped/legacy JSON deserializes to it. **Declaration order is contractual** (ruled 2026-08-28 on the authority of XG's own analysis-level menu, amended the same day): every member after `Unknown` ascends in rigor, and the ply and Roller families *interleave* rather than forming two blocks — `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`. Reordering, or inserting out of rigor order, is a breaking change; live consumers read the order (the diagram's level floor, the filter-panel and quiz level dropdowns). `Unknown` sits *outside* the rigor scale — not "least rigorous" but "not recorded": never excluded by a floor, never offered as a threshold; head-of-list is the zero-value requirement, not a rank. `DepthRank` / `CubeDepthRank` remain the ordering surface across the mode × level *pair*. Every member carries a `[Description]` display label. `Ply3Red` is XG's "3-ply Red" — its own member between `Ply2` and `Ply3` as of the same ruling, superseding the earlier collapse into `Ply3` as a label variant. |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
+| `CubeClaimPair` | `readonly record struct (CubeClaim Claim, CubeAction Taker)` — the two-part cube answer of SPEC-scoring §3 (`halheinrich/backgammon#86`): the claim-layer counterpart of `CubeDecisionPair`, pairing the three-valued claim with the taker response if doubled. Same construction-guard idiom (`Claim` any defined member, `Taker` ∈ {`Take`, `Pass`}). A closed 3×2 of six named canonical instances: five verdict cells (`NoDoubleTake`, `DoubleTake`, `DoublePass`, `TooGoodTake`, `TooGoodPass`) plus `NoDoublePass`, the incoherent cell — representable *by ruling* (a selectable user answer; cross-disabling the axes was rejected), named by `IsIncoherent` for review surfaces. One type serves both scored roles — a user's submitted answer and the derived truth (`DecisionData.BestClaimPair`). Scoring semantics stay with the consuming legs. No parse/format story: display strings are consumer copy per SPEC-scoring §3, and no wire token is ruled — its wire debut (and wire shape) belongs to the first document that embeds it. `default` is non-meaningful — see Pitfalls. |
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
@@ -414,21 +427,40 @@ cross-decision override:
   `DoubleTakeEquity < 1`; the error is the equity gap (taker
   perspective) between the chosen action and that best.
 
-All four throw `InvalidOperationException` when `IsCube` is false — they
-are only meaningful on cube decisions, and silent zero / default returns
-on play decisions would mask misuse. The two error methods further
-throw `ArgumentOutOfRangeException` when the action argument is from the
-wrong half (e.g. `Take` or `Pass` passed to `DoublerActionError`).
+Above the action layer sits the claim derivation of SPEC-scoring §3
+(`halheinrich/backgammon#86`) — the truth side of the two-part cube answer,
+derived producer-side so consumers never re-derive:
+
+- **`BestDoublerClaim`** widens `BestDoublerAction` to the three-valued
+  claim: `Double` when doubling is best; otherwise `TooGood` iff
+  `NoDoubleEquity > 1` (the ratified predicate, strict — exactly 1 is not
+  too good), else `NoDouble`. Reads equities only: no match-score, money,
+  or Jacoby context enters, which is what makes the claim uniformly
+  available (Too Good occurs in money via Jacoby redoubles).
+
+- **`BestClaimPair`** composes the full derived truth,
+  `(BestDoublerClaim, BestTakerAction)` — the `CubeClaimPair` a submitted
+  answer is scored against half by half, and the producer verdict the
+  answer-type classification consumes. Off the tie boundaries it lands in
+  one of SPEC-scoring §3's five verdict cells; see Pitfalls for the
+  boundary case.
+
+All the computed members throw `InvalidOperationException` when `IsCube` is
+false — they are only meaningful on cube decisions, and silent zero /
+default returns on play decisions would mask misuse. The two error methods
+further throw `ArgumentOutOfRangeException` when the action argument is
+from the wrong half (e.g. `Take` or `Pass` passed to `DoublerActionError`).
 
 Tie-breaking follows the renderer's existing convention so a downstream
 consumer that collapses the inline cube derivation into calls to these
 helpers preserves behaviour: `NoDouble` on the doubler-equity tie, `Pass`
 on `DoubleTakeEquity == 1`.
 
-The two computed properties (`BestDoublerAction`, `BestTakerAction`)
-carry `[JsonIgnore]` so `System.Text.Json` does not invoke their throwing
-getters when serialising play decisions. The error methods are
-intrinsically not serialised because they take parameters.
+The four computed properties (`BestDoublerAction`, `BestTakerAction`,
+`BestDoublerClaim`, `BestClaimPair`) carry `[JsonIgnore]` so
+`System.Text.Json` does not invoke their throwing getters when serialising
+play decisions. The error methods are intrinsically not serialised because
+they take parameters.
 
 An aggregate verdict layer was removed in the cube-surface rebuild and is
 slated to return later on a cleaner footing; the umbrella `INSTRUCTIONS.md`
@@ -581,6 +613,11 @@ public class DecisionData
     [JsonIgnore] public CubeAction  BestDoublerAction { get; }   // Double or NoDouble
     [JsonIgnore] public CubeAction  BestTakerAction   { get; }   // Take or Pass
 
+    // Claim-layer truth derivation (SPEC-scoring §3; same IsCube guard).
+    [JsonIgnore] public CubeClaim     BestDoublerClaim { get; }  // TooGood iff best is
+                                                                 // NoDouble && NoDoubleEquity > 1
+    [JsonIgnore] public CubeClaimPair BestClaimPair    { get; }  // (BestDoublerClaim, BestTakerAction)
+
     public double DoublerActionError(CubeAction action);          // 0 if action == BestDoublerAction;
                                                                   // throws ArgumentOutOfRangeException on Take/Pass.
     public double TakerActionError(CubeAction action);            // 0 if action == BestTakerAction;
@@ -673,6 +710,19 @@ public enum CubeOwner { OnRoll, Opponent, Centered }
 
 public enum CubeAction { NoDouble, Double, Take, Pass }
 
+// The doubler half of a cube answer at the claim layer (SPEC-scoring §3):
+// a claim about the position, not a board action. Declaration order is the
+// ruled claim axis. Serializes as string (strict converter).
+public enum CubeClaim { NoDouble, Double, TooGood }
+
+// The claim→action collapse, single-sourced: NoDouble and TooGood both map
+// to CubeAction.NoDouble; Double maps to Double. No reverse mapping exists
+// (the claim is underdetermined by the action alone).
+public static class CubeClaimExtensions
+{
+    public static CubeAction ToCubeAction(this CubeClaim claim);  // throws on undefined
+}
+
 // The two-axis depth taxonomy: mode (how the numbers were produced) ×
 // level (the evaluation level — for rollout-family modes, the inner level).
 // Unknown = 0 deliberately on both: unstamped/legacy JSON deserializes to
@@ -724,6 +774,23 @@ public readonly record struct DiceRoll :
 // non-meaningful (see Pitfalls).
 public readonly record struct CubeDecisionPair(CubeAction Doubler, CubeAction Taker);
 
+// The two-part cube answer (SPEC-scoring §3): claim × taker response, a
+// closed 3×2 with six named canonical instances — the five verdict cells
+// plus the incoherent NoDoublePass, representable by ruling. Validated
+// halves: Claim any defined CubeClaim member, Taker ∈ {Take, Pass}.
+// default is non-meaningful (see Pitfalls).
+public readonly record struct CubeClaimPair(CubeClaim Claim, CubeAction Taker)
+{
+    public static CubeClaimPair NoDoubleTake { get; }
+    public static CubeClaimPair NoDoublePass { get; }   // the incoherent cell
+    public static CubeClaimPair DoubleTake { get; }
+    public static CubeClaimPair DoublePass { get; }
+    public static CubeClaimPair TooGoodTake { get; }    // halheinrich/backgammon#86's
+                                                        // missing verdict
+    public static CubeClaimPair TooGoodPass { get; }
+    public bool IsIncoherent { get; }                   // == NoDoublePass
+}
+
 public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<DecisionId>
 {
     public abstract string Filename { get; init; }
@@ -774,7 +841,7 @@ public sealed class ProblemKey :
 
 Serialization contract: round-trips cleanly through `System.Text.Json` —
 no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
-`AnalysisMode`, and `AnalysisLevel` bundle
+`CubeClaim`, `AnalysisMode`, and `AnalysisLevel` bundle
 `StrictJsonStringEnumConverter<TEnum>` via attribute;
 `Play` bundles `PlayJsonConverter`; `DecisionId` bundles
 `DecisionIdJsonConverter`; `DiceRoll` bundles `DiceRollJsonConverter`;
@@ -789,7 +856,7 @@ by downstream contexts — roots, the composition rules (public converters,
 metadata-only generation), and the trim posture are in "Source generation
 & trimming" above.
 
-The four enums are **string-token-exact in both directions**: they write their
+The five enums are **string-token-exact in both directions**: they write their
 declared member names and read only those names — a numeric ordinal is a
 `JsonException`, not a value. `AnalysisLevel`'s declaration order is contractual
 and its members interleave, so an inserted member renumbers everything after it;
@@ -1037,13 +1104,13 @@ measure" is not a valid comparison on this hardware.
   equivalence class uses `EquityLoss == 0.0`. Do not filter by
   `EquityLoss == null` — `EquityLoss` is non-nullable.
 - **`DecisionData` cube-scoring helpers throw when `IsCube` is false.**
-  All four (two computed properties + two methods) guard on `IsCube` and
-  throw `InvalidOperationException` on play decisions — they encode a
-  cube-only policy and silent zeros would mask misuse. Callers in
-  mixed-decision contexts must check `IsCube` first. The two
-  computed properties carry `[JsonIgnore]` so `System.Text.Json` does
-  not invoke their throwing getters during serialisation; do not strip
-  those attributes.
+  All six (four computed properties — the action pair and the claim pair —
+  plus two methods) guard on `IsCube` and throw
+  `InvalidOperationException` on play decisions — they encode a cube-only
+  policy and silent zeros would mask misuse. Callers in mixed-decision
+  contexts must check `IsCube` first. The four computed properties carry
+  `[JsonIgnore]` so `System.Text.Json` does not invoke their throwing
+  getters during serialisation; do not strip those attributes.
 - **Cube-scoring atomic-action methods reject the wrong half.**
   `DoublerActionError(CubeAction)` accepts only `Double` / `NoDouble`;
   `TakerActionError(CubeAction)` accepts only `Take` / `Pass`. The
@@ -1054,6 +1121,28 @@ measure" is not a valid comparison on this hardware.
   Construct pairs explicitly; do not treat `default` as a "no decision"
   sentinel. This is the standard value-type caveat, shared with `Play`
   and `DiceRoll`.
+- **`default(CubeClaimPair)` is non-meaningful.** Same caveat, same shape:
+  `default` bypasses the half-guards and carries `(NoDouble, NoDouble)` —
+  whose `Taker` is not a valid taker action. "No answer" is
+  `CubeClaimPair?` null, never `default`.
+- **`CubeClaim.TooGood` and `CubeAction.NoDouble` are the same board
+  action.** The claim layer exists precisely because two claims collapse to
+  one action (SPEC-scoring §3). Code bridging claims to the action-level
+  scoring helpers must go through `CubeClaimExtensions.ToCubeAction` —
+  re-encoding the collapse inline creates a second source of the rule. The
+  reverse direction does not exist: never infer a claim from an action
+  (underdetermined); the only equities→claim door is
+  `DecisionData.BestDoublerClaim`.
+- **`BestClaimPair` can derive the incoherent cell — on the tie boundary
+  only.** At `NoDoubleEquity == 1` exactly with `DoubleTakeEquity >= 1`,
+  both halves tie and the ruled tie-breaks (NoDouble; Pass) compose to
+  `CubeClaimPair.NoDoublePass` — the cell SPEC-scoring §3 calls "never a
+  verdict". Measure-zero and equity-neutral (every answer scores
+  identically there), pinned by test as the spec-literal reading of the
+  strict `> 1` predicate, and flagged to the umbrella as a candidate spec
+  sharpening. Off the boundary the derived truth is always one of the five
+  verdict cells (pinned over a grid). Consumers rendering the derived
+  truth should not assume `!IsIncoherent`.
 
 ## Subproject-internal next steps
 

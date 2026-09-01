@@ -290,6 +290,70 @@ public class DecisionData
     }
 
     /// <summary>
+    /// The correct doubler <em>claim</em> — <see cref="BestDoublerAction"/>
+    /// widened to the three-valued claim layer of SPEC-scoring §3
+    /// (halheinrich/backgammon#86): <see cref="CubeClaim.Double"/> when
+    /// doubling is best; otherwise <see cref="CubeClaim.TooGood"/> when
+    /// playing on is worth more than the cashed point
+    /// (<see cref="NoDoubleEquity"/> strictly above the pass equity 1), else
+    /// <see cref="CubeClaim.NoDouble"/>.
+    /// </summary>
+    /// <remarks>
+    /// The one derivation site of the truth claim in the ecosystem, beside
+    /// its action-level siblings — consumers never re-derive (SPEC-scoring
+    /// §3's encapsulation rule). Implements the ratified predicate verbatim:
+    /// Too Good ⟺ best doubler action is NoDouble <b>and</b>
+    /// <c>NoDoubleEquity &gt; 1</c>. The comparison is strict, so at
+    /// <c>NoDoubleEquity == 1</c> exactly (playing on worth exactly the
+    /// cash) the claim stays <see cref="CubeClaim.NoDouble"/> — the same
+    /// tie-favours-NoDouble posture as <see cref="BestDoublerAction"/>. The
+    /// derivation reads equities only: no match-score, money, or Jacoby
+    /// context enters, which is what makes the claim uniformly available
+    /// (SPEC-scoring §3 — Too Good occurs in money too, via Jacoby
+    /// redoubles).
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
+    /// </exception>
+    [JsonIgnore]
+    public CubeClaim BestDoublerClaim
+    {
+        get
+        {
+            RequireCube();
+            if (BestDoublerAction == CubeAction.Double)
+                return CubeClaim.Double;
+            return NoDoubleEquity > PassEquity ? CubeClaim.TooGood : CubeClaim.NoDouble;
+        }
+    }
+
+    /// <summary>
+    /// The derived truth of the whole cube decision as a two-part claim
+    /// answer — (<see cref="BestDoublerClaim"/>,
+    /// <see cref="BestTakerAction"/>) — the pair a submitted
+    /// <see cref="CubeClaimPair"/> is scored against, half by half
+    /// (SPEC-scoring §3; halheinrich/backgammon#86). This is the producer
+    /// verdict the answer-type classification consumes; consumers never walk
+    /// the equities themselves.
+    /// </summary>
+    /// <remarks>
+    /// Off the tie boundaries this lands in one of the five verdict cells of
+    /// SPEC-scoring §3's table. At <c>NoDoubleEquity == 1</c> exactly with
+    /// <c>DoubleTakeEquity &gt;= 1</c>, both halves tie and their ruled
+    /// tie-breaks (NoDouble; Pass) compose to
+    /// <see cref="CubeClaimPair.NoDoublePass"/> — the incoherent cell as
+    /// derived truth, on a measure-zero boundary where every answer's equity
+    /// is identical. Pinned by test as the spec-literal reading; flagged to
+    /// the umbrella as a candidate spec sharpening rather than silently
+    /// rounded away here.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
+    /// </exception>
+    [JsonIgnore]
+    public CubeClaimPair BestClaimPair => new(BestDoublerClaim, BestTakerAction);
+
+    /// <summary>
     /// Equity loss the doubler incurs by choosing <paramref name="action"/>
     /// rather than the optimal doubler action — <c>0</c> if
     /// <paramref name="action"/> matches <see cref="BestDoublerAction"/>,

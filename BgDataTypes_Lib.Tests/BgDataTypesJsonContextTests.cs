@@ -293,6 +293,7 @@ public class BgDataTypesJsonContextTests
         AssertContextMatchesReflection(AnalysisMode.BookRollout);
         AssertContextMatchesReflection(AnalysisLevel.Ply3Red);
         AssertContextMatchesReflection(CubeAction.Pass);
+        AssertContextMatchesReflection(CubeClaim.TooGood);
         AssertContextMatchesReflection(CubeOwner.Opponent);
     }
 
@@ -353,6 +354,13 @@ public class BgDataTypesJsonContextTests
             "{\"CubeOwner\":1}", ContextOptions));
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DecisionData>(
             "{\"IsCube\":true,\"UserDoublerAction\":1}", ContextOptions));
+
+        // CubeClaim has no embedding document in this library yet (it is a
+        // declared root ahead of its first downstream document — the
+        // halheinrich/backgammon#86 arc's consumer legs), so its strictness
+        // through the context is pinned on the bare token.
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CubeClaim>(
+            "2", ContextOptions));
     }
 
     // -----------------------------------------------------------------------
@@ -391,7 +399,7 @@ public class BgDataTypesJsonContextTests
             typeof(Play), typeof(Move), typeof(DecisionId),
             typeof(ProblemKey), typeof(DiceRoll),
             typeof(AnalysisMode), typeof(AnalysisLevel),
-            typeof(CubeAction), typeof(CubeOwner)
+            typeof(CubeAction), typeof(CubeClaim), typeof(CubeOwner)
         ];
 
         var closure = new HashSet<Type>();

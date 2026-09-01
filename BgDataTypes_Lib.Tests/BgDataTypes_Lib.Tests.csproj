@@ -24,4 +24,17 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Local-only corpus for the Too Good predicate's exercise check
+       (halheinrich/backgammon#86; SPEC-scoring §3's acceptance requirement).
+       Umbrella TestData contents are gitignored, so on CI or a fresh clone
+       this glob matches nothing and the corpus test passes vacuously by
+       design — the XgFilter_Lib.Tests linking pattern, narrowed to the one
+       subtree this suite reads. -->
+  <ItemGroup>
+    <None Include="..\..\TestData\BgDecisionData\*.json"
+          Link="TestData\BgDecisionData\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
