@@ -89,7 +89,9 @@ never reach into the umbrella `TestData/`. The one deliberate exception is
 local-only: `TooGoodCorpusExerciseTests` links `TestData/BgDecisionData/`
 into its output and checks the Too Good predicate is exercised by real
 converted data (SPEC-scoring §3's acceptance requirement,
-halheinrich/backgammon#86) — vacuous on an empty or absent corpus by
+halheinrich/backgammon#86) and that no corpus position derives the retired
+Too Good / Take pair (the 2026-09-02 amendment,
+halheinrich/backgammon#187) — vacuous on an empty or absent corpus by
 design, per the AGENTS.md TestData rule, so it cannot gate and nothing on
 CI depends on it.
 
@@ -468,17 +470,43 @@ derived producer-side so consumers never re-derive:
 
 - **`BestDoublerClaim`** widens `BestDoublerAction` to the three-valued
   claim: `Double` when doubling is best; otherwise `TooGood` iff
-  `NoDoubleEquity > 1` (the ratified predicate, strict — exactly 1 is not
-  too good), else `NoDouble`. Reads equities only: no match-score, money,
-  or Jacoby context enters, which is what makes the claim uniformly
-  available (Too Good occurs in money via Jacoby redoubles).
+  `NoDoubleEquity > 1` **and** `BestTakerAction == Pass` (the ratified
+  predicate as amended 2026-09-02 by `halheinrich/backgammon#187`: Too
+  Good requires the pass; the equity comparison is strict — exactly 1 is
+  not too good), else `NoDouble`. Cell by cell of the no-double half: Too
+  good / Pass — playing on beats the cash and they would pass; No double /
+  Take with a no-double equity above 1 — playing on beats being taken, the
+  opponent takes, no pass is involved, a No double *by ruling* (XG's "Too
+  good to double/Take", `TooGoodAndTake.xgp`, no double +1.1711,
+  double/take +0.6004, is the position that decided it); No double / Take
+  at or below 1 — the ordinary cell. Reads equities only: no match-score,
+  money, or Jacoby context enters (Too Good occurs in money via Jacoby
+  redoubles). Whether the verdict *can* occur at a position is the separate
+  offerability fact below.
 
 - **`BestClaimPair`** composes the full derived truth,
   `(BestDoublerClaim, BestTakerAction)` — the `CubeClaimPair` a submitted
   answer is scored against half by half, and the producer verdict the
   answer-type classification consumes. Off the tie boundaries it lands in
-  one of SPEC-scoring §3's five verdict cells; see Pitfalls for the
-  boundary case.
+  one of the four reachable verdict cells — `NoDoubleTake`, `DoubleTake`,
+  `DoublePass`, `TooGoodPass`; `TooGoodTake` is never derived since the
+  amendment — and the sixth-cell boundary ruling stands; see Pitfalls.
+
+- **`BgDecisionData.CanBeTooGood`** — the offerability fact of the same
+  amendment, on the composite record because only it sees money, Jacoby and
+  cube owner together: `false` iff the session is money
+  (`IDecisionFilterData.IsMoneyGame`, the contract's single spelling — never
+  a restated `MatchLength == 0`), `IsJacoby == true`, and
+  `Position.CubeOwner == Centered` (gammons do not count under Jacoby until
+  the cube turns, so the no-double equity never exceeds the cash); `true`
+  otherwise, including `IsJacoby == null` — an unknown rule is not a known
+  Jacoby rule. The one derivation site: a consumer offering cube answers
+  reads it to decide whether the Too Good pair is in the option set and
+  never re-derives it from the rules fields. Independent of what the
+  equities derive (the claim would still say Too Good if the producer's
+  numbers did). Throws `InvalidOperationException` on a non-cube record
+  through the same guard as `BestClaimPair`; `[JsonIgnore]`d like the rest
+  of the record's derived view.
 
 All the computed members throw `InvalidOperationException` when `IsCube` is
 false — they are only meaningful on cube decisions, and silent zero /
@@ -519,6 +547,14 @@ out-of-range index from malformed data); a shared private lookup guarantees
 both axes read the same candidate. `Dice` forwards `Decision.Dice` in
 canonical `DiceRoll` form — null for cube decisions, fail-loud on malformed
 stored faces.
+
+Beyond the filter view, the composite carries the one claim-layer fact that
+needs the whole record: `CanBeTooGood`, the Too Good offerability of
+SPEC-scoring §3's 2026-09-02 amendment (`halheinrich/backgammon#187`) —
+see "Cube-decision scoring on DecisionData". It lives here rather than on
+`DecisionData` because only the composite sees money (`Descriptive`),
+Jacoby and cube owner (`Position`) together; the claim itself stays on
+`DecisionData`, derived from equities alone.
 
 The whole forwarding view carries `[JsonIgnore]`
 (halheinrich/backgammon#14): it is a read-side derivation of the category
@@ -658,6 +694,11 @@ public class BgDecisionData : IDecisionFilterData
     // IDecisionFilterData members implemented as forwarding properties —
     // all [JsonIgnore]d; the category members are the wire form
     // (halheinrich/backgammon#14).
+
+    // Offerability of the Too Good verdict (SPEC-scoring §3, 2026-09-02):
+    // false iff money && IsJacoby == true && cube centred. Throws
+    // InvalidOperationException when IsCube is false.
+    [JsonIgnore] public bool CanBeTooGood { get; }
 }
 
 public class PlayOutcomeData { /* AfterBestBoard, AfterPlayerBoard (each IReadOnlyList<int>) */ }
@@ -700,10 +741,12 @@ public class DecisionData
     [JsonIgnore] public CubeAction  BestDoublerAction { get; }   // Double or NoDouble
     [JsonIgnore] public CubeAction  BestTakerAction   { get; }   // Take or Pass
 
-    // Claim-layer truth derivation (SPEC-scoring §3; same IsCube guard).
-    [JsonIgnore] public CubeClaim     BestDoublerClaim { get; }  // TooGood iff best is
-                                                                 // NoDouble && NoDoubleEquity > 1
-    [JsonIgnore] public CubeClaimPair BestClaimPair    { get; }  // (BestDoublerClaim, BestTakerAction)
+    // Claim-layer truth derivation (SPEC-scoring §3, amended 2026-09-02; same IsCube guard).
+    [JsonIgnore] public CubeClaim     BestDoublerClaim { get; }  // TooGood iff best is NoDouble
+                                                                 // && NoDoubleEquity > 1
+                                                                 // && BestTakerAction == Pass
+    [JsonIgnore] public CubeClaimPair BestClaimPair    { get; }  // (BestDoublerClaim, BestTakerAction);
+                                                                 // never TooGoodTake
 
     public double DoublerActionError(CubeAction action);          // 0 if action == BestDoublerAction;
                                                                   // throws ArgumentOutOfRangeException on Take/Pass.
@@ -862,8 +905,9 @@ public readonly record struct DiceRoll :
 public readonly record struct CubeDecisionPair(CubeAction Doubler, CubeAction Taker);
 
 // The two-part cube answer (SPEC-scoring §3): claim × taker response, a
-// closed 3×2 with six named canonical instances — the five verdict cells
-// plus the incoherent NoDoublePass, representable by ruling. Validated
+// closed 3×2 with six named canonical instances — the four reachable
+// verdict cells, plus two representable-but-never-offered cells (the
+// retired TooGoodTake and the incoherent NoDoublePass). Validated
 // halves: Claim any defined CubeClaim member, Taker ∈ {Take, Pass}.
 // default is non-meaningful (see Pitfalls).
 public readonly record struct CubeClaimPair(CubeClaim Claim, CubeAction Taker)
@@ -872,8 +916,9 @@ public readonly record struct CubeClaimPair(CubeClaim Claim, CubeAction Taker)
     public static CubeClaimPair NoDoublePass { get; }   // the incoherent cell
     public static CubeClaimPair DoubleTake { get; }
     public static CubeClaimPair DoublePass { get; }
-    public static CubeClaimPair TooGoodTake { get; }    // halheinrich/backgammon#86's
-                                                        // missing verdict
+    public static CubeClaimPair TooGoodTake { get; }    // retired as a verdict 2026-09-02
+                                                        // (halheinrich/backgammon#187);
+                                                        // never derived, not offered
     public static CubeClaimPair TooGoodPass { get; }
     public bool IsIncoherent { get; }                   // == NoDoublePass
 }
@@ -1250,9 +1295,22 @@ measure" is not a valid comparison on this hardware.
   verdict". Measure-zero and equity-neutral (every answer scores
   identically there), pinned by test as the spec-literal reading of the
   strict `> 1` predicate, and flagged to the umbrella as a candidate spec
-  sharpening. Off the boundary the derived truth is always one of the five
-  verdict cells (pinned over a grid). Consumers rendering the derived
-  truth should not assume `!IsIncoherent`.
+  sharpening; the 2026-09-02 amendment left it standing. Off the boundary
+  the derived truth is always one of the four reachable verdict cells
+  (pinned over a grid). Consumers rendering the derived truth should not
+  assume `!IsIncoherent`.
+- **`CubeClaimPair.TooGoodTake` is representable but never derived.**
+  Since SPEC-scoring §3's 2026-09-02 amendment (`halheinrich/backgammon#187`)
+  Too Good requires the pass, so `BestClaimPair` cannot compose it (pinned
+  over a grid, and counted at zero over the local corpus). The cell stays
+  on the closed 3×2 because a data-types library does not hide cells;
+  consumers do not offer it, and must not treat its presence in the type as
+  a hint that it is reachable.
+- **Never re-derive Too Good offerability from the rules fields.**
+  `BgDecisionData.CanBeTooGood` is the one site; spelling
+  `IsMoneyGame && IsJacoby == true && CubeOwner == Centered` (or worse, a
+  near-miss like `IsJacoby != false`, which admits the unknown-rule record)
+  in a consumer creates a second source of the ruling.
 
 ## Subproject-internal next steps
 

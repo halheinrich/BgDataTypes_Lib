@@ -15,15 +15,19 @@ namespace BgDataTypes_Lib;
 /// The claim-layer counterpart of <see cref="CubeDecisionPair"/>: where that
 /// type pairs two board <em>actions</em> (a closed 2×2), this one pairs a
 /// claim with a taker action — a closed 3×2 of six cells, each with a named
-/// canonical instance. Five cells are verdicts an analysis can be
-/// (<see cref="NoDoubleTake"/>, <see cref="DoubleTake"/>,
-/// <see cref="DoublePass"/>, <see cref="TooGoodTake"/>,
-/// <see cref="TooGoodPass"/>); the sixth, <see cref="NoDoublePass"/>, is the
-/// incoherent cell — "not good enough to double, yet they'd pass" —
-/// deliberately representable because it is a selectable user answer
-/// (SPEC-scoring §3, "The incoherent cell is allowed"; cross-disabling the
-/// axes was rejected). <see cref="IsIncoherent"/> names it for review
-/// surfaces. Scoring semantics live with the consuming legs, not here.
+/// canonical instance. Four cells are the reachable verdicts an analysis can
+/// be (<see cref="NoDoubleTake"/>, <see cref="DoubleTake"/>,
+/// <see cref="DoublePass"/>, <see cref="TooGoodPass"/>) — the option set
+/// consumers offer since the 2026-09-02 amendment
+/// (halheinrich/backgammon#187). The other two are representable but not
+/// offered: <see cref="TooGoodTake"/>, a verdict retired by that amendment
+/// (Too Good requires the pass) and never derived as truth since; and
+/// <see cref="NoDoublePass"/>, the incoherent cell — "not good enough to
+/// double, yet they'd pass" — derived only on the tie boundary and named by
+/// <see cref="IsIncoherent"/> for review surfaces. A data-types library
+/// does not hide cells: the closed 3×2 stays whole so that stored answers
+/// from any era remain representable. Scoring semantics live with the
+/// consuming legs, not here.
 /// </para>
 /// <para>
 /// Each half is validated on construction, paralleling
@@ -113,9 +117,13 @@ public readonly record struct CubeClaimPair(CubeClaim Claim, CubeAction Taker)
     /// The "too good, take" answer —
     /// (<see cref="CubeClaim.TooGood"/>, <see cref="CubeAction.Take"/>):
     /// playing on beats cashing, yet the opponent would still take a double —
-    /// the verdict the action-level 2×2 could not represent
-    /// (halheinrich/backgammon#86's motivating case). Occurs in matches only,
-    /// by ruling (SPEC-scoring §3's verdict table).
+    /// the cell halheinrich/backgammon#86 originally introduced the claim
+    /// layer to represent. <b>Retired as a verdict on 2026-09-02</b>
+    /// (halheinrich/backgammon#187): Too Good requires the pass, so
+    /// <see cref="DecisionData.BestClaimPair"/> never derives this cell as
+    /// truth — such a position is <see cref="NoDoubleTake"/> by ruling — and
+    /// consumers do not offer it. Kept representable because a data-types
+    /// library does not hide cells of a closed 3×2.
     /// </summary>
     public static CubeClaimPair TooGoodTake { get; } =
         new(CubeClaim.TooGood, CubeAction.Take);

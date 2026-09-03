@@ -11,7 +11,10 @@ namespace BgDataTypes_Lib.Tests;
 /// in <see cref="DecisionDataClaimDerivationTests"/> prove the predicate
 /// against chosen equities; this check proves real converted data actually
 /// reaches the Too Good branch — a predicate no real record ever satisfies
-/// would pass every synthetic pin while being vacuous in production.
+/// would pass every synthetic pin while being vacuous in production. Since
+/// the 2026-09-02 amendment (halheinrich/backgammon#187: Too Good requires
+/// the pass) it also counts that no corpus position derives the retired
+/// Too Good / Take pair.
 ///
 /// <para>
 /// Local-only by design (the AGENTS.md TestData rule): the corpus under the
@@ -43,6 +46,7 @@ public class TooGoodCorpusExerciseTests
 
         int cubeDecisions = 0;
         int tooGood = 0;
+        int tooGoodTake = 0;
 
         foreach (var file in Directory.EnumerateFiles(CorpusDir, "*.json"))
         {
@@ -64,14 +68,23 @@ public class TooGoodCorpusExerciseTests
 
                     // Every corpus cube decision must derive a defined
                     // claim without throwing — the sweep half of the check.
-                    var claim = decision.BestDoublerClaim;
-                    Assert.True(Enum.IsDefined(claim));
+                    var pair = decision.BestClaimPair;
+                    Assert.True(Enum.IsDefined(pair.Claim));
 
-                    if (claim == CubeClaim.TooGood)
+                    if (pair.Claim == CubeClaim.TooGood)
                         tooGood++;
+                    if (pair == CubeClaimPair.TooGoodTake)
+                        tooGoodTake++;
                 }
             }
         }
+
+        // The retired cell, counted over real data: since the 2026-09-02
+        // amendment (halheinrich/backgammon#187) Too Good requires the pass,
+        // so no corpus position may derive Too Good / Take. Vacuous-safe —
+        // a zero count on an empty corpus is the assertion holding, not
+        // dodging it — which is why it sits ahead of the vacuous return.
+        Assert.Equal(0, tooGoodTake);
 
         if (cubeDecisions == 0)
             return;   // corpus carries no readable cube decisions — vacuous

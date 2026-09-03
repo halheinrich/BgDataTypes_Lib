@@ -292,25 +292,60 @@ public class DecisionData
     /// <summary>
     /// The correct doubler <em>claim</em> — <see cref="BestDoublerAction"/>
     /// widened to the three-valued claim layer of SPEC-scoring §3
-    /// (halheinrich/backgammon#86): <see cref="CubeClaim.Double"/> when
+    /// (halheinrich/backgammon#86; amended 2026-09-02 by
+    /// halheinrich/backgammon#187): <see cref="CubeClaim.Double"/> when
     /// doubling is best; otherwise <see cref="CubeClaim.TooGood"/> when
     /// playing on is worth more than the cashed point
-    /// (<see cref="NoDoubleEquity"/> strictly above the pass equity 1), else
-    /// <see cref="CubeClaim.NoDouble"/>.
+    /// (<see cref="NoDoubleEquity"/> strictly above the pass equity 1)
+    /// <em>and</em> the opponent would pass a double
+    /// (<see cref="BestTakerAction"/> is <see cref="CubeAction.Pass"/>),
+    /// else <see cref="CubeClaim.NoDouble"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The one derivation site of the truth claim in the ecosystem, beside
     /// its action-level siblings — consumers never re-derive (SPEC-scoring
     /// §3's encapsulation rule). Implements the ratified predicate verbatim:
     /// Too Good ⟺ best doubler action is NoDouble <b>and</b>
-    /// <c>NoDoubleEquity &gt; 1</c>. The comparison is strict, so at
-    /// <c>NoDoubleEquity == 1</c> exactly (playing on worth exactly the
-    /// cash) the claim stays <see cref="CubeClaim.NoDouble"/> — the same
-    /// tie-favours-NoDouble posture as <see cref="BestDoublerAction"/>. The
-    /// derivation reads equities only: no match-score, money, or Jacoby
-    /// context enters, which is what makes the claim uniformly available
-    /// (SPEC-scoring §3 — Too Good occurs in money too, via Jacoby
-    /// redoubles).
+    /// <c>NoDoubleEquity &gt; 1</c> <b>and</b> best taker action is Pass —
+    /// the 2026-09-02 amendment's third term: Too Good requires the pass.
+    /// </para>
+    /// <para>
+    /// The rationale, cell by cell of the no-double half:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <b>Too good / Pass</b> — playing on beats the cash <em>and</em> they
+    /// would pass: the roller declines a point the opponent would concede
+    /// because the game is worth more played out. The only Too Good cell.
+    /// </description></item>
+    /// <item><description>
+    /// <b>No double / Take, with a no-double equity above 1</b> — playing on
+    /// beats being taken, the opponent takes, and no pass is involved: the
+    /// roller refrains because a double would be taken and playing on beats
+    /// that, not because any cash was declined. A No double <em>by
+    /// ruling</em>: XG labels such a position "Too good to double/Take"
+    /// (<c>TooGoodAndTake.xgp</c> — no double +1.1711, double/take +0.6004,
+    /// the position that decided the amendment), and the quiz cannot teach
+    /// a distinction its players do not make.
+    /// </description></item>
+    /// <item><description>
+    /// <b>No double / Take, with a no-double equity at or below 1</b> — not
+    /// good enough to double; the ordinary cell.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// The equity comparison is strict, so at <c>NoDoubleEquity == 1</c>
+    /// exactly (playing on worth exactly the cash) the claim stays
+    /// <see cref="CubeClaim.NoDouble"/> — the same tie-favours-NoDouble
+    /// posture as <see cref="BestDoublerAction"/>; at that boundary with a
+    /// pass, <see cref="BestClaimPair"/> composes the incoherent cell as
+    /// before. The derivation reads equities only: no match-score, money, or
+    /// Jacoby context enters (Too Good occurs in money too, via Jacoby
+    /// redoubles). Whether the verdict <em>can</em> occur at a position is a
+    /// separate fact of the rules context, derived beside this one on the
+    /// record — <see cref="BgDecisionData.CanBeTooGood"/>.
+    /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
@@ -323,7 +358,9 @@ public class DecisionData
             RequireCube();
             if (BestDoublerAction == CubeAction.Double)
                 return CubeClaim.Double;
-            return NoDoubleEquity > PassEquity ? CubeClaim.TooGood : CubeClaim.NoDouble;
+            return NoDoubleEquity > PassEquity && BestTakerAction == CubeAction.Pass
+                ? CubeClaim.TooGood
+                : CubeClaim.NoDouble;
         }
     }
 
@@ -337,8 +374,14 @@ public class DecisionData
     /// the equities themselves.
     /// </summary>
     /// <remarks>
-    /// Off the tie boundaries this lands in one of the five verdict cells of
-    /// SPEC-scoring §3's table. At <c>NoDoubleEquity == 1</c> exactly with
+    /// Off the tie boundaries this lands in one of the four reachable verdict
+    /// cells of SPEC-scoring §3 — <see cref="CubeClaimPair.NoDoubleTake"/>,
+    /// <see cref="CubeClaimPair.DoubleTake"/>,
+    /// <see cref="CubeClaimPair.DoublePass"/>,
+    /// <see cref="CubeClaimPair.TooGoodPass"/>; since the 2026-09-02
+    /// amendment (halheinrich/backgammon#187) Too Good requires the pass, so
+    /// <see cref="CubeClaimPair.TooGoodTake"/> is never derived. At
+    /// <c>NoDoubleEquity == 1</c> exactly with
     /// <c>DoubleTakeEquity &gt;= 1</c>, both halves tie and their ruled
     /// tie-breaks (NoDouble; Pass) compose to
     /// <see cref="CubeClaimPair.NoDoublePass"/> — the incoherent cell as
@@ -417,7 +460,16 @@ public class DecisionData
         return Math.Max(0.0, bestEquity - actionEquity);
     }
 
-    private void RequireCube()
+    /// <summary>
+    /// The single <see cref="IsCube"/> guard behind every cube-only derived
+    /// member — here and on the composite record
+    /// (<see cref="BgDecisionData.CanBeTooGood"/>), so a non-cube decision
+    /// fails the same way from every door.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
+    /// </exception>
+    internal void RequireCube()
     {
         if (!IsCube)
             throw new InvalidOperationException(

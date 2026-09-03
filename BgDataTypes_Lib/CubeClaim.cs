@@ -26,10 +26,14 @@ namespace BgDataTypes_Lib;
 /// </para>
 /// <para>
 /// Declaration order is the claim axis as ruled — {No Double, Double,
-/// Too Good} — and is what a UI offering the claims renders. All three claims
-/// are offered for every cube decision regardless of rules in force: Too Good
+/// Too Good} — and is what a UI offering the claims renders. Too Good
 /// occurs in money too, including under Jacoby via redoubles (SPEC-scoring
-/// §3, "Uniform availability").
+/// §3, "Uniform availability"), with one ruled exception: a money position
+/// under Jacoby with the cube centred cannot be too good, so Too Good is
+/// not offered there (the 2026-09-02 amendment, halheinrich/backgammon#187).
+/// That offerability fact is derived once, producer-side, as
+/// <see cref="BgDecisionData.CanBeTooGood"/>; consumers read it and never
+/// re-derive it.
 /// </para>
 /// </remarks>
 [JsonConverter(typeof(StrictJsonStringEnumConverter<CubeClaim>))]

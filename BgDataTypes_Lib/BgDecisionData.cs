@@ -163,4 +163,66 @@ public class BgDecisionData : IDecisionFilterData
     /// <inheritdoc/>
     [JsonIgnore]
     public IReadOnlyList<int> AfterPlayerBoard => Outcome.AfterPlayerBoard;
+
+    // -----------------------------------------------------------------------
+    //  Claim-layer facts that need the whole record
+    //
+    //  DecisionData derives the truth claim from equities alone. Whether the
+    //  Too Good verdict can occur at all is a fact of the rules context —
+    //  money, Jacoby, cube owner — which only this composite sees together,
+    //  so it is derived here, once, and read by every consumer. Same
+    //  [JsonIgnore] posture as the forwarding view: a derivation, not wire.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether the Too Good verdict can occur at this position — the
+    /// offerability fact of SPEC-scoring §3's 2026-09-02 amendment
+    /// (halheinrich/backgammon#187): <see langword="false"/> exactly when the
+    /// session is money (<see cref="IDecisionFilterData.IsMoneyGame"/>), the
+    /// Jacoby rule is known to be in force (<see cref="IsJacoby"/> is
+    /// <see langword="true"/>) and the cube is centred
+    /// (<see cref="PositionData.CubeOwner"/> is
+    /// <see cref="CubeOwner.Centered"/>); <see langword="true"/> otherwise.
+    /// Gammons do not count under Jacoby until the cube turns, so the
+    /// no-double equity never exceeds the cash there and the verdict cannot
+    /// arise; a turned cube re-arms gammons, and Too Good returns.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The one derivation site of this fact in the ecosystem: a consumer
+    /// that offers cube answers reads it to decide whether the Too Good pair
+    /// is in the option set, and never re-derives it from the record's
+    /// rules fields (the same encapsulation rule as
+    /// <see cref="DecisionData.BestDoublerClaim"/>). Money is reached
+    /// through the contract's single spelling of the rule, never a restated
+    /// <c>MatchLength == 0</c>.
+    /// </para>
+    /// <para>
+    /// An unknown rule is not a known Jacoby rule: <see cref="IsJacoby"/>
+    /// <see langword="null"/> (a money record whose rule was never stamped,
+    /// or any match record) leaves this <see langword="true"/> — the
+    /// verdict is withheld only when the position's own facts rule it out,
+    /// the same posture <see cref="IDecisionFilterData.IsJacoby"/> states
+    /// for the filter layer. This is a fact about the position, independent
+    /// of what <see cref="DecisionData.BestClaimPair"/> derives: the
+    /// derivation reads equities only and would still name Too Good if the
+    /// producer's numbers said so.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="IsCube"/> is <see langword="false"/> — the
+    /// same guard as <see cref="DecisionData.BestClaimPair"/>; the question
+    /// has no meaning on a checker play.
+    /// </exception>
+    [JsonIgnore]
+    public bool CanBeTooGood
+    {
+        get
+        {
+            Decision.RequireCube();
+            return !(((IDecisionFilterData)this).IsMoneyGame
+                     && IsJacoby == true
+                     && Position.CubeOwner == CubeOwner.Centered);
+        }
+    }
 }
