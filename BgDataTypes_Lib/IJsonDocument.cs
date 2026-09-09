@@ -45,7 +45,7 @@ namespace BgDataTypes_Lib;
 /// </para>
 /// </summary>
 /// <typeparam name="TSelf">The implementing type itself.</typeparam>
-public interface IJsonDocument<TSelf> where TSelf : IJsonDocument<TSelf>?
+public interface IJsonDocument<TSelf> where TSelf : IJsonDocument<TSelf>
 {
     /// <summary>
     /// Deserializes a <typeparamref name="TSelf"/> from its canonical JSON

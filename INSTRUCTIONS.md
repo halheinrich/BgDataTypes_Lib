@@ -1075,7 +1075,7 @@ public sealed class ProblemKey :
 
 // The persistence trio as a contract (halheinrich/backgammon#190). Implemented
 // downstream by FilterConfig and QuizMix; no implementer in this library.
-public interface IJsonDocument<TSelf> where TSelf : IJsonDocument<TSelf>?
+public interface IJsonDocument<TSelf> where TSelf : IJsonDocument<TSelf>
 {
     static abstract TSelf FromJson(string json);      // ArgumentNullException / ArgumentException
                                                       // (null token) / JsonException
@@ -1515,9 +1515,9 @@ measure" is not a valid comparison on this hardware.
   wire names are the specialization's identity: changing them is a file
   migration, not a refactor — the saved-filter document's are `filters` and
   `config`, fixed by every `xg-filters.json` on users' disks. The base's
-  `Get` / `TryGet` are the generic names; a specialization that keeps a
-  domain spelling for its callers (`GetConfig`) adds it as a forward, not a
-  reimplementation.
+  `Get` / `TryGet` are the only get pair: a specialization adds no
+  domain-spelled forwarder (`GetConfig`) — its callers rename (ruled
+  2026-09-09 on halheinrich/backgammon#190).
 
 ## Subproject-internal next steps
 
