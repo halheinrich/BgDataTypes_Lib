@@ -11,7 +11,7 @@ namespace BgDataTypes_Lib;
 /// (XgFilter_Lib) and <c>QuizMix</c> (BgGame_Lib) each hand-wrote and whose
 /// doc comments named the other as the convention to copy. Those two are
 /// this interface's first implementers (halheinrich/backgammon#190, legs
-/// (B) and (C)); <c>NamedCollection</c> (its next commit) is the third
+/// (B) and (C)); <see cref="NamedCollection{TValue, TSelf}"/> is the third
 /// and the first generic consumer, storing any implementer by name.
 ///
 /// <para>

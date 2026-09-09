@@ -12,6 +12,7 @@ namespace BgDataTypes_Lib.Tests;
 /// </summary>
 [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(SamplePayload))]
+[JsonSerializable(typeof(SampleCollection))]
 [JsonSerializable(typeof(ThrowingDocument))]
 internal sealed partial class SampleJsonContext : JsonSerializerContext
 {
@@ -27,6 +28,9 @@ internal sealed partial class SampleJsonContext : JsonSerializerContext
 /// exactly the "tolerant entry body" a named collection delegates to. The
 /// inert default is a fresh instance (the <c>FilterConfig</c> shape), not a
 /// shared singleton, because a mutable singleton would be corruptible.
+/// Value equality over the full content (the <c>QuizMix</c> shape), so two
+/// snapshots of equal payloads compare equal — the case an immutable map's
+/// <c>SetItem</c> mishandles on a case-variant replace.
 /// </summary>
 public sealed record SamplePayload : IJsonDocument<SamplePayload>
 {
@@ -35,6 +39,14 @@ public sealed record SamplePayload : IJsonDocument<SamplePayload>
     public int Weight { get; set; }
 
     public List<string> Tags { get; init; } = [];
+
+    public bool Equals(SamplePayload? other) =>
+        other is not null
+        && Label == other.Label
+        && Weight == other.Weight
+        && Tags.SequenceEqual(other.Tags);
+
+    public override int GetHashCode() => HashCode.Combine(Label, Weight, Tags.Count);
 
     public string ToJson() => JsonSerializer.Serialize(this, SampleJsonContext.Default.SamplePayload);
 

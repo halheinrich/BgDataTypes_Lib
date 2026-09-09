@@ -78,9 +78,14 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `IJsonDocument<TSelf>`, the persistence-trio contract every persisted
   document type implements (fail-loud `FromJson`, always-usable
   `TryFromJson`, canonical `ToJson`), and `CanonicalJson`, the shared bodies
-  of its two readers. No implementer lives in this library; the payloads
-  (`FilterConfig`, `QuizMix`) and the named collections over them are
-  downstream. See "Named documents" below.
+  of its two readers; `NamedCollection<TValue, TSelf>`, the immutable
+  named collection over any implementer (name rule, canonical order,
+  snapshot contract, the trio), with `INamedCollectionSpecialization` (the
+  static half a sealed specialization supplies) and the abstract
+  `NamedCollectionJsonConverter<TValue, TSelf>` (the strict envelope, closed
+  per specialization with its own two wire names). No payload and no
+  specialization lives in this library; `FilterConfig` / `QuizMix` and the
+  collections over them are downstream. See "Named documents" below.
 
 **`BgDataTypes_Lib.Benchmarks/`** — BenchmarkDotNet harness, an executable
 (`OutputType=Exe`) excluded from `dotnet test` by `IsTestProject=false`.
@@ -637,7 +642,7 @@ mirrored wholesale from a producer. They carry no JSON contract (nothing
 serializes an `IMatchInfo`); they are purely the shape a consumer needs
 to decide "skip this match / skip this game".
 
-### Named documents: the persistence trio
+### Named documents: the persistence trio and the named collection
 
 `IJsonDocument<TSelf>` (halheinrich/backgammon#190 leg (A)) is the contract
 behind what `FilterConfig` (XgFilter_Lib) and `QuizMix` (BgGame_Lib) each
@@ -663,6 +668,70 @@ declares the implementer. The pattern an implementer follows: a type-level
 `[JsonConverter]` where the wire form is hand-written (public, per the
 composition rules above), metadata from its repo's context, the trio
 forwarding to `CanonicalJson`.
+
+**`NamedCollection<TValue, TSelf>`** generalizes XgFilter_Lib's
+saved-filter document: an immutable collection of named `TValue` documents
+where `TValue : IJsonDocument<TValue>`. It carries once what that document
+carried welded to `FilterConfig` — the name rule (one
+`OrdinalIgnoreCase` comparer for duplicate rejection, lookup, replace,
+removal and the canonical sort; names validated, never coerced: blank and
+untrimmed rejected in memory and on the wire), the canonical name order in
+`Names` and on the wire, value snapshots by the payload's own
+`ToJson`/`FromJson` round-trip so a mutable payload can never alias the
+document, `Empty` / `Count` / `Names` / `Contains` / `Get` / `TryGet` /
+`With` (add-or-replace, last write wins for spelling) / `Without`
+(idempotent; the same instance on a miss), and the trio — the collection is
+itself an `IJsonDocument<TSelf>`. Reference equality, deliberately: the
+type wraps a map of snapshots, and payload equality is not something the
+contract promises.
+
+**The fork, settled: a self-typed base the specializations derive from,
+not a value they wrap.** `TSelf` is the sealed specialization deriving with
+itself as the argument, so `With` and `Without` return the specialization
+and the trio is typed to it — `NamedFilterCollection.With` keeps returning
+`NamedFilterCollection`, and `Empty`, `FromJson`, `TryFromJson` and
+`CurrentSchemaVersion` resolve through the specialization's name with no
+forwarding. The wrapping alternative (a sealed `NamedCollection<TValue>`
+value with the specialization forwarding every member and hand-writing its
+trio) lost because it restates per specialization exactly the boilerplate
+the arc exists to remove: ten forwarders plus a third and fourth copy of
+the trio, with the generic value unable to implement the trio at all
+(it has no wire names). Neither shape adds a dependency to this library.
+A base class cannot declare `static abstract` members, so the two static
+things the machinery cannot know — how to make an instance, where the
+serializer finds its metadata — live on `INamedCollectionSpecialization<TValue, TSelf>`,
+which the specialization lists beside the base and implements explicitly:
+`Create(Entries)` forwards to its private constructor, `CanonicalTypeInfo`
+returns its own context's metadata. `Entries` is the base's public nested
+type with an internal constructor: a specialization's factory can only
+ever receive an entry set the base built, so neither a caller nor a
+specialization can bypass the name rule or the snapshot contract. The
+self-type is a convention the compiler cannot fully enforce (a type
+deriving with another specialization as `TSelf` fails at runtime on first
+use with `InvalidCastException`); it is the standard CRTP cost, stated on
+the type parameter.
+
+**The wire identity is the specialization's, not the generic's.** The
+envelope is `{"schemaVersion":1,"<entries>":[{"name":…,"<value>":{…}}]}`
+with `<entries>` and `<value>` supplied by the specialization's closed
+converter — `filters` and `config` for the saved-filter document, so
+`xg-filters.json` files on disk read unchanged. `NamedCollectionJsonConverter<TValue, TSelf>`
+is abstract with a protected two-name constructor (names validated:
+non-blank, trimmed, not colliding with `schemaVersion` / `name`); a
+specialization closes it as a sealed public class with a parameterless
+constructor passing its names, and names that closed type in its
+type-level `[JsonConverter]`. The envelope is strict and fail-loud (version
+other than 1 — a newer one distinguished in its message — missing required
+property, unknown property at top or entry level, invalid or duplicate
+name), order-tolerant on read at both levels, and each entry body goes
+verbatim to `TValue.FromJson`, so the payload's tolerance is the envelope's
+tolerance; a body the payload rejects fails the whole file with the entry
+named. Reads route through `With`, so the wire-level name rule and the
+in-memory one have one definition. No reflection-based generic
+instantiation exists on either path: no `MakeGenericType`, no converter
+factory — the source generator instantiates the closed converter from the
+consumer's generated code, which is why the pattern is closed (see
+Pitfalls).
 
 ### Mop layout
 
@@ -1025,6 +1094,57 @@ public static class CanonicalJson
     public static bool TryParse<T>(string? json, JsonTypeInfo<T> typeInfo, T fallback, out T document)
         where T : IJsonDocument<T>;                   // fallback non-null; only JsonException absorbed
 }
+
+// The immutable named collection over any IJsonDocument payload. A sealed
+// specialization derives with itself as TSelf (see the pattern under
+// INamedCollectionSpecialization); no specialization lives in this library.
+public abstract class NamedCollection<TValue, TSelf> : IJsonDocument<TSelf>
+    where TValue : IJsonDocument<TValue>
+    where TSelf : NamedCollection<TValue, TSelf>, INamedCollectionSpecialization<TValue, TSelf>
+{
+    public const int CurrentSchemaVersion = 1;        // the envelope's; reads reject any other
+    public static TSelf Empty { get; }                // one instance per specialization
+    protected NamedCollection(Entries entries);       // the only construction path
+
+    public int Count { get; }
+    public IReadOnlyList<string> Names { get; }       // canonical (name-sorted) order
+    public bool Contains(string name);                // name rule: OrdinalIgnoreCase
+    public TValue Get(string name);                   // fresh snapshot; KeyNotFoundException on a miss
+    public bool TryGet(string name, [MaybeNullWhen(false)] out TValue value);
+    public TSelf With(string name, TValue value);     // add-or-replace; snapshots; new spelling wins;
+                                                      // blank / untrimmed name -> ArgumentException
+    public TSelf Without(string name);                // idempotent; same instance on a miss
+
+    public string ToJson();                           // the trio, resolved through
+    public static TSelf FromJson(string json);        // TSelf.CanonicalTypeInfo — never reflection
+    public static bool TryFromJson(string? json, out TSelf collection);   // Empty on failure
+
+    public sealed class Entries { /* internal ctor — built only by the base */ }
+}
+
+// The static half of a specialization; implemented explicitly.
+public interface INamedCollectionSpecialization<TValue, TSelf>
+    where TValue : IJsonDocument<TValue>
+    where TSelf : NamedCollection<TValue, TSelf>, INamedCollectionSpecialization<TValue, TSelf>
+{
+    static abstract TSelf Create(NamedCollection<TValue, TSelf>.Entries entries);
+    static abstract JsonTypeInfo<TSelf> CanonicalTypeInfo { get; }
+}
+
+// The strict envelope. Abstract: each specialization closes it as a sealed
+// public parameterless class passing its two wire names, and names that
+// closed type in its [JsonConverter].
+public abstract class NamedCollectionJsonConverter<TValue, TSelf> : JsonConverter<TSelf>
+    where TValue : IJsonDocument<TValue>
+    where TSelf : NamedCollection<TValue, TSelf>, INamedCollectionSpecialization<TValue, TSelf>
+{
+    protected NamedCollectionJsonConverter(string entriesPropertyName, string valuePropertyName);
+                                                      // non-blank, trimmed, not "schemaVersion" / "name"
+    public string EntriesPropertyName { get; }        // "filters" for the saved-filter document
+    public string ValuePropertyName { get; }          // "config" for the saved-filter document
+    public override TSelf? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options);
+    public override void Write(Utf8JsonWriter writer, TSelf value, JsonSerializerOptions options);
+}
 ```
 
 Serialization contract: round-trips cleanly through `System.Text.Json` —
@@ -1037,6 +1157,9 @@ no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
 the property-name overloads, so it also works as a dictionary key). Tested
 without any options-level registration in `BgDecisionDataSerializationTests`,
 `DecisionRowSerializationTests`, `DiceRollTests`, and `ProblemKeyTests`.
+A `NamedCollection` specialization bundles its own closed
+`NamedCollectionJsonConverter` the same way, in its own repo; this library
+ships the abstract converter and no closed one.
 
 `BgDataTypesJsonContext` is the source-generated `JsonSerializerContext`
 over this wire surface, byte-identical to the reflection path and chained
@@ -1367,6 +1490,34 @@ measure" is not a valid comparison on this hardware.
   `IsMoneyGame && IsJacoby == true && CubeOwner == Centered` (or worse, a
   near-miss like `IsJacoby != false`, which admits the unknown-rule record)
   in a consumer creates a second source of the ruling.
+- **A `NamedCollection` specialization is a closed pattern, and every part
+  of it is load-bearing.** The shape (the saved-filter document of
+  halheinrich/backgammon#190 leg (B) and the queued mix document follow it):
+  a `sealed` class deriving `NamedCollection<TPayload, TSelf>` *with itself
+  as `TSelf`* and listing `INamedCollectionSpecialization<TPayload, TSelf>`;
+  a private constructor forwarding `Entries` to the base and nothing else;
+  `Create` and `CanonicalTypeInfo` implemented explicitly, the latter
+  returning the specialization's entry in *its own repo's* source-generated
+  context, where it is declared as a `[JsonSerializable]` root; a
+  `sealed`, `public`, parameterless converter class deriving
+  `NamedCollectionJsonConverter<TPayload, TSelf>` and passing the two wire
+  names; and a type-level `[JsonConverter]` naming that closed converter.
+  What breaks if a part is skipped: an open or generic converter type
+  cannot be named by an attribute, and a converter without a public
+  parameterless constructor, or an internal one, fails every downstream
+  context that embeds the document with SYSLIB1220 then SYSLIB1030 — the
+  generator emits `new TheConverter()` into the consumer's assembly and
+  silently drops the type when it cannot. A converter *factory* activating
+  a closed converter at runtime is the reflection path the pattern exists
+  to avoid and the trim analyzer here rejects. A specialization deriving
+  with a *different* specialization as `TSelf` compiles and fails at
+  runtime (`InvalidCastException`) on first `ToJson` or `Without`. The two
+  wire names are the specialization's identity: changing them is a file
+  migration, not a refactor — the saved-filter document's are `filters` and
+  `config`, fixed by every `xg-filters.json` on users' disks. The base's
+  `Get` / `TryGet` are the generic names; a specialization that keeps a
+  domain spelling for its callers (`GetConfig`) adds it as a forward, not a
+  reimplementation.
 
 ## Subproject-internal next steps
 
