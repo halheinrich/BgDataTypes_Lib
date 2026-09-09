@@ -35,7 +35,7 @@ Three projects under `BgDataTypes_Lib.slnx`, governed by repo-root
 and `Directory.Packages.props` (Central Package Management — no inline
 `Version=` anywhere).
 
-**`BgDataTypes_Lib/`** — the library. Six areas, one file per type:
+**`BgDataTypes_Lib/`** — the library. Seven areas, one file per type:
 
 - **The decision record and its categories** — `BgDecisionData`, the
   composite every consumer passes around, plus the four orthogonal category
@@ -74,6 +74,13 @@ and `Directory.Packages.props` (Central Package Management — no inline
   converter fails that generator outright (SYSLIB1220).
   `BgDataTypesJsonContext` is the source-generated context over the whole
   wire surface — see "Source generation & trimming" below.
+- **Named-document machinery** (halheinrich/backgammon#190) —
+  `IJsonDocument<TSelf>`, the persistence-trio contract every persisted
+  document type implements (fail-loud `FromJson`, always-usable
+  `TryFromJson`, canonical `ToJson`), and `CanonicalJson`, the shared bodies
+  of its two readers. No implementer lives in this library; the payloads
+  (`FilterConfig`, `QuizMix`) and the named collections over them are
+  downstream. See "Named documents" below.
 
 **`BgDataTypes_Lib.Benchmarks/`** — BenchmarkDotNet harness, an executable
 (`OutputType=Exe`) excluded from `dotnet test` by `IsTestProject=false`.
@@ -630,6 +637,33 @@ mirrored wholesale from a producer. They carry no JSON contract (nothing
 serializes an `IMatchInfo`); they are purely the shape a consumer needs
 to decide "skip this match / skip this game".
 
+### Named documents: the persistence trio
+
+`IJsonDocument<TSelf>` (halheinrich/backgammon#190 leg (A)) is the contract
+behind what `FilterConfig` (XgFilter_Lib) and `QuizMix` (BgGame_Lib) each
+hand-wrote and cross-referenced as "the persistence trio": a `static
+abstract` fail-loud `FromJson` (`ArgumentNullException` on a null string,
+`ArgumentException` on the literal `null` token, `JsonException` on a
+contract violation), a `static abstract` `TryFromJson` that absorbs exactly
+those three failures and yields the type's inert default so its out is
+always usable, and an instance `ToJson` writing the canonical form. Generic
+over the implementer (`TSelf`), so a container can call the trio on a type
+parameter — the way `INumber<TSelf>` exposes `Parse`. The two payloads are
+its first implementers (legs (B) and (C)); this library ships the contract
+and no implementer of its own.
+
+`CanonicalJson` is where the two readers' bodies live: `Parse<T>` and
+`TryParse<T>` take the type's `JsonTypeInfo<T>` and encode the exception
+taxonomy and the absorb-only-`JsonException` rule once. An implementer's
+`FromJson` / `TryFromJson` are one-line forwards passing its own
+source-generated metadata; `ToJson` is the serializer call against the same
+metadata and needs no helper. Nothing here touches the reflection-bound
+`JsonSerializer` overloads, so the trio is trim-safe from any context that
+declares the implementer. The pattern an implementer follows: a type-level
+`[JsonConverter]` where the wire form is hand-written (public, per the
+composition rules above), metadata from its repo's context, the trio
+forwarding to `CanonicalJson`.
+
 ### Mop layout
 
 26-element `IReadOnlyList<int>` from the on-roll player's perspective:
@@ -968,6 +1002,28 @@ public sealed class ProblemKey :
     public static bool operator ==(ProblemKey? left, ProblemKey? right);
     public static bool operator !=(ProblemKey? left, ProblemKey? right);
     public int CompareTo(ProblemKey? other);      // ordinal; any key > null
+}
+
+// The persistence trio as a contract (halheinrich/backgammon#190). Implemented
+// downstream by FilterConfig and QuizMix; no implementer in this library.
+public interface IJsonDocument<TSelf> where TSelf : IJsonDocument<TSelf>?
+{
+    static abstract TSelf FromJson(string json);      // ArgumentNullException / ArgumentException
+                                                      // (null token) / JsonException
+    static abstract bool TryFromJson(string? json, out TSelf document);
+                                                      // absorbs exactly those three; out is
+                                                      // always usable (the inert default)
+    string ToJson();                                  // the canonical form
+}
+
+// The two readers' shared bodies; an implementer forwards with its own
+// source-generated JsonTypeInfo<T>. The writer is the plain serializer call.
+public static class CanonicalJson
+{
+    public static T Parse<T>(string json, JsonTypeInfo<T> typeInfo)
+        where T : IJsonDocument<T>;
+    public static bool TryParse<T>(string? json, JsonTypeInfo<T> typeInfo, T fallback, out T document)
+        where T : IJsonDocument<T>;                   // fallback non-null; only JsonException absorbed
 }
 ```
 
