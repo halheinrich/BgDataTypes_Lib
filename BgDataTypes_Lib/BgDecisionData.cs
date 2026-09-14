@@ -59,14 +59,21 @@ public class BgDecisionData : IDecisionFilterData
     /// </summary>
     public string Xgid { get; init; } = string.Empty;
 
-    // The two guarded halves read each other through null-tolerant patterns:
-    // a null half is not rejected here (ProblemKey's no-key rung degrades on
-    // it by ruling — "never throws on bad facts"), so the guard must not be
-    // the thing that dereferences it.
+    // Both halves keep their non-nullable declaration honest: an explicit
+    // null — an initializer's, or a JSON document's `"Position":null` — is
+    // rejected at init (halheinrich/backgammon#221), while an absent half
+    // stays at its `new()` default. So the Crawford guard below reads the
+    // other half directly; it is never null.
 
     /// <summary>
     /// Board, score context and cube state at the moment of the decision.
     /// </summary>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown on init when the value is <see langword="null"/> — the member
+    /// is declared non-nullable and keeps it; a JSON <c>null</c> for it is
+    /// a malformed document, not a record without a position
+    /// (halheinrich/backgammon#221).
+    /// </exception>
     /// <exception cref="ArgumentException">
     /// Thrown on init when the incoming position is Crawford and the
     /// already-set <see cref="Decision"/> is a cube decision — the Crawford
@@ -78,8 +85,8 @@ public class BgDecisionData : IDecisionFilterData
         get => _position;
         init
         {
-            CrawfordRule.ThrowIfCrawfordCube(
-                value is { IsCrawford: true }, _decision is { IsCube: true }, nameof(Position));
+            ArgumentNullException.ThrowIfNull(value, nameof(Position));
+            CrawfordRule.ThrowIfCrawfordCube(value.IsCrawford, _decision.IsCube, nameof(Position));
             _position = value;
         }
     }
@@ -88,6 +95,12 @@ public class BgDecisionData : IDecisionFilterData
     /// The analysis and how the user's choice scored — see
     /// <see cref="DecisionData"/>.
     /// </summary>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown on init when the value is <see langword="null"/> — the member
+    /// is declared non-nullable and keeps it; a JSON <c>null</c> for it is
+    /// a malformed document, not a record without a decision
+    /// (halheinrich/backgammon#221).
+    /// </exception>
     /// <exception cref="ArgumentException">
     /// Thrown on init when the incoming decision is a cube decision and the
     /// already-set <see cref="Position"/> is Crawford — the Crawford rule,
@@ -99,8 +112,8 @@ public class BgDecisionData : IDecisionFilterData
         get => _decision;
         init
         {
-            CrawfordRule.ThrowIfCrawfordCube(
-                _position is { IsCrawford: true }, value is { IsCube: true }, nameof(Decision));
+            ArgumentNullException.ThrowIfNull(value, nameof(Decision));
+            CrawfordRule.ThrowIfCrawfordCube(_position.IsCrawford, value.IsCube, nameof(Decision));
             _decision = value;
         }
     }

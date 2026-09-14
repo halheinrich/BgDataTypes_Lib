@@ -625,25 +625,6 @@ public class ProblemKeyTests
         AssertNoKey(CubeDecision(cubeOwner: (CubeOwner)99));
     }
 
-    [Fact]
-    public void NoKey_NullCategoryMembers()
-    {
-        // Lenient JSON input can null the category members through init.
-        var template = PlayDecision();
-        AssertNoKey(new BgDecisionData
-        {
-            Id = template.Id,
-            Position = null!,
-            Decision = template.Decision,
-        });
-        AssertNoKey(new BgDecisionData
-        {
-            Id = template.Id,
-            Position = template.Position,
-            Decision = null!,
-        });
-    }
-
     // -----------------------------------------------------------------------
     //  The Jacoby fact — money-only identity (SPEC-stats-identity.md §1/§2,
     //  amended 2026-08-20, halheinrich/backgammon#120)

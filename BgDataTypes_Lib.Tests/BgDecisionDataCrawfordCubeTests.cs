@@ -164,30 +164,4 @@ public class BgDecisionDataCrawfordCubeTests
 
         Assert.NotEqual(restored.IsCrawford, restored.IsCube);
     }
-
-    // ---------------------------------------------------------------------
-    //  A null half is not this guard's business — ProblemKey's no-key rung
-    //  degrades on it by ruling — so the guard must not be what
-    //  dereferences it, in either order
-    // ---------------------------------------------------------------------
-
-    [Fact]
-    public void NullHalf_DoesNotTripTheGuard_InEitherOrder()
-    {
-        var crawfordThenNull = new BgDecisionData
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Position = Crawford(),
-            Decision = null!,
-        };
-        var nullThenCube = new BgDecisionData
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Position = null!,
-            Decision = Cube(),
-        };
-
-        Assert.Null(crawfordThenNull.Decision);
-        Assert.Null(nullThenCube.Position);
-    }
 }

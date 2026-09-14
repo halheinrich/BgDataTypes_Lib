@@ -199,10 +199,8 @@ public sealed class ProblemKey :
         ArgumentNullException.ThrowIfNull(data);
         key = null;
 
-        // Category members are declared non-nullable, but lenient JSON input
-        // can null them through init — a malformed record, so no key.
-        if (data.Position is not { } position || data.Decision is not { } decision)
-            return false;
+        var position = data.Position;
+        var decision = data.Decision;
 
         DiceRoll? dice = null;
         if (!decision.IsCube)

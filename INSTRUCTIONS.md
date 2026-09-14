@@ -571,9 +571,14 @@ member order and for a JSON document in either property order, since
 `System.Text.Json` populates init setters (the `UserDoublerAction`
 half-guard precedent; a half-set record never throws, both defaults being
 "not cube, not Crawford"). `CrawfordRule` is the one spelling of the rule
-and of the throw, shared with `DecisionRow`; a null half is not the guard's
-business — `ProblemKey`'s no-key rung degrades on one by ruling, so the
-guards read both halves through null-tolerant patterns. The alternative —
+and of the throw, shared with `DecisionRow`. An explicit null half — an
+initializer's, or a JSON `"Position":null` — throws `ArgumentNullException`
+at init, while an absent one stays at its default on the reflection path
+(`halheinrich/backgammon#221`); the halves keep their non-nullable
+declaration, so the guards read each other directly. Through the
+source-generated context an absent half throws the same way, because the
+generated creator passes an absent init-only member as `default` — see
+Pitfalls. The alternative —
 `IJsonOnDeserialized` plus an explicit check at the converter's build seam —
 was rejected because it guards the wire and one factory and leaves object
 initializers open: a future producer using an initializer would fail only
@@ -1311,6 +1316,28 @@ measure" is not a valid comparison on this hardware.
   a cube. The row's guards are order-independent only together with
   `Roll`'s backing field; `DecisionRow.Roll`'s doc comment owns why, so
   read it before touching either setter.
+- **`BgDecisionData.Position` and `Decision` reject null at init; absent
+  is not null** (`halheinrich/backgammon#221`). An explicit null — from an
+  initializer or a JSON `"Position":null` — throws `ArgumentNullException`
+  naming the member, through the reflection path and the context alike;
+  a document that omits the half loads with the half at its default on
+  the reflection path. There is no `ProblemKey` no-key rung for a null
+  half any more: the record cannot exist, so a test or reader must not
+  expect degrade-to-no-key there.
+- **Through the source-generated context, an absent init-only member
+  reads as `default`, not as its initializer.** The generated creator for
+  every init-only type in the wire graph is one object initializer over an
+  argument array (`ObjectWithParameterizedConstructorCreator`), and a
+  member the document omits arrives as `default(T)`: `{"Id":"x"}` through
+  `BgDataTypesJsonContext` yields a null `Position`, `Decision`,
+  `Descriptive`, `Outcome` and `Xgid`, where the reflection path keeps
+  every `= new()` / `= string.Empty` initializer (measured 2026-09-14,
+  `BgDecisionDataNullHalfTests`). The two halves now throw
+  `ArgumentNullException` there instead of loading silently null. No
+  producer omits a member — every document is a full record written by
+  the serializer — so the divergence is latent, but a hand-written or
+  trimmed document is not a partial record through the context; it is a
+  malformed one.
 - **A money record with `IsJacoby == null` has no `ProblemKey`, silently.**
   `PositionData.IsJacoby` is not `required` — it cannot be, since match
   records legitimately carry `null` — so the omission compiles, constructs,
