@@ -24,7 +24,7 @@ public class ProblemKeyTests
     private const string PinnedCrawfordPlayKey = StandardBoardToken + "/1a3cr/1c/52";
 
     // Money keys carry the v3 Jacoby suffix; both values are spelled, so the
-    // v2 money spelling below is simply not in the grammar (#120).
+    // v2 money spelling below is simply not in the grammar (halheinrich/backgammon#120).
     private const string PinnedMoneyPlayKeyJacoby = StandardBoardToken + "/0a0j/1c/31";
     private const string PinnedMoneyPlayKeyNoJacoby = StandardBoardToken + "/0a0nj/1c/31";
     private const string PinnedMoneyCubeKey = StandardBoardToken + "/0a0j/2o";
