@@ -1,12 +1,32 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
 /// <summary>
 /// A single analysed checker-play or cube decision, ready for CSV/JSON export.
+///
+/// <para>
+/// <b>The Crawford rule binds the row</b> (halheinrich/backgammon#201).
+/// Doubling is prohibited in the Crawford game, so a cube decision
+/// (<see cref="Roll"/> of 0) flagged <see cref="IsCrawford"/> cannot exist,
+/// and the row cannot be constructed: the <see cref="Roll"/> and
+/// <see cref="IsCrawford"/> init setters each check the other, so whichever
+/// is set second throws <see cref="ArgumentException"/> naming itself —
+/// from an object initializer in either member order and from a JSON
+/// document in either property order alike. Cube is the row's
+/// <em>default</em> kind, which is why <see cref="Roll"/> is
+/// <c>required</c> and why its guard distinguishes a not-yet-stated roll
+/// from a stated 0 — see <see cref="Roll"/>. The same rule on the composite
+/// record is <see cref="BgDecisionData"/>; <see cref="CrawfordRule"/> is
+/// the one spelling of both.
+/// </para>
 /// </summary>
 public sealed class DecisionRow : IDecisionFilterData
 {
+    // Null until Roll is stated — Roll's doc comment owns the why.
+    private readonly int? _roll;
+    private readonly bool _isCrawford;
+
     /// <summary>
     /// Stable, persistent identifier for this decision within its source file.
     /// Producer-supplied at the build site (see <c>ConvertXgToJson_Lib</c>) —
@@ -55,8 +75,44 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <summary>True if the game started from the canonical opening position.</summary>
     public bool IsStandardStart { get; init; }
 
-    /// <summary>Dice roll as a two-digit integer, e.g. 63, 11. 0 for cube decisions.</summary>
-    public int Roll { get; init; }
+    /// <summary>
+    /// Dice roll as a two-digit integer, e.g. 63, 11. 0 for cube decisions.
+    /// The row's decision-kind discriminator (<see cref="IsCube"/> reads it),
+    /// and <c>required</c> because the kind must be stated, never defaulted:
+    /// with 0 — a cube — as the default, a row that set
+    /// <see cref="IsCrawford"/> and omitted the roll would be a Crawford cube
+    /// by accident, and no guard could tell "not yet stated" from "cube".
+    /// Every construction therefore names it, and a JSON document without
+    /// it is refused (<see cref="System.Text.Json.JsonException"/>) rather
+    /// than read as a cube.
+    /// </summary>
+    /// <remarks>
+    /// The one place the sentinel is explained. The property is backed by a
+    /// nullable field whose null means "not yet stated", and the
+    /// <see cref="IsCrawford"/> guard reads that field rather than this
+    /// property: in the legal initializer order
+    /// <c>{ IsCrawford = true, Roll = 31 }</c> the <see cref="IsCrawford"/>
+    /// setter runs while the roll is still unstated, and a plain
+    /// <see langword="int"/> field would hand it a 0 — a cube — and throw
+    /// on a legal Crawford play. <c>required</c> guarantees the null never
+    /// survives construction, so this setter always runs, sees every stated
+    /// 0, and carries the guard for that order; the two guards are
+    /// order-independent only together with the sentinel.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when the value is 0 and the already-set
+    /// <see cref="IsCrawford"/> is <see langword="true"/> — the Crawford
+    /// rule, see the class summary.
+    /// </exception>
+    public required int Roll
+    {
+        get => _roll ?? 0;
+        init
+        {
+            CrawfordRule.ThrowIfCrawfordCube(_isCrawford, value == 0, nameof(Roll));
+            _roll = value;
+        }
+    }
 
     /// <summary>
     /// <see cref="Roll"/> in canonical unordered form
@@ -108,7 +164,22 @@ public sealed class DecisionRow : IDecisionFilterData
     public int OpponentNeeds { get; init; }
 
     /// <summary>True if this is the Crawford game.</summary>
-    public bool IsCrawford { get; init; }
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when the value is <see langword="true"/> and
+    /// <see cref="Roll"/> has already been stated as 0 — the Crawford rule,
+    /// see the class summary. A roll not yet stated does not trip it: the
+    /// <see cref="Roll"/> setter, which <c>required</c> guarantees will run,
+    /// carries the guard for that order.
+    /// </exception>
+    public bool IsCrawford
+    {
+        get => _isCrawford;
+        init
+        {
+            CrawfordRule.ThrowIfCrawfordCube(value, _roll == 0, nameof(IsCrawford));
+            _isCrawford = value;
+        }
+    }
 
     /// <summary>
     /// Whether the Jacoby rule was in force

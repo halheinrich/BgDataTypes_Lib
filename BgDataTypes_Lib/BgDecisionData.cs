@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
@@ -14,9 +14,32 @@ namespace BgDataTypes_Lib;
 /// category members; that view is a read-side derivation and is excluded
 /// from JSON — the category members are the wire form
 /// (halheinrich/backgammon#14).
+///
+/// <para>
+/// <b>The Crawford rule binds the record</b> (halheinrich/backgammon#201).
+/// Doubling is prohibited in the Crawford game, so a cube decision
+/// (<see cref="DecisionData.IsCube"/>) in a Crawford position
+/// (<see cref="PositionData.IsCrawford"/>) cannot exist, and the record
+/// cannot be constructed: the <see cref="Position"/> and
+/// <see cref="Decision"/> init setters each check the other half, so
+/// whichever is set second throws <see cref="ArgumentException"/> naming
+/// itself — from an object initializer in either member order and from a
+/// JSON document in either property order alike, since
+/// <c>System.Text.Json</c> populates init setters. A half-set record never
+/// throws: both defaults are "not cube, not Crawford".
+/// <see cref="ProblemKey"/>'s grammar still accepts a Crawford cube key,
+/// because stats documents written before this guard hold such keys and
+/// must keep loading; those keys are inert rather than orphaned — stats are
+/// looked up per pooled problem (<c>BgGame_Lib</c>'s
+/// <c>MixedProblemSetSource</c>), and nothing but the document writer's
+/// ordering walks the whole document.
+/// </para>
 /// </summary>
 public class BgDecisionData : IDecisionFilterData
 {
+    private readonly PositionData _position = new();
+    private readonly DecisionData _decision = new();
+
     /// <summary>
     /// Stable, persistent identifier for this decision within its source file.
     /// Producer-supplied at the build site (see <c>ConvertXgToJson_Lib</c>) —
@@ -36,11 +59,51 @@ public class BgDecisionData : IDecisionFilterData
     /// </summary>
     public string Xgid { get; init; } = string.Empty;
 
-    /// <summary>Board, score context and cube state at the moment of the decision.</summary>
-    public PositionData    Position    { get; init; } = new();
+    // The two guarded halves read each other through null-tolerant patterns:
+    // a null half is not rejected here (ProblemKey's no-key rung degrades on
+    // it by ruling — "never throws on bad facts"), so the guard must not be
+    // the thing that dereferences it.
 
-    /// <summary>The analysis and how the user's choice scored — see <see cref="DecisionData"/>.</summary>
-    public DecisionData    Decision    { get; init; } = new();
+    /// <summary>
+    /// Board, score context and cube state at the moment of the decision.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when the incoming position is Crawford and the
+    /// already-set <see cref="Decision"/> is a cube decision — the Crawford
+    /// rule, see the class summary (<see cref="CrawfordRule"/> is the one
+    /// spelling of the rule).
+    /// </exception>
+    public PositionData Position
+    {
+        get => _position;
+        init
+        {
+            CrawfordRule.ThrowIfCrawfordCube(
+                value is { IsCrawford: true }, _decision is { IsCube: true }, nameof(Position));
+            _position = value;
+        }
+    }
+
+    /// <summary>
+    /// The analysis and how the user's choice scored — see
+    /// <see cref="DecisionData"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when the incoming decision is a cube decision and the
+    /// already-set <see cref="Position"/> is Crawford — the Crawford rule,
+    /// see the class summary (<see cref="CrawfordRule"/> is the one spelling
+    /// of the rule).
+    /// </exception>
+    public DecisionData Decision
+    {
+        get => _decision;
+        init
+        {
+            CrawfordRule.ThrowIfCrawfordCube(
+                _position is { IsCrawford: true }, value is { IsCube: true }, nameof(Decision));
+            _decision = value;
+        }
+    }
 
     /// <summary>Provenance and metadata: players, source file, position within the match.</summary>
     public DescriptiveData Descriptive { get; init; } = new();

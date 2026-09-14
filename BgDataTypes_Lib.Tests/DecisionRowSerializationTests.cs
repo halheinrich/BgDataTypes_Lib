@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
@@ -73,8 +73,7 @@ public class DecisionRowSerializationTests
             AnalysisDepth = "Rollout: 1296 trials. 3-ply",
             MatchLength = 9,
             OnRollNeeds = 1,
-            OpponentNeeds = 1,
-            IsCrawford = true
+            OpponentNeeds = 1
         };
 
         var json = JsonSerializer.Serialize(original, Options);
@@ -84,13 +83,37 @@ public class DecisionRowSerializationTests
         Assert.True(restored.IsCube);
         Assert.Equal(original.Equity, restored.Equity);
         Assert.Equal(original.AnalysisDepth, restored.AnalysisDepth);
+        Assert.False(restored.IsCrawford);
+    }
+
+    [Fact]
+    public void DecisionRow_RoundTrip_IsCrawford()
+    {
+        // The flag's true round trip rides a Crawford checker play: a
+        // Crawford cube cannot be constructed (DecisionRowCrawfordCubeTests),
+        // so the cube round trip above is a post-Crawford 1-away/1-away game.
+        var original = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Roll = 52,
+            MatchLength = 9,
+            OnRollNeeds = 1,
+            OpponentNeeds = 3,
+            IsCrawford = true
+        };
+
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+
         Assert.True(restored.IsCrawford);
+        Assert.False(restored.IsCube);
+        Assert.Equal("1a3aC", restored.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_RoundTrip_StringDefaults()
     {
-        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31 };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
@@ -106,7 +129,7 @@ public class DecisionRowSerializationTests
         var board = new int[26];
         board[1] = 2; board[6] = -5; board[24] = -2; board[25] = 1;
 
-        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Board = board };
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, Board = board };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
@@ -116,7 +139,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_RoundTrip_MatchScoreNotSerialized()
     {
-        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5 };
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5 };
         var json = JsonSerializer.Serialize(original, Options);
 
         Assert.DoesNotContain("MatchScore", json);
@@ -135,6 +158,7 @@ public class DecisionRowSerializationTests
         var original = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             AnalysisDepth = "XG Roller++",
             AnalysisMode = AnalysisMode.Evaluation,
             AnalysisLevel = AnalysisLevel.XgRollerPlusPlus
@@ -153,7 +177,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_AnalysisModeAndLevel_DefaultToUnknown()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31 };
         Assert.Equal(AnalysisMode.Unknown, row.AnalysisMode);
         Assert.Equal(AnalysisLevel.Unknown, row.AnalysisLevel);
     }
@@ -179,6 +203,7 @@ public class DecisionRowSerializationTests
         var row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             AnalysisDepth = "3-ply",
             AnalysisMode = AnalysisMode.Evaluation,
             AnalysisLevel = AnalysisLevel.Ply3
@@ -196,6 +221,7 @@ public class DecisionRowSerializationTests
         IDecisionFilterData row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             AnalysisMode = AnalysisMode.BookRollout,
             AnalysisLevel = AnalysisLevel.XgRoller
         };
@@ -211,7 +237,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsMoneyGame_MoneyRow()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0 };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0 };
 
         Assert.True(row.IsMoneyGame);
         // IsJacoby unset, so the bare (rule-unknown) money token.
@@ -222,7 +248,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_IsMoneyGame_OnePointMatch()
     {
         // The shortest possible match — the boundary case next to money's 0.
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 1, OnRollNeeds = 1, OpponentNeeds = 1 };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 1, OnRollNeeds = 1, OpponentNeeds = 1 };
 
         Assert.False(row.IsMoneyGame);
         Assert.Equal("1a1a", row.MatchScore);
@@ -231,7 +257,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsMoneyGame_StandardMatch()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5 };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5 };
 
         Assert.False(row.IsMoneyGame);
         Assert.Equal("3a5a", row.MatchScore);
@@ -240,7 +266,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire()
     {
-        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0 };
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 0 };
         var json = JsonSerializer.Serialize(original, Options);
 
         Assert.DoesNotContain("IsMoneyGame", json);
@@ -253,7 +279,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsMoneyGame_NotInCsvOutput()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0 };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 0 };
 
         Assert.DoesNotContain("IsMoneyGame", DecisionRow.CsvHeader);
         // Column count unchanged: 11 columns → 10 commas.
@@ -263,8 +289,8 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IDecisionFilterData_IsMoneyGame()
     {
-        IDecisionFilterData money = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0 };
-        IDecisionFilterData match = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9 };
+        IDecisionFilterData money = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 0 };
+        IDecisionFilterData match = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 9 };
 
         Assert.True(money.IsMoneyGame);
         Assert.False(match.IsMoneyGame);
@@ -278,21 +304,21 @@ public class DecisionRowSerializationTests
     public void DecisionRow_MatchScore_Money_JacobyUnknown()
     {
         // No IsJacoby stamp — the bare token, which is neither moneyJ nor moneyNJ.
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0 };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0 };
         Assert.Equal("money", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Money_Jacoby()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0, IsJacoby = true };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0, IsJacoby = true };
         Assert.Equal("moneyJ", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Money_NoJacoby()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0, IsJacoby = false };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 0, OnRollNeeds = 0, OpponentNeeds = 0, IsJacoby = false };
         Assert.Equal("moneyNJ", row.MatchScore);
     }
 
@@ -307,6 +333,7 @@ public class DecisionRowSerializationTests
         var row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             MatchLength = 9,
             OnRollNeeds = 3,
             OpponentNeeds = 5,
@@ -318,14 +345,14 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_MatchScore_Standard()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5 };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5 };
         Assert.Equal("3a5a", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Crawford()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9, OnRollNeeds = 1, OpponentNeeds = 1, IsCrawford = true };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 9, OnRollNeeds = 1, OpponentNeeds = 1, IsCrawford = true };
         Assert.Equal("1a1aC", row.MatchScore);
     }
 
@@ -344,7 +371,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_EscapesCommas()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5, Player = "Last, First" };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 9, OnRollNeeds = 3, OpponentNeeds = 5, Player = "Last, First" };
         var line = row.ToCsvLine();
         Assert.Contains("\"Last, First\"", line);
     }
@@ -352,7 +379,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_EscapesQuotes()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Player = "say \"hello\"" };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, Player = "say \"hello\"" };
         var line = row.ToCsvLine();
         Assert.Contains("\"say \"\"hello\"\"\"", line);
     }
@@ -360,7 +387,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_DoublesFormattedG6()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Error = 0.12345678, Equity = -0.98765432 };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, Error = 0.12345678, Equity = -0.98765432 };
         var line = row.ToCsvLine();
         Assert.Contains("0.123457", line);
         Assert.Contains("-0.987654", line);
@@ -372,6 +399,7 @@ public class DecisionRowSerializationTests
         var row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             Board = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]
         };
         var line = row.ToCsvLine();
@@ -385,14 +413,14 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_SourceFile_DefaultsToNull()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31 };
         Assert.Null(row.SourceFile);
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_EmptyCellWhenNull()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Player = "Mochy", SourceFile = null };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, Player = "Mochy", SourceFile = null };
         var line = row.ToCsvLine();
 
         // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Roll,AnalysisDepth,Equity
@@ -405,7 +433,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_PlainFilename()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), SourceFile = "mochy-falafel.xg" };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, SourceFile = "mochy-falafel.xg" };
         var line = row.ToCsvLine();
         Assert.Contains(",mochy-falafel.xg,", line);
     }
@@ -413,7 +441,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_FilenameWithSpaces_Unquoted()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), SourceFile = "Mochy vs Falafel.xgp" };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, SourceFile = "Mochy vs Falafel.xgp" };
         var line = row.ToCsvLine();
         // RFC 4180 does not require quoting on spaces; value passes through literally.
         Assert.Contains(",Mochy vs Falafel.xgp,", line);
@@ -422,7 +450,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_FilenameWithComma_Quoted()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), SourceFile = "file,with,commas.xg" };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, SourceFile = "file,with,commas.xg" };
         var line = row.ToCsvLine();
         Assert.Contains("\"file,with,commas.xg\"", line);
     }
@@ -430,7 +458,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_RoundTrip_SourceFile()
     {
-        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), SourceFile = "mochy-falafel.xg" };
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, SourceFile = "mochy-falafel.xg" };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
         Assert.Equal("mochy-falafel.xg", restored.SourceFile);
@@ -475,19 +503,37 @@ public class DecisionRowSerializationTests
             MatchLength = 9,
             OnRollNeeds = 1,
             OpponentNeeds = 1,
-            IsCrawford = true,
             Error = 0.011
         };
 
         Assert.True(row.IsCube);
-        Assert.True(row.IsCrawford);
+        Assert.False(row.IsCrawford);
         Assert.Equal(0.011, row.FilterError);
+    }
+
+    [Fact]
+    public void DecisionRow_IDecisionFilterData_IsCrawford_Forwards()
+    {
+        // The flag forwards from a record that can exist — a Crawford
+        // checker play; the cube case above is post-Crawford by necessity.
+        IDecisionFilterData row = new DecisionRow
+        {
+            Id = new XgpDecisionId("test.xgp"),
+            Roll = 52,
+            MatchLength = 9,
+            OnRollNeeds = 1,
+            OpponentNeeds = 3,
+            IsCrawford = true
+        };
+
+        Assert.False(row.IsCube);
+        Assert.True(row.IsCrawford);
     }
 
     [Fact]
     public void DecisionRow_IDecisionFilterData_FilterError_IsNullableDouble()
     {
-        IDecisionFilterData row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Error = 0.045 };
+        IDecisionFilterData row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, Error = 0.045 };
         double? fe = row.FilterError;
         Assert.NotNull(fe);
         Assert.Equal(0.045, fe!.Value);
@@ -579,7 +625,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_AfterBoards_DefaultToEmpty()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31 };
         Assert.Empty(row.AfterBestBoard);
         Assert.Empty(row.AfterPlayerBoard);
     }
@@ -619,6 +665,7 @@ public class DecisionRowSerializationTests
         var row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             Board = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1],
             AfterBestBoard = best,
             AfterPlayerBoard = best
@@ -674,7 +721,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_MoveNumber_RoundTrip()
     {
-        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MoveNumber = 17 };
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MoveNumber = 17 };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
         Assert.Equal(17, restored.MoveNumber);
@@ -683,14 +730,14 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_MoveNumber_DefaultsToZero()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31 };
         Assert.Equal(0, row.MoveNumber);
     }
 
     [Fact]
     public void DecisionRow_IsStandardStart_RoundTrip()
     {
-        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), IsStandardStart = true };
+        var original = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, IsStandardStart = true };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
         Assert.True(restored.IsStandardStart);
@@ -699,7 +746,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsStandardStart_DefaultsToFalse()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31 };
         Assert.False(row.IsStandardStart);
     }
 
@@ -726,6 +773,7 @@ public class DecisionRowSerializationTests
         IDecisionFilterData row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             MoveNumber = 12,
             IsStandardStart = true
         };
@@ -737,7 +785,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IDecisionFilterData_MoveNumberAndIsStandardStart_Defaults()
     {
-        IDecisionFilterData row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        IDecisionFilterData row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31 };
 
         Assert.Equal(0, row.MoveNumber);
         Assert.False(row.IsStandardStart);
@@ -750,7 +798,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_Id_RoundTrip_Xgp()
     {
-        var original = new DecisionRow { Id = new XgpDecisionId("match.xgp") };
+        var original = new DecisionRow { Id = new XgpDecisionId("match.xgp"), Roll = 31 };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
@@ -764,7 +812,8 @@ public class DecisionRowSerializationTests
     {
         var original = new DecisionRow
         {
-            Id = new XgDecisionId("match.xg", Game: 2, MoveNumber: 17, IsCube: false)
+            Id = new XgDecisionId("match.xg", Game: 2, MoveNumber: 17, IsCube: false),
+            Roll = 31,
         };
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
@@ -781,6 +830,7 @@ public class DecisionRowSerializationTests
         var row = new DecisionRow
         {
             Id = new XgDecisionId("match.xg", 2, 17, IsCube: true),
+            Roll = 0,
             Player = "Mochy"
         };
 
@@ -795,7 +845,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsJacoby_DefaultsToNull()
     {
-        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp") };
+        var row = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31 };
         Assert.Null(row.IsJacoby);
     }
 
@@ -808,6 +858,7 @@ public class DecisionRowSerializationTests
         var original = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             MatchLength = 0,
             IsJacoby = isJacoby
         };
@@ -823,7 +874,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_IsJacoby_AbsentFromJson_ReadsAsNotSupplied()
     {
         // A row written before the fact existed still reads — as unknown.
-        var json = "{\"Id\":\"test.xgp\",\"MatchLength\":0}";
+        var json = "{\"Id\":\"test.xgp\",\"Roll\":31,\"MatchLength\":0}";
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
         Assert.Null(restored.IsJacoby);
@@ -839,6 +890,7 @@ public class DecisionRowSerializationTests
         IDecisionFilterData data = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             MatchLength = 0,
             IsJacoby = isJacoby
         };
@@ -851,7 +903,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IDecisionFilterData_IsJacoby_MatchRow_IsNull()
     {
-        IDecisionFilterData data = new DecisionRow { Id = new XgpDecisionId("test.xgp"), MatchLength = 9 };
+        IDecisionFilterData data = new DecisionRow { Id = new XgpDecisionId("test.xgp"), Roll = 31, MatchLength = 9 };
 
         Assert.False(data.IsMoneyGame);
         Assert.Null(data.IsJacoby);
@@ -866,6 +918,7 @@ public class DecisionRowSerializationTests
         var row = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
+            Roll = 31,
             Xgid = "XGID=x",
             MatchLength = 0,
             IsJacoby = isJacoby
