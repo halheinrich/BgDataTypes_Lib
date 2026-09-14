@@ -209,7 +209,8 @@ via `ApplyPlay`, never via raw point-array mutation.
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
-| `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the doubler half of a cube answer at the claim layer (SPEC-scoring §1/§3, `halheinrich/backgammon#86`), serializes as string. A claim about the position, not a board action: `NoDouble` and `TooGood` share the identical board action (`CubeAction.NoDouble`), and `CubeClaimExtensions.ToCubeAction` is the single spelling of that collapse. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, ruled claim-layer only. Declaration order is the ruled claim axis {No Double, Double, Too Good}, what a UI offering the claims renders. No reverse action→claim mapping exists: the claim is underdetermined by the action alone; the only equities→claim door is `DecisionData.BestDoublerClaim`. | — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — unstamped/legacy JSON, including JSON stamped with the retired flat class (unrecognized property, ignored on read), deserializes to it. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Trial counts stay label-only. |
+| `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the doubler half of a cube answer at the claim layer (SPEC-scoring §1/§3, `halheinrich/backgammon#86`), serializes as string. A claim about the position, not a board action: `NoDouble` and `TooGood` share the identical board action (`CubeAction.NoDouble`), and `CubeClaimExtensions.ToCubeAction` is the single spelling of that collapse. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, ruled claim-layer only. Declaration order is the ruled claim axis {No Double, Double, Too Good}, what a UI offering the claims renders. No reverse action→claim mapping exists: the claim is underdetermined by the action alone; the only equities→claim door is `DecisionData.BestDoublerClaim`. |
+| `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — unstamped/legacy JSON, including JSON stamped with the retired flat class (unrecognized property, ignored on read), deserializes to it. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Trial counts stay label-only. |
 | `AnalysisLevel` | enum: `Unknown`, `Ply1`, `Ply2`, `Ply3Red`, `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`, `Ply6`, `Ply7`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — unstamped/legacy JSON deserializes to it. **Declaration order is contractual** (ruled 2026-08-28 on the authority of XG's own analysis-level menu, amended the same day): every member after `Unknown` ascends in rigor, and the ply and Roller families *interleave* rather than forming two blocks — `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`. Reordering, or inserting out of rigor order, is a breaking change; live consumers read the order (the diagram's level floor, the filter-panel and quiz level dropdowns). `Unknown` sits *outside* the rigor scale — not "least rigorous" but "not recorded": never excluded by a floor, never offered as a threshold; head-of-list is the zero-value requirement, not a rank. `DepthRank` / `CubeDepthRank` remain the ordering surface across the mode × level *pair*. Every member carries a `[Description]` display label. `Ply3Red` is XG's "3-ply Red" — its own member between `Ply2` and `Ply3` as of the same ruling, superseding the earlier collapse into `Ply3` as a label variant. |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `CubeClaimPair` | `readonly record struct (CubeClaim Claim, CubeAction Taker)` — the two-part cube answer of SPEC-scoring §3 (`halheinrich/backgammon#86`): the claim-layer counterpart of `CubeDecisionPair`, pairing the three-valued claim with the taker response if doubled. Same construction-guard idiom (`Claim` any defined member, `Taker` ∈ {`Take`, `Pass`}). A closed 3×2 of six named canonical instances: five verdict cells (`NoDoubleTake`, `DoubleTake`, `DoublePass`, `TooGoodTake`, `TooGoodPass`) plus `NoDoublePass`, the incoherent cell — representable *by ruling* (a selectable user answer; cross-disabling the axes was rejected), named by `IsIncoherent` for review surfaces. One type serves both scored roles — a user's submitted answer and the derived truth (`DecisionData.BestClaimPair`). Scoring semantics stay with the consuming legs. No parse/format story: display strings are consumer copy per SPEC-scoring §3, and no wire token is ruled — its wire debut (and wire shape) belongs to the first document that embeds it. `default` is non-meaningful — see Pitfalls. |
@@ -560,6 +561,30 @@ both axes read the same candidate. `Dice` forwards `Decision.Dice` in
 canonical `DiceRoll` form — null for cube decisions, fail-loud on malformed
 stored faces.
 
+**A Crawford cube is unrepresentable** (`halheinrich/backgammon#201`).
+Doubling is prohibited in the Crawford game, so a record with
+`Position.IsCrawford` and `Decision.IsCube` both true describes a decision
+that cannot exist. The `Position` and `Decision` init setters each check
+the other half, and whichever is set second throws `ArgumentException`
+naming itself — order-independent for an object initializer in either
+member order and for a JSON document in either property order, since
+`System.Text.Json` populates init setters (the `UserDoublerAction`
+half-guard precedent; a half-set record never throws, both defaults being
+"not cube, not Crawford"). `CrawfordRule` is the one spelling of the rule
+and of the throw, shared with `DecisionRow`; a null half is not the guard's
+business — `ProblemKey`'s no-key rung degrades on one by ruling, so the
+guards read both halves through null-tolerant patterns. The alternative —
+`IJsonOnDeserialized` plus an explicit check at the converter's build seam —
+was rejected because it guards the wire and one factory and leaves object
+initializers open: a future producer using an initializer would fail only
+if its record happened to round-trip through JSON, which is not
+"unrepresentable at construction". `ProblemKey`'s grammar still accepts a
+Crawford cube *key*: v3 stats documents written before the guard hold such
+keys and must keep loading (SPEC-stats-identity.md §1 keeps the Crawford
+flag in identity); `TryDerive` simply never sees such a record again, and
+the orphaned keys are inert — stats are looked up per pooled problem, never
+walked from the document.
+
 Beyond the filter view, the composite carries the one claim-layer fact that
 needs the whole record: `CanBeTooGood`, the Too Good offerability of
 SPEC-scoring §3's 2026-09-02 amendment (`halheinrich/backgammon#187`) —
@@ -604,6 +629,23 @@ as are `AnalysisMode` / `AnalysisLevel` (the taxonomy form of
 the int `Roll` column (`Roll == 0` → null; malformed digits fail loud) and is
 `[JsonIgnore]`d like `IsCube` / `MatchScore` — `Roll` stays the wire form on
 both CSV and JSON.
+
+The Crawford invariant of the composite type binds the row too
+(`halheinrich/backgammon#201`): a cube row (`Roll == 0`) with `IsCrawford`
+set cannot be constructed, the `Roll` and `IsCrawford` init setters each
+checking the other so that whichever is set second throws
+`ArgumentException` naming itself, from an initializer or from JSON alike,
+through the shared `CrawfordRule`. The row needs one mechanism the
+composite does not: **`Roll` is `required`**, because cube is the row's
+*default* kind and the decision kind must be stated, never defaulted. Why
+the guards also need `Roll`'s nullable backing field is owned by
+`DecisionRow.Roll`'s doc comment, the one spelling of that rationale. On
+the wire, `required` means a JSON document without `Roll` is
+refused with `JsonException` rather than read as a cube; the 2026-09-14
+survey (by bare identifier, every member) found no reader of `DecisionRow`
+JSON outside this repo's tests, no document lacking `Roll`, and every
+production construction site already stating it. The rejected shape is the
+composite's rejected shape, for the same reason.
 
 `IsJacoby` (`bool?`) is stored, not derived — the tri-state fact
 `PositionData.IsJacoby` owns, carried here because the CSV shape spells it
@@ -790,8 +832,8 @@ public interface IGameInfo
 public class BgDecisionData : IDecisionFilterData
 {
     public required DecisionId Id { get; init; }    // producer-stamped; throws at ctor if omitted
-    public PositionData    Position    { get; init; }
-    public DecisionData    Decision    { get; init; }
+    public PositionData    Position    { get; init; }   // init guard: a Crawford cube throws ArgumentException
+    public DecisionData    Decision    { get; init; }   //   from whichever half is set second (halheinrich/backgammon#201)
     public DescriptiveData Descriptive { get; init; }
     public PlayOutcomeData Outcome     { get; init; }
     // IDecisionFilterData members implemented as forwarding properties —
@@ -809,7 +851,10 @@ public class PlayOutcomeData { /* AfterBestBoard, AfterPlayerBoard (each IReadOn
 public sealed class DecisionRow : IDecisionFilterData
 {
     public required DecisionId Id { get; init; }    // producer-stamped; throws at ctor if omitted
-    // Flat init-only properties — see DecisionRow.cs for the full set.
+    public required int Roll { get; init; }         // decision kind: 0 = cube; required so the kind is
+                                                    //   stated, never defaulted (halheinrich/backgammon#201)
+    public bool IsCrawford { get; init; }           // init guard with Roll: a Crawford cube throws ArgumentException
+    // Other flat init-only properties — see DecisionRow.cs for the full set.
     public bool? IsJacoby { get; init; }  // stored tri-state; suffixes the money MatchScore token
     public string MatchScore { get; }   // computed from needs/Crawford/length/Jacoby
     public static string CsvHeader { get; }
@@ -1253,6 +1298,19 @@ measure" is not a valid comparison on this hardware.
   (`ConvertXgToJson_Lib`'s `Build*` sites) must stamp it; tests that
   construct decision records directly must set it. Aligns with the
   "producer-supplied identity" contract — no silent default IDs.
+- **A Crawford cube throws at construction, and `DecisionRow.Roll` is
+  `required`** (`halheinrich/backgammon#201`). A cube record in a Crawford
+  position gets `ArgumentException` from whichever of its two halves is set
+  second (`Position`/`Decision` on the composite, `Roll`/`IsCrawford` on
+  the row), from an object initializer and from JSON alike — so a fixture
+  that wants the Crawford flag builds a Crawford *play*, and a test that
+  needs a Crawford cube *key* (still in `ProblemKey`'s grammar, for old
+  stats documents) builds it from the key string, never from a record.
+  Every `DecisionRow` initializer must state `Roll`: omitting it is a
+  compile error, and a JSON document without it is a `JsonException`, not
+  a cube. The row's guards are order-independent only together with
+  `Roll`'s backing field; `DecisionRow.Roll`'s doc comment owns why, so
+  read it before touching either setter.
 - **A money record with `IsJacoby == null` has no `ProblemKey`, silently.**
   `PositionData.IsJacoby` is not `required` — it cannot be, since match
   records legitimately carry `null` — so the omission compiles, constructs,
