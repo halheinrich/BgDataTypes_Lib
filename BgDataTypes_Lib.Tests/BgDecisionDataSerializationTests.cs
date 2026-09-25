@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;

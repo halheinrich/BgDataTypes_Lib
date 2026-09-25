@@ -1,4 +1,4 @@
-﻿namespace BgDataTypes_Lib;
+namespace BgDataTypes_Lib;
 
 /// <summary>
 /// One analysed candidate play of a checker-play decision — one row of the
