@@ -217,7 +217,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
-| `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint (an intermediate hit splits the trajectory into two chains). |
+| `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, full equality surface (`IEquatable`, `==`/`!=`, hash). The canonical chain form of a `Play` and the single source of play equivalence. Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
@@ -242,8 +242,9 @@ overshoot, etc.) live in `BgMoveGen` — `Move` here is just the encoding.
 `Play.ToCanonical()` produces a `CanonicalPlay` — the single source of play
 equivalence. `Play.Equals` / `GetHashCode` / `==` delegate to it, so play
 equality is **notation-level, not encoding-level**: insensitive to move order
-and to how a checker's trajectory is decomposed into single-die hops, fully
-sensitive to hits.
+and to how a checker's trajectory is decomposed into single-die hops;
+sensitive to **which points are hit**, but not to which checker carries a
+point's hit mark.
 
 Collapse semantics (the XG chain-collapse rules, previously encoded
 display-side in `BgMoveGen.MoveNotationFormatter` — the rule now lives here
@@ -252,17 +253,37 @@ and the formatter renders from this form):
 - Consecutive single-die hops of one checker merge into a single
   `PlayChain` recording source and final landing point:
   `{(13,10),(10,8)}` and `{(13,8)}` both canonicalize to the chain `13/8`.
-- **Hit-visibility rule** (the one predicate gating every join): two
-  segments joining at point P may merge only when the segment *ending* at P
-  does not hit there — otherwise the hit marking that now-intermediate point
-  would be lost. So `13/10*/8` splits into chains `{13/10*, 10/8}` (≠ `13/8`),
-  while `13/10 10/8*` collapses to `13/8*`. A hit only ever sits at a chain's
-  endpoint.
-- Moves are pre-sorted (FrPt desc, |ToPt| desc, hit first) so the same
-  multiset of moves always canonicalizes identically; chains are emitted
-  sorted the same way. Matching is bidirectional with a fixpoint fuse pass,
-  keeping the whole `Move` encoding domain deterministic (bar entry,
-  bear-off, doubles, out-of-order legs, even physically-impossible zigzags).
+- **A hit belongs to its point** (`halheinrich/backgammon#273`). A point
+  holds at most one opposing blot, so it is hit at most once, and which move
+  or chain landing there records the hit is not part of identity.
+  Canonicalization lifts the marks off the moves into the play's set of hit
+  points, builds chains from the unmarked moves, and places each point's mark
+  on its **carrier**: the first chain, in canonical order, ending there. So
+  `8/3* 7/3` and `8/3 7/3*` both canonicalize to `{8/3*, 7/3}`, while hitting
+  on a point still differs from the same moves without the hit. The form
+  depends only on the unmarked moves and the hit-point set, so encodings
+  differing only in attribution are equal by construction. Two marks on one
+  point (no legal play has them) count as the one hit.
+- **Hit-visibility rule** (the one predicate gating every join): a join at
+  point P consumes the segment *ending* at P, so it is allowed unless P is
+  hit and that segment is P's carrier — the carrier keeps P as its endpoint,
+  where the mark is visible. A lone trajectory with an intermediate hit
+  therefore splits: `13/10*/8` gives chains `{13/10*, 10/8}` (≠ `13/8`),
+  while `13/10 10/8*` collapses to `13/8*`. When several chains land on the
+  hit point, only the carrier stops there: `{(15,9),(12,9),(9,6)}` with the
+  hit on 9 gives `{15/9*, 12/6}` whichever move recorded it. A hit only ever
+  sits at a chain's endpoint.
+- Moves are pre-sorted (FrPt desc, |ToPt| desc) so the same multiset of
+  moves always canonicalizes identically; chains are emitted sorted the same
+  way, and a carrier precedes its unmarked duplicates. Matching is
+  bidirectional with a fixpoint fuse pass, keeping the whole `Move` encoding
+  domain deterministic (bar entry, bear-off, doubles, out-of-order legs, even
+  physically-impossible zigzags).
+- **Limit — pairing stays notation-level.** Checkers are interchangeable, so
+  encodings holding multi-die moves can pair sources with destinations
+  differently for one position: `25/10 20/15*` and `25/15* 20/10` (5-5, a
+  hit on 15) are distinct canonical forms, as `13/9 11/7` and `13/7 11/9`
+  are. Hit attribution is canonical; pairing is not.
 - Duplicate chains (doubles moving two checkers along the same route) are
   kept as repeated entries — `"(2)"` grouping, `"bar"`/`"off"` labels and all
   other notation rendering stay in `BgMoveGen`'s formatter.
@@ -1419,14 +1440,16 @@ measure" is not a valid comparison on this hardware.
 - **`Play` equality is notation-level, not encoding-level.** Equality /
   hash / `==` delegate to `ToCanonical()`: insensitive to move order *and*
   to hop decomposition (`{(13,10),(10,8)}` equals `{(13,8)}`; a one-hop
-  overshoot bear-off equals its two-hop decomposition), but **fully
-  hit-sensitive** (`13/10*/8` ≠ `13/8`). Do not rely on `Equals` to
-  distinguish different encodings of the same play — compare move sequences
-  directly if encoding identity matters. Conversely, do rely on it to
-  distinguish hitting from non-hitting plays: the old hit-stripped
-  `DeduplicationKey()` (which compared them equal) is gone, deliberately —
-  it let a hit-less encoding of a hitting play validate as legal and apply
-  without barring the blot.
+  overshoot bear-off equals its two-hop decomposition), and sensitive to
+  **which points are hit** (`13/10*/8` ≠ `13/8`) but not to which checker
+  carries a point's hit mark (`8/3* 7/3` equals `8/3 7/3*`). Do not rely on
+  `Equals` to distinguish different encodings of the same play — including
+  which move of an encoding records a hit — compare move sequences directly
+  if encoding identity matters. Conversely, do rely on it to distinguish
+  hitting from non-hitting plays: the old hit-stripped `DeduplicationKey()`
+  (which compared them equal) is gone, deliberately — it let a hit-less
+  encoding of a hitting play validate as legal and apply without barring
+  the blot.
 - **`Play` requires its bundled `JsonConverter`.** Default property-based
   serialization only sees `Count`, losing every move. The
   `[JsonConverter(typeof(PlayJsonConverter))]` attribute is intrinsic to

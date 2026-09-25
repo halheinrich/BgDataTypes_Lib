@@ -24,8 +24,9 @@ namespace BgDataTypes_Lib;
 /// Equality is notation-level, not encoding-level: two plays are equal iff
 /// their canonical chain forms (<see cref="ToCanonical"/>) are equal —
 /// insensitive to move order and to how a checker's trajectory is decomposed
-/// into single-die hops, but fully sensitive to hits. See
-/// <see cref="CanonicalPlay"/> for the collapse semantics.
+/// into single-die hops, and sensitive to which points are hit but not to
+/// which checker carries a point's hit mark (8/3* 7/3 equals 8/3 7/3*). See
+/// <see cref="CanonicalPlay"/> for the collapse and hit-attribution semantics.
 ///
 /// Serialised as a JSON array of <see cref="Move"/> via <see cref="PlayJsonConverter"/>;
 /// the raw move sequence round-trips exactly — canonicalization affects

@@ -14,8 +14,9 @@ namespace BgDataTypes_Lib;
 ///
 /// Unlike a <see cref="Move"/>, which is always a single-die hop, a chain may
 /// span several dice (13/10 followed by 10/8 collapses to the chain 13/8). A
-/// hit can only ever sit at a chain's endpoint: canonicalization splits a
-/// trajectory at any intermediate hit so the hit stays visible — see
-/// <see cref="CanonicalPlay"/> for the collapse rules.
+/// hit can only ever sit at a chain's endpoint, and each hit point's mark sits
+/// on exactly one chain, its carrier: canonicalization never joins the
+/// carrier across the point it hits, so the hit stays visible — see
+/// <see cref="CanonicalPlay"/> for the collapse and hit-attribution rules.
 /// </summary>
 public readonly record struct PlayChain(int FrPt, int ToPt);

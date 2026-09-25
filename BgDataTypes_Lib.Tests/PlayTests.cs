@@ -354,7 +354,7 @@ public class PlayTests
         // plays — one sends a blot to the bar — and the stripped key let a
         // hit-less encoding of a hitting play validate and apply without
         // barring the blot (the booked ApplyPlay/IsLegalPlay board-corruption
-        // hazard). Equality is now fully hit-sensitive.
+        // hazard). Equality is sensitive to which points are hit.
         Play hitting = [new(13, -10), new(10, 8)];
         Play quiet = [new(13, 8)];
 
@@ -371,6 +371,45 @@ public class PlayTests
 
         Assert.True(decomposed == combined);
         Assert.Equal(decomposed.GetHashCode(), combined.GetHashCode());
+    }
+
+    [Fact]
+    public void Equals_PointMadeOnBlot_HitAttributionIgnored()
+    {
+        // The halheinrich/backgammon#273 repro: 5-4, making the 3-point on a
+        // blot. XG's candidate carries the hit on one checker, board entry
+        // can record it on the other; one blot, hit once, same resulting
+        // position — so the same play.
+        Play hitOnEight = [new(8, -3), new(7, 3)];
+        Play hitOnSeven = [new(8, 3), new(7, -3)];
+
+        Assert.True(hitOnEight == hitOnSeven);
+        Assert.Equal(hitOnEight.GetHashCode(), hitOnSeven.GetHashCode());
+    }
+
+    [Fact]
+    public void Equals_PointMadeOnBlot_VsSameMovesWithoutHit_NotEqual()
+    {
+        // Attribution is free; the hit itself is not. Making the 3-point on a
+        // blot and making it on an empty point are different plays.
+        Play hitting = [new(8, -3), new(7, 3)];
+        Play quiet = [new(8, 3), new(7, 3)];
+
+        Assert.True(hitting != quiet);
+    }
+
+    [Fact]
+    public void Equals_HitsOnTwoPoints_VsHitOnOne_NotEqual()
+    {
+        // 5-4 from the 13-point over blots on 9 and 8: which points are hit
+        // is part of identity, so hitting both differs from hitting either.
+        Play both = [new(13, -9), new(13, -8)];
+        Play nineOnly = [new(13, -9), new(13, 8)];
+        Play eightOnly = [new(13, 9), new(13, -8)];
+
+        Assert.True(both != nineOnly);
+        Assert.True(both != eightOnly);
+        Assert.True(nineOnly != eightOnly);
     }
 
     [Fact]

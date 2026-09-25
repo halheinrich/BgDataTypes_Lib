@@ -12,26 +12,44 @@ namespace BgDataTypes_Lib;
 /// differently-decomposed entries of the same play compare equal. Equality is
 /// therefore notation-level (XG's candidate-list semantics), not
 /// encoding-level: it is insensitive to move order and to how a trajectory is
-/// split into hops, but fully sensitive to hits.
+/// split into hops, and sensitive to which points are hit — but not to which
+/// checker carries a point's hit mark.
 /// </para>
 ///
 /// <para>
-/// Hits are preserved, never merged away. The single hit-visibility rule
-/// (<see cref="MayFuseAt"/>): two segments joining at a shared point P may
-/// collapse only when the segment <i>ending</i> at P does not hit there —
-/// otherwise the hit marking that now-intermediate point would be lost. A
-/// trajectory with an intermediate hit is thus split at the hit into two
-/// chains, so a hit only ever sits at a chain's endpoint: 13/10*/8 canonicalizes
-/// to the two chains {13/10*, 10/8} and is distinct from 13/8, while
-/// 13/10/8* collapses to the one chain 13/8* and equals any other encoding
-/// of 13/8*.
+/// A hit belongs to its point. A point holds at most one opposing blot, so it
+/// is hit at most once, and among the moves or chains landing on one point,
+/// which one records the hit is not part of the play's identity.
+/// Canonicalization lifts the marks off the moves into the play's set of hit
+/// points, builds chains from the unmarked moves, and places each point's
+/// mark on exactly one chain, its <i>carrier</i>: the first, in canonical
+/// order, of the chains ending there. 8/3* 7/3 and 8/3 7/3* therefore both
+/// canonicalize to {8/3*, 7/3} and are the same play, while a play that hits
+/// on a point never equals the same moves without the hit. Two marks on one
+/// point, which no legal play produces, count as the one hit.
+/// </para>
+///
+/// <para>
+/// Hits are never merged away. The single hit-visibility rule
+/// (<see cref="MayJoinAt"/>): a join at a shared point P consumes the segment
+/// ending there, so it is allowed unless P is hit and that segment is P's
+/// carrier. The carrier thus keeps P as its endpoint, where the mark is
+/// visible. A lone trajectory with an intermediate hit is split at the hit
+/// into two chains: 13/10*/8 canonicalizes to {13/10*, 10/8} and is distinct
+/// from 13/8, while 13/10/8* collapses to the one chain 13/8* and equals any
+/// other encoding of 13/8*. When several chains land on the hit point, only
+/// the carrier stops there and the others may continue through it:
+/// {(15,9),(12,9),(9,6)} with the hit on 9 canonicalizes to {15/9*, 12/6},
+/// whichever move landing on 9 recorded the hit.
 /// </para>
 ///
 /// <para>
 /// Canonical order: chains are sorted by FrPt descending, then |ToPt|
-/// descending, then hit-first. Equality and hash compare the sorted chain
-/// sequence, so equal canonical forms are structurally identical and the form
-/// is deterministic for any multiset of moves.
+/// descending. Because a point's mark goes to the first chain ending there,
+/// a marked chain precedes its unmarked duplicates. Equality and hash compare
+/// the sorted chain sequence, so equal canonical forms are structurally
+/// identical. The form is deterministic for any multiset of moves, and
+/// depends only on the unmarked moves and the set of hit points.
 /// </para>
 ///
 /// <para>
@@ -85,39 +103,56 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
         int n = play.Count;
         if (n == 0) return default;
 
-        // Deterministic processing order — FrPt desc, |ToPt| desc, hit first.
-        // Chain-building matches greedily, so the same multiset of moves must
+        // Hit marks belong to points, not to legs: a point holds at most one
+        // opposing blot, so it is hit at most once, and which leg landing
+        // there carries the mark is not part of the play's identity. Lift the
+        // marks off the legs into the set of hit points; chains are built from
+        // the unmarked legs, and each point's mark is placed back on its
+        // carrier (MayJoinAt) once the chains are final. Everything below is
+        // therefore a function of the unmarked legs and the hit-point set
+        // alone, so encodings that differ only in attribution canonicalize
+        // identically by construction.
+        Span<Segment> legs = stackalloc Segment[n];
+        Span<int> hitBuffer = stackalloc int[n];
+        int hitCount = 0;
+        for (int i = 0; i < n; i++)
+        {
+            var move = play[i];
+            int to = Math.Abs(move.ToPt);
+            legs[i] = new Segment(move.FrPt, to);
+            if (move.ToPt < 0 && !hitBuffer[..hitCount].Contains(to))
+                hitBuffer[hitCount++] = to;
+        }
+        ReadOnlySpan<int> hitPoints = hitBuffer[..hitCount];
+
+        // Deterministic processing order — the canonical order (Precedes).
+        // Chain-building matches greedily, so the same multiset of legs must
         // always be walked in the same order or two encodings of one play
         // could canonicalize differently (e.g. {(13,11),(11,9),(11,8)}: the
         // leg reaching 11 first grabs whichever continuation it meets first).
         // FrPt-descending also visits each checker's legs in journey order,
         // since every legal move decreases the point number.
-        Span<Move> moves = stackalloc Move[n];
-        for (int i = 0; i < n; i++) moves[i] = play[i];
-        for (int i = 1; i < n; i++)
-            for (int j = i; j > 0 && Precedes(moves[j], moves[j - 1]); j--)
-                (moves[j], moves[j - 1]) = (moves[j - 1], moves[j]);
+        SortCanonically(legs);
 
         Span<Segment> chains = stackalloc Segment[n];
         int chainCount = 0;
 
         for (int i = 0; i < n; i++)
         {
-            int from = moves[i].FrPt;
-            bool hit = moves[i].ToPt < 0;
-            int to = hit ? -moves[i].ToPt : moves[i].ToPt;
+            var leg = legs[i];
+            var (from, to) = leg;
 
             int matchIdx = -1;
             bool isForward = false;
 
             if (from is >= 1 and <= 24)
             {
-                // Forward: an existing chain ends where this leg starts. The
-                // chain is the segment ending at the join, so its endpoint
-                // hit gates the merge.
+                // Forward: an existing chain ends where this leg starts. That
+                // chain is the segment ending at the join, so the rule is
+                // asked of it.
                 for (int j = 0; j < chainCount; j++)
                 {
-                    if (chains[j].To == from && MayFuseAt(chains[j].Hit))
+                    if (chains[j].To == from && MayJoinAt(chains[j], j, chains[..chainCount], hitPoints))
                     {
                         matchIdx = j;
                         isForward = true;
@@ -126,11 +161,13 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
                 }
             }
 
-            if (matchIdx < 0 && to is >= 1 and <= 24 && MayFuseAt(hit))
+            if (matchIdx < 0 && to is >= 1 and <= 24
+                && MayJoinAt(leg, -1, chains[..chainCount], hitPoints))
             {
                 // Backward: this leg ends where an existing chain starts. The
-                // leg is the segment ending at the join, so its own hit gates.
-                // Unreachable for legal plays once moves are journey-ordered,
+                // leg is the segment ending at the join, so the rule is asked
+                // of it; it is not a chain yet, so it has no index to exclude.
+                // Unreachable for legal plays once legs are journey-ordered,
                 // but kept so the whole encoding domain stays deterministic.
                 for (int j = 0; j < chainCount; j++)
                 {
@@ -146,12 +183,12 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
             {
                 var c = chains[matchIdx];
                 chains[matchIdx] = isForward
-                    ? new Segment(c.From, to, hit)
-                    : new Segment(from, c.To, c.Hit);
+                    ? new Segment(c.From, to)
+                    : new Segment(from, c.To);
             }
             else
             {
-                chains[chainCount++] = new Segment(from, to, hit);
+                chains[chainCount++] = new Segment(from, to);
             }
         }
 
@@ -166,15 +203,15 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
             for (int a = 0; a < chainCount && !fused; a++)
             {
                 int joinPt = chains[a].To;
-                if (joinPt is < 1 or > 24 || !MayFuseAt(chains[a].Hit)) continue;
+                if (joinPt is < 1 or > 24 || !MayJoinAt(chains[a], a, chains[..chainCount], hitPoints))
+                    continue;
 
                 for (int b = 0; b < chainCount; b++)
                 {
                     if (b == a || chains[b].From != joinPt) continue;
 
-                    // a is the segment ending at the join; b's endpoint hit
-                    // becomes the merged chain's endpoint, still visible.
-                    chains[a] = new Segment(chains[a].From, chains[b].To, chains[b].Hit);
+                    // a is the segment ending at the join, consumed by it.
+                    chains[a] = new Segment(chains[a].From, chains[b].To);
                     chains[b] = chains[chainCount - 1];
                     chainCount--;
                     fused = true;
@@ -183,44 +220,80 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
             }
         }
 
-        // Canonical order: FrPt desc, |To| desc, hit first.
-        for (int i = 1; i < chainCount; i++)
-            for (int j = i; j > 0 && Precedes(chains[j], chains[j - 1]); j--)
-                (chains[j], chains[j - 1]) = (chains[j - 1], chains[j]);
+        var final = chains[..chainCount];
+        SortCanonically(final);
 
+        // Place each hit point's mark on its carrier: the first chain in
+        // canonical order ending there. The join rule never consumed that
+        // chain, so it exists.
         Span<PlayChain> result = stackalloc PlayChain[chainCount];
         for (int i = 0; i < chainCount; i++)
-            result[i] = new PlayChain(chains[i].From, chains[i].Hit ? -chains[i].To : chains[i].To);
+        {
+            var (from, to) = final[i];
+            bool carriesHit = hitPoints.Contains(to) && !AnyEndsAt(final[..i], to);
+            result[i] = new PlayChain(from, carriesHit ? -to : to);
+        }
         return new CanonicalPlay(result);
     }
 
     /// <summary>
-    /// The single hit-visibility rule for joining two segments at a shared
-    /// point P: the segment whose endpoint is P (the one being extended
-    /// forward across P) must not hit at P, or the hit marking that
-    /// now-intermediate point would be lost. Forward leg-matching, backward
-    /// leg-matching, and chain-to-chain fusing all reduce to this predicate.
+    /// The single hit-visibility rule. A hit point P's mark is carried by the
+    /// chain ending at P that comes first in canonical order — chains
+    /// identical to it being interchangeable — so that chain must keep P as
+    /// its endpoint. A join at P consumes <paramref name="consumed"/>, the
+    /// segment ending there, and turns P into an interior point; it is
+    /// therefore allowed unless P is hit and <paramref name="consumed"/> is
+    /// P's carrier, that is, unless no other chain ending at P comes before it
+    /// or level with it. Forward leg-matching, backward leg-matching, and
+    /// chain-to-chain fusing all reduce to this predicate, and the final
+    /// placement of each mark applies the same "first in canonical order".
     /// </summary>
-    private static bool MayFuseAt(bool leftSegmentHitsAtJoin) => !leftSegmentHitsAtJoin;
-
-    private static bool Precedes(Move a, Move b)
+    /// <param name="consumed">The segment ending at the join point.</param>
+    /// <param name="consumedIdx">
+    /// Its index in <paramref name="chains"/>, or -1 when it is a leg not yet
+    /// in a chain.
+    /// </param>
+    /// <param name="chains">The chains built so far.</param>
+    /// <param name="hitPoints">The play's set of hit points.</param>
+    private static bool MayJoinAt(
+        Segment consumed, int consumedIdx, ReadOnlySpan<Segment> chains, ReadOnlySpan<int> hitPoints)
     {
-        if (a.FrPt != b.FrPt) return a.FrPt > b.FrPt;
-        int aTo = Math.Abs(a.ToPt), bTo = Math.Abs(b.ToPt);
-        if (aTo != bTo) return aTo > bTo;
-        return a.ToPt < b.ToPt; // hit (negative) first
+        if (!hitPoints.Contains(consumed.To)) return true;
+
+        for (int i = 0; i < chains.Length; i++)
+            if (i != consumedIdx && chains[i].To == consumed.To && !Precedes(consumed, chains[i]))
+                return true;
+        return false;
+    }
+
+    private static bool AnyEndsAt(ReadOnlySpan<Segment> chains, int pt)
+    {
+        foreach (var c in chains)
+            if (c.To == pt) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Sorts into canonical order — From descending, then To descending —
+    /// the one order for both the leg walk and the emitted chains.
+    /// </summary>
+    private static void SortCanonically(Span<Segment> segments)
+    {
+        for (int i = 1; i < segments.Length; i++)
+            for (int j = i; j > 0 && Precedes(segments[j], segments[j - 1]); j--)
+                (segments[j], segments[j - 1]) = (segments[j - 1], segments[j]);
     }
 
     private static bool Precedes(Segment a, Segment b)
     {
         if (a.From != b.From) return a.From > b.From;
-        if (a.To != b.To) return a.To > b.To;
-        return a.Hit && !b.Hit; // hit first
+        return a.To > b.To;
     }
 
-    // Working representation during canonicalization: destination magnitude
-    // and hit flag carried separately so join points compare sign-free.
-    private readonly record struct Segment(int From, int To, bool Hit);
+    // Working representation during canonicalization: an unmarked leg or
+    // chain, destination as a magnitude so join points compare sign-free.
+    // Hit marks live apart, as the play's set of hit points.
+    private readonly record struct Segment(int From, int To);
 
     /// <summary>
     /// Structural equality of the sorted chain sequences. Because every
