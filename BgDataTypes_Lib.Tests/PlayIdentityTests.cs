@@ -587,6 +587,20 @@ public class PlayIdentityTests
     }
 
     [Fact]
+    public void IndexOfSamePlay_InvalidEntry_NeverMatchesThePass()
+    {
+        // The pass reaches the starting position itself, which is also where
+        // an invalid entry is left when the rule stops at its first hop. Only
+        // the entry's own validity keeps the two apart.
+        var start = Position((13, 2), (6, 5));
+        Play pass = [];
+        Play fromEmptyPoint = [new(14, 10)];
+
+        Assert.False(start.IsSamePlay(pass, fromEmptyPoint));
+        Assert.Equal(1, start.IndexOfSamePlay(pass, [fromEmptyPoint, pass]));
+    }
+
+    [Fact]
     public void IndexOfSamePlay_TwoEntriesTheSamePlay_LowestIndexWins()
     {
         var start = TesterPosition();
