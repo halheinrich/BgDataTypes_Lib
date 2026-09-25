@@ -186,13 +186,15 @@ the reflection-bound `JsonSerializer` overloads.
 
 All composite and category types in this library are `class` with
 `init`-only properties — except `BoardState`, which is mutable for
-hot-path move-generation efficiency. The type encapsulates its own
-state-management logic (`ApplyMove` / `UndoMove` / `ApplyPlay` maintain
-`HighPointOccupied` incrementally), and external mutation of `Points`
-is supported but desyncs `HighPointOccupied` unless the caller calls
-`RecalcHighPoint`. Hot-path consumers (BgMoveGen's move generator) use
-the apply/undo primitives; non-hot-path consumers should advance state
-via `ApplyPlay`, never via raw point-array mutation.
+hot-path move-generation efficiency. The mutation is its own, never a
+caller's (halheinrich/backgammon#281): `Points` is a `ReadOnlySpan<int>`
+and `HighPointOccupied` has a private setter, so a write from outside the
+library does not compile, and the type's own members keep
+`HighPointOccupied` in step (`ApplyMove` / `UndoMove` incrementally, a
+full recompute on construction and flip). Hot-path consumers (BgMoveGen's
+move generator) use the apply/undo primitives; non-hot-path consumers
+advance state via `ApplyPlay`. Its immutable counterpart is
+`BoardPosition`, which is what a board is compared and stored as.
 
 ### Data categories
 
@@ -319,6 +321,10 @@ needs before touching it:
   `BoardState` builds from it and compares through it.
 - **No frame of its own.** A position does not record whose turn it
   describes; every member that stores one states its frame.
+- **The starting positions are values.** `Standard`, `Nackgammon` and
+  `Bg960(seed)` define the layouts once, here; `BoardState`'s factories of
+  the same names build a board from them, so "is this the standard start"
+  is `position == BoardPosition.Standard`.
 - **Read surface.** The indexer (slots 0–25), `CopyTo`, and a `ToString`
   of `slot:count` pairs for the occupied slots (`"empty"` for the empty
   board), which a test failure shows side by side. Deliberately no
@@ -327,12 +333,37 @@ needs before touching it:
 
 ### BoardState
 
-Mutable backgammon position. `int[26] Points` plus `int HighPointOccupied`.
-Layout matches `PositionData.Mop` / `IDecisionFilterData.Board`:
+Mutable backgammon board: the working copy play applies to. Private
+storage for 26 counts in `BoardPosition`'s layout, read through
+`ReadOnlySpan<int> Points`, plus `int HighPointOccupied`:
 `Points[0]` = opponent bar, `Points[1..24]` = playing surface, `Points[25]` =
 on-roll bar; positive = on-roll, negative = opponent. On-roll moves
 high index → low; opponent moves low → high. Borne-off counts are not
 tracked — checkers leaving the board simply disappear.
+
+**Callers read it; only its own members write it**
+(halheinrich/backgammon#281). `Points` is a read-only span over the
+board's storage (allocation-free to read, a write does not compile) and
+`HighPointOccupied` has a private setter. A board comes into being only
+by construction, and the board is therefore always a well-formed position
+(`BoardPosition`'s invariant): every way in is one, and every change
+below keeps it one.
+
+- **Construction.** `new BoardState(BoardPosition)` is the construction
+  from a value, and every other way in goes through it: `Standard()`,
+  `Nackgammon()` and `Bg960(int? seed = null)` build from
+  `BoardPosition`'s starting positions (the layouts are defined once, on
+  the value); `FromMop(ReadOnlySpan<int>)` is the door from raw outside
+  counts, validated by the value's one rule, so the pseudoboards it once
+  tolerated are refused (partial boards are fine — borne-off checkers are
+  not tracked). `Copy()` is a deep copy; `FlippedCopy()` a deep copy
+  re-expressed from the opponent's perspective (an involution — flipping
+  twice reproduces the original). There is no public empty constructor:
+  the empty board is `new BoardState(BoardPosition.Empty)`.
+- **The snapshot.** `ToPosition()` takes the board as it stands as a
+  `BoardPosition` value, allocation-free; later changes to the board do
+  not reach it. Two boards are compared through it, never through
+  `Points`, and it is what the move generator deduplicates by.
 
 Three layers of mutation, in increasing scope:
 
@@ -364,14 +395,6 @@ Three layers of mutation, in increasing scope:
   primitive for querying a position from the other player's frame
   (e.g. cube-response evaluation) without advancing state — the
   receiver is untouched.
-
-Factories: `Standard()`, `Nackgammon()`, `Bg960(int? seed = null)` for
-the three starting variants. `FromMop(IReadOnlyList<int>)` and `ToMop()`
-bridge to/from the 26-element on-roll-relative point array used by
-`PositionData.Mop`. `Copy()` is a deep copy; `FlippedCopy()` is a deep
-copy re-expressed from the opponent's perspective (an involution —
-flipping twice reproduces the original). `RecalcHighPoint()` is
-public for callers that mutate `Points` directly.
 
 Derived properties:
 
@@ -417,10 +440,12 @@ Design points a maintainer needs before touching it:
   even an identical encoding; the list match returns -1 for it and passes
   over invalid entries. `ApplyPlay` refuses with an `ArgumentException`
   naming the fault and the move; `TryApplyPlay` returns false.
-- **How positions compare.** By all 26 point counts, inside the rule's
-  callers, computed into stack scratch — allocation-free. `BoardState`
-  deliberately gets no value equality: it is a mutable class, and a hash
-  that changes under mutation corrupts any set or dictionary holding it.
+- **How positions compare.** As `BoardPosition` values, the one definition
+  of "the same position": the rule computes each reached board into stack
+  scratch and the comparison is the value's equality — allocation-free.
+  `BoardState` deliberately gets no value equality: it is a mutable class,
+  and a hash that changes under mutation corrupts any set or dictionary
+  holding it; `ToPosition()` is how a board is compared.
 - **The raw pair stays raw.** `ApplyMove`/`UndoMove` trust their moves on
   the generator's hot path. `Debug.Assert` checks their stated
   preconditions in Debug builds only, and a failed assertion terminates the
@@ -514,10 +539,8 @@ Design points a maintainer needs before touching the type:
   mechanism's first exercise (`SPEC-stats-identity.md` §3).
 - **Real-board posture.** Fact validation requires a physically possible
   position (≤15 checkers per side, per-point counts within ±15, own-side
-  bars only, non-empty board). `BoardState.FromMop` tolerates pseudoboards
-  because a general board utility should; `ProblemKey` identifies real
-  analysed decisions, so a violation is corruption and corruption gets no
-  key.
+  bars only, non-empty board). `ProblemKey` identifies real analysed
+  decisions, so a violation is corruption and corruption gets no key.
 
 JSON shape: round-trips as the canonical string via the bundled
 `ProblemKeyJsonConverter` (type-level `[JsonConverter]` attribute on
@@ -1062,6 +1085,9 @@ public readonly struct BoardPosition :
     public BoardPosition(ReadOnlySpan<int> counts);           // malformed → ArgumentException
     public static bool TryCreate(ReadOnlySpan<int> counts, out BoardPosition position);
     public static BoardPosition Empty { get; }                // == default; well-formed
+    public static BoardPosition Standard { get; }             // the starting layouts, defined once
+    public static BoardPosition Nackgammon { get; }
+    public static BoardPosition Bg960(int? seed = null);      // random, symmetric, no blots
     public int this[int point] { get; }                       // slots 0–25
     public void CopyTo(Span<int> destination);                // at least 26 elements
     public bool Equals(BoardPosition other);                  // + ==, !=, Equals(object), GetHashCode
@@ -1070,24 +1096,20 @@ public readonly struct BoardPosition :
 
 public class BoardState
 {
-    public readonly int[] Points = new int[26];   // layout matches PositionData.Mop
-    public int HighPointOccupied;                 // 1–25, or 0 if no on-roll checkers
+    public ReadOnlySpan<int> Points { get; }      // read-only; layout of BoardPosition
+    public int HighPointOccupied { get; }         // 1–25, or 0 if no on-roll checkers; private setter
 
-    public BoardState();                          // empty board (all zeros, HighPointOccupied = 0)
-
-    // Factories
-    public static BoardState Standard();
-    public static BoardState Nackgammon();
-    public static BoardState Bg960(int? seed = null);
-
-    // Mop bridge
-    public static BoardState FromMop(IReadOnlyList<int> mop);
-    public IReadOnlyList<int> ToMop();
-
-    // Maintenance
+    // Construction: a board is always a well-formed position (halheinrich/backgammon#281)
+    public BoardState(BoardPosition position);    // every other way in goes through this
+    public static BoardState Standard();          // from BoardPosition.Standard
+    public static BoardState Nackgammon();        // from BoardPosition.Nackgammon
+    public static BoardState Bg960(int? seed = null);   // from BoardPosition.Bg960
+    public static BoardState FromMop(ReadOnlySpan<int> mop);   // raw counts; malformed → ArgumentException
     public BoardState Copy();
     public BoardState FlippedCopy();              // copy from opponent's perspective; receiver untouched
-    public void RecalcHighPoint();
+
+    // The snapshot: how a board is compared and stored
+    public BoardPosition ToPosition();            // allocation-free; later changes do not reach it
 
     // Apply / undo (hot-path primitives)
     public void ApplyMove(Move move);
@@ -1549,13 +1571,17 @@ measure" is not a valid comparison on this hardware.
   the type — do not strip it, and do not register a different converter
   for `Play` in consumer-side options without understanding the
   consequence.
-- **`BoardState` is mutable; `HighPointOccupied` desyncs on raw
-  mutation.** The apply/undo helpers maintain `HighPointOccupied`
-  incrementally; raw `Points[i] = …` writes do not. Call
-  `RecalcHighPoint()` after any direct point-array mutation, or use
-  `FromMop` (which recomputes for you). The contract is intentional —
-  hot-path move generation needs zero-overhead apply/undo, so the
-  per-write maintenance lives in the helpers, not in property setters.
+- **`BoardState` cannot be written by callers, and must not be reopened**
+  (halheinrich/backgammon#281). `Points` is a `ReadOnlySpan<int>` and
+  `HighPointOccupied` has a private setter, pinned by
+  `BoardStateTests.PublicSurface_HasNoWritableState`. A test or consumer
+  that wants a particular board builds it — `FromMop` from counts, or
+  `new BoardState(position)` — and changes it through the apply methods;
+  it never writes counts. Re-exposing a writable array, or a public
+  `RecalcHighPoint`, would bring back the desynced high point and the
+  corrupt boards `ApplyPlay`'s guarantee cannot survive. The apply/undo
+  helpers keep the per-change maintenance, not property setters, because
+  hot-path move generation needs zero-overhead apply/undo.
 - **Bearing-off overshoot is a property of the data shape.** Bear-off
   legal only from `HighPointOccupied` when `HighPointOccupied <= 6`
   *and* the die exceeds `FrPt`. The `BoardState` data primitive does

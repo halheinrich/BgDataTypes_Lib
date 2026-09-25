@@ -21,7 +21,7 @@ public class PipCountTests
     [Fact]
     public void EmptyBoard_PipCounts_AreZero()
     {
-        var s = new BoardState();
+        var s = new BoardState(BoardPosition.Empty);
         Assert.Equal(0, s.PipCount);
         Assert.Equal(0, s.OpponentPipCount);
     }

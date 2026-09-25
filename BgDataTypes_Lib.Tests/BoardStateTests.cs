@@ -150,29 +150,157 @@ public class BoardStateTests
         }
     }
 
-    // ── Mop bridge ────────────────────────────────────────────────
+    [Fact]
+    public void StartingFactories_HoldTheStartingPositionValues()
+    {
+        // The layouts are defined once, on the value; each factory is a
+        // board built from it.
+        Assert.Equal(BoardPosition.Standard, BoardState.Standard().ToPosition());
+        Assert.Equal(BoardPosition.Nackgammon, BoardState.Nackgammon().ToPosition());
+        Assert.Equal(BoardPosition.Bg960(seed: 42), BoardState.Bg960(seed: 42).ToPosition());
+    }
+
+    // ── Construction from a position value ────────────────────────
+
+    public static TheoryData<string, int[]> Positions => new()
+    {
+        { "standard", [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0] },
+        { "both bars", [-1, 0, 2, -1, 2, 2, 2, 1, 2, -1, 0, 1, -2, 0, 0, 0, -2, 0, 0, -2, -2, 1, -2, 0, -1, 1] },
+        { "bearing off", [0, 3, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -4, 0, 0, -2, 0, 0, 0] },
+        { "empty", new int[26] },
+    };
+
+    [Theory]
+    [MemberData(nameof(Positions))]
+    public void Constructor_HoldsThePosition(string name, int[] counts)
+    {
+        var position = new BoardPosition(counts);
+
+        var s = new BoardState(position);
+
+        Assert.Equal(position, s.ToPosition());
+        Assert.True(s.Points.SequenceEqual(counts), name);
+    }
+
+    [Theory]
+    [MemberData(nameof(Positions))]
+    public void Constructor_ComputesHighPointOccupied(string name, int[] counts)
+    {
+        int expected = 0;
+        for (int i = 25; i >= 1 && expected == 0; i--)
+            if (counts[i] > 0) expected = i;
+
+        Assert.True(expected == new BoardState(new BoardPosition(counts)).HighPointOccupied, name);
+    }
+
+    // ── Snapshot ──────────────────────────────────────────────────
 
     [Fact]
-    public void FromMop_ToMop_RoundTrip()
+    public void ToPosition_IsASnapshot_LaterChangesDoNotReachIt()
     {
         var s = BoardState.Standard();
-        var mop = s.ToMop();
-        var s2 = BoardState.FromMop(mop);
+        var snapshot = s.ToPosition();
 
-        Assert.Equal(s.Points, s2.Points);
-        Assert.Equal(s.HighPointOccupied, s2.HighPointOccupied);
+        s.ApplyMove(new Move(13, 7));
+        var afterMove = s.ToPosition();
+        s.ApplyPlay([new(24, 18)]);
+
+        Assert.Equal(BoardPosition.Standard, snapshot);
+        Assert.Equal(5, snapshot[13]);
+        Assert.Equal(0, snapshot[7]);
+        Assert.Equal(4, afterMove[13]);
+        Assert.Equal(1, afterMove[7]);
+        Assert.NotEqual(afterMove, s.ToPosition());
     }
 
     [Fact]
-    public void ToMop_IsDefensiveCopy()
+    public void ToPosition_EqualBoards_EqualPositions()
+    {
+        // Two boards reached by different routes compare through the value.
+        var viaPlay = BoardState.Standard();
+        viaPlay.ApplyPlay([new(13, 10), new(10, 8)]);
+        var viaOneHop = BoardState.Standard();
+        viaOneHop.ApplyPlay([new(13, 8)]);
+
+        Assert.Equal(viaOneHop.ToPosition(), viaPlay.ToPosition());
+        Assert.Equal(viaOneHop.ToPosition().GetHashCode(), viaPlay.ToPosition().GetHashCode());
+    }
+
+    // ── Read-only to callers (halheinrich/backgammon#281) ─────────
+
+    [Fact]
+    public void PublicSurface_HasNoWritableState()
+    {
+        // A write from outside the library does not compile; this pins the
+        // shape that makes it so, against a regression that re-exposes a
+        // writable array or field.
+        var type = typeof(BoardState);
+        const System.Reflection.BindingFlags Public =
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Static;
+
+        Assert.Empty(type.GetFields(Public));
+        Assert.All(type.GetProperties(Public), p =>
+            Assert.True(p.SetMethod is null || !p.SetMethod.IsPublic, $"{p.Name} has a public setter"));
+        Assert.Equal(typeof(ReadOnlySpan<int>), type.GetProperty(nameof(BoardState.Points))!.PropertyType);
+        Assert.Null(type.GetConstructor(Type.EmptyTypes));
+    }
+
+    [Fact]
+    public void HotPath_ApplyUndoReadsAndSnapshot_AllocateNothing()
     {
         var s = BoardState.Standard();
-        var mop = s.ToMop();
+        var move = new Move(13, 9);
+        int sink = Churn(s, move);   // warm the paths outside the measured window
 
-        // Mutating the source board after extraction must not affect the snapshot.
-        s.Points[6] = 0;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+            sink += Churn(s, move);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.Equal(5, mop[6]);
+        Assert.Equal(0, allocated);
+        Assert.Equal(BoardPosition.Standard, s.ToPosition());
+        Assert.NotEqual(int.MinValue, sink);
+    }
+
+    private static int Churn(BoardState s, Move move)
+    {
+        s.ApplyMove(move);
+        int read = s.Points[9] + s.Points[13] + s.HighPointOccupied;
+        var snapshot = s.ToPosition();
+        s.UndoMove(move);
+        return read + snapshot.GetHashCode();
+    }
+
+    // ── Mop bridge ────────────────────────────────────────────────
+
+    [Fact]
+    public void FromMop_ToPosition_RoundTrip()
+    {
+        // Rewritten from FromMop_ToMop_RoundTrip: ToMop gave way to the
+        // position snapshot.
+        int[] counts = new int[26];
+        BoardPosition.Standard.CopyTo(counts);
+
+        var s = BoardState.FromMop(counts);
+
+        Assert.Equal(BoardPosition.Standard, s.ToPosition());
+        Assert.Equal(BoardState.Standard().HighPointOccupied, s.HighPointOccupied);
+    }
+
+    [Fact]
+    public void FromMop_CopiesTheCounts_LaterWritesToTheSourceDoNotReachIt()
+    {
+        // Rewritten from ToMop_IsDefensiveCopy: the board can no longer be
+        // written from outside, so the defensive copy that matters is the
+        // one taken on the way in.
+        int[] mop = new int[26];
+        BoardPosition.Standard.CopyTo(mop);
+        var s = BoardState.FromMop(mop);
+
+        mop[6] = 0;
+
+        Assert.Equal(5, s.Points[6]);
     }
 
     [Fact]
@@ -191,13 +319,32 @@ public class BoardStateTests
     [Fact]
     public void FromMop_WrongLength_Throws()
     {
-        Assert.Throws<ArgumentException>(() => BoardState.FromMop(new int[25]));
+        Assert.Throws<ArgumentException>("mop", () => BoardState.FromMop(new int[25]));
     }
 
     [Fact]
-    public void FromMop_Null_Throws()
+    public void FromMop_NullArray_IsNoCounts_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => BoardState.FromMop(null!));
+        // Rewritten from FromMop_Null_Throws: the counts arrive as a span,
+        // and a null array is an empty span — no counts, not 26.
+        int[]? none = null;
+
+        Assert.Throws<ArgumentException>("mop", () => BoardState.FromMop(none));
+    }
+
+    [Theory]
+    [InlineData(0, 1)]      // an on-roll checker on the opponent's bar
+    [InlineData(25, -1)]    // an opponent's checker on the on-roll bar
+    [InlineData(24, 3)]     // sixteen on-roll checkers
+    [InlineData(19, -6)]    // sixteen opponent's checkers
+    public void FromMop_MalformedBoard_Throws(int slot, int count)
+    {
+        // FromMop validates through BoardPosition's one invariant; the
+        // pseudoboards it once tolerated are refused.
+        int[] mop = [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0];
+        mop[slot] = count;
+
+        Assert.Throws<ArgumentException>("mop", () => BoardState.FromMop(mop));
     }
 
     // Four cases ported from BgMoveGen's deleted BoardStateBridgeTests, orphaned
@@ -206,38 +353,43 @@ public class BoardStateTests
     // wrong-length throws) are already pinned above and are not duplicated here.
 
     [Fact]
-    public void FromMop_ToMop_RoundTrip_Bg960Seeded()
+    public void FromMop_ToPosition_RoundTrip_Bg960Seeded()
     {
+        // Rewritten from FromMop_ToMop_RoundTrip_Bg960Seeded.
         var s = BoardState.Bg960(seed: 42);
-        var s2 = BoardState.FromMop(s.ToMop());
+        int[] counts = [.. s.Points];
+        var s2 = BoardState.FromMop(counts);
 
-        Assert.Equal(s.Points, s2.Points);
+        Assert.Equal(s.ToPosition(), s2.ToPosition());
         Assert.Equal(s.HighPointOccupied, s2.HighPointOccupied);
     }
 
     [Fact]
-    public void FromMop_ToMop_RoundTrip_MidGamePosition()
+    public void FromMop_ToPosition_RoundTrip_MidGamePosition()
     {
-        // Hand-built mid-game: both bars occupied, hit-eligible blot, partial
-        // bear-off, both signs present at non-trivial counts. The player-on-bar
-        // checker at [25] makes 25 the highest occupied point.
-        var s = new BoardState();
-        s.Points[0] = -1;    // opponent on bar
-        s.Points[1] = 3;     // player home-board point
-        s.Points[3] = -1;    // opponent blot in player's home
-        s.Points[6] = 4;
-        s.Points[8] = 2;
-        s.Points[12] = -3;
-        s.Points[13] = 2;
-        s.Points[17] = -4;
-        s.Points[19] = -5;
-        s.Points[24] = 1;    // player blot on 24
-        s.Points[25] = 1;    // player on bar
-        s.RecalcHighPoint();
+        // Rewritten from FromMop_ToMop_RoundTrip_MidGamePosition, which built
+        // its board by raw writes that no longer compile. Hand-built
+        // mid-game: both bars occupied, hit-eligible blot, partial bear-off,
+        // both signs present at non-trivial counts. The player-on-bar checker
+        // at [25] makes 25 the highest occupied point.
+        var mop = new int[26];
+        mop[0] = -1;    // opponent on bar
+        mop[1] = 3;     // player home-board point
+        mop[3] = -1;    // opponent blot in player's home
+        mop[6] = 4;
+        mop[8] = 2;
+        mop[12] = -3;
+        mop[13] = 2;
+        mop[17] = -4;
+        mop[19] = -5;
+        mop[24] = 1;    // player blot on 24
+        mop[25] = 1;    // player on bar
 
-        var s2 = BoardState.FromMop(s.ToMop());
+        var s = BoardState.FromMop(mop);
+        var s2 = new BoardState(s.ToPosition());
 
-        Assert.Equal(s.Points, s2.Points);
+        Assert.Equal(mop, s.Points);
+        Assert.Equal(s.ToPosition(), s2.ToPosition());
         Assert.Equal(s.HighPointOccupied, s2.HighPointOccupied);
         Assert.Equal(25, s2.HighPointOccupied);
     }
@@ -257,14 +409,15 @@ public class BoardStateTests
     }
 
     [Fact]
-    public void FromMop_AcceptsPseudoboard_AllZero()
+    public void FromMop_AcceptsTheEmptyBoard()
     {
-        // Borne-off / cube-decision shells with no checkers are legitimate
-        // inputs — FromMop performs no checker-count validation.
+        // Rewritten from FromMop_AcceptsPseudoboard_AllZero: the empty board
+        // is well-formed (no checkers on the board), not a tolerated
+        // pseudoboard — FromMop now validates, and this board passes.
         var s = BoardState.FromMop(new int[26]);
 
         Assert.Equal(0, s.HighPointOccupied);
-        Assert.All(s.Points, p => Assert.Equal(0, p));
+        Assert.Equal(BoardPosition.Empty, s.ToPosition());
     }
 
     // ── Copy ──────────────────────────────────────────────────────
@@ -272,11 +425,20 @@ public class BoardStateTests
     [Fact]
     public void Copy_IsDeep()
     {
-        var s = BoardState.Standard();
+        // Rewritten: the copy is changed through the apply path, since a raw
+        // write no longer compiles.
+        var s = BoardState.FromMop(
+            [-1, 0, 2, -1, 2, 2, 2, 1, 2, -1, 0, 1, -2, 0, 0, 0, -2, 0, 0, -2, -2, 1, -2, 0, -1, 0]);
         var c = s.Copy();
 
-        c.Points[6] = 0;
-        Assert.Equal(5, s.Points[6]);
+        Assert.Equal(s.ToPosition(), c.ToPosition());
+        Assert.Equal(21, c.HighPointOccupied);
+
+        c.ApplyMove(new Move(6, 1));
+
+        Assert.Equal(1, c.Points[6]);
+        Assert.Equal(2, s.Points[6]);
+        Assert.NotEqual(s.ToPosition(), c.ToPosition());
     }
 
     // ── ApplyMove / UndoMove round-trip ───────────────────────────
@@ -285,7 +447,7 @@ public class BoardStateTests
     public void ApplyMove_UndoMove_RegularMove_RoundTrips()
     {
         var s = BoardState.Standard();
-        int[] before = (int[])s.Points.Clone();
+        int[] before = [.. s.Points];
         int highBefore = s.HighPointOccupied;
 
         var move = new Move(13, 9);
@@ -306,7 +468,7 @@ public class BoardStateTests
         mop[13] = 1;   // on-roll blot we move from
         mop[7] = -1;   // opponent blot — target of the hit
         var s = BoardState.FromMop(mop);
-        int[] before = (int[])s.Points.Clone();
+        int[] before = [.. s.Points];
         int highBefore = s.HighPointOccupied;
 
         var hit = new Move(13, -7);
@@ -329,7 +491,7 @@ public class BoardStateTests
         mop[5] = 2;
         var s = BoardState.FromMop(mop);
         Assert.Equal(6, s.HighPointOccupied);
-        int[] before = (int[])s.Points.Clone();
+        int[] before = [.. s.Points];
 
         var bear = new Move(6, 0);
         s.ApplyMove(bear);
@@ -555,7 +717,7 @@ public class BoardStateTests
     public void FlippedCopy_LeavesReceiverUntouched_AndCopyIsIndependent()
     {
         var s = AsymmetricBoard();
-        int[] before = (int[])s.Points.Clone();
+        int[] before = [.. s.Points];
         int highBefore = s.HighPointOccupied;
 
         var f = s.FlippedCopy();
@@ -563,8 +725,10 @@ public class BoardStateTests
         Assert.Equal(before, s.Points);
         Assert.Equal(highBefore, s.HighPointOccupied);
 
-        // Mutating the copy must not leak back into the receiver.
-        f.Points[6] = 0;
+        // Changing the copy must not leak back into the receiver (rewritten:
+        // through the apply path, since a raw write no longer compiles).
+        f.ApplyMove(new Move(5, 4));
+        Assert.Equal(2, f.Points[5]);
         Assert.Equal(before, s.Points);
     }
 
@@ -587,7 +751,7 @@ public class BoardStateTests
         var s = AsymmetricBoard();
 
         var f = s.FlippedCopy();
-        var fresh = BoardState.FromMop(f.ToMop());
+        var fresh = new BoardState(f.ToPosition());   // rewritten: ToMop gave way to the snapshot
 
         Assert.Equal(fresh.HighPointOccupied, f.HighPointOccupied);
     }
@@ -595,9 +759,11 @@ public class BoardStateTests
     [Fact]
     public void FlippedCopy_EmptyBoard_StaysEmpty()
     {
-        var f = new BoardState().FlippedCopy();
+        // Rewritten: the empty board is built from its value, the public
+        // empty constructor having gone.
+        var f = new BoardState(BoardPosition.Empty).FlippedCopy();
 
-        Assert.All(f.Points, p => Assert.Equal(0, p));
+        Assert.Equal(BoardPosition.Empty, f.ToPosition());
         Assert.Equal(0, f.HighPointOccupied);
     }
 

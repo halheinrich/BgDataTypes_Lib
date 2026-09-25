@@ -4,19 +4,33 @@ using System.Diagnostics.CodeAnalysis;
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// Mutable backgammon board position.
+/// A mutable backgammon board: the working copy that play applies to.
 ///
 /// <para>
-/// <c>Points[0..25]</c>: 26-element array.
+/// <see cref="Points"/> is the 26-count layout of <see cref="BoardPosition"/>:
 ///   <c>Points[25]</c> = on-roll player's bar,
 ///   <c>Points[1..24]</c> = playing surface,
 ///   <c>Points[0]</c> = opponent's bar.
+/// Positive values = on-roll player's checkers; negative = opponent's.
+/// On-roll moves from high indices toward low (25 → 1, bearing off past 1).
 /// </para>
 ///
 /// <para>
-/// Positive values = on-roll player's checkers; negative = opponent's.
-/// On-roll moves from high indices toward low (25 → 1, bearing off past 1).
-/// Layout matches <c>PositionData.Mop</c> / <c>IDecisionFilterData.Board</c>.
+/// <b>Callers read it; only its own members write it</b>
+/// (halheinrich/backgammon#281). <see cref="Points"/> is a read-only span and
+/// <see cref="HighPointOccupied"/> has a private setter, so a write from
+/// outside this library does not compile. A board comes into being only by
+/// construction — from a position value
+/// (<see cref="BoardState(BoardPosition)"/>, and the starting positions
+/// <see cref="Standard"/>, <see cref="Nackgammon"/> and <see cref="Bg960"/>
+/// built on it), from raw counts (<see cref="FromMop"/>, which validates
+/// them), or from another board (<see cref="Copy"/>, <see cref="FlippedCopy"/>)
+/// — and then changes only through the raw pair
+/// <see cref="ApplyMove(Move)"/> / <see cref="UndoMove(Move)"/> and through
+/// <see cref="ApplyPlay(Play)"/> / <see cref="TryApplyPlay(Play)"/>. So the
+/// board is always a well-formed position (<see cref="BoardPosition"/>'s
+/// invariant): every way in is one, the play rule keeps it one, and the raw
+/// pair keeps it one under its stated preconditions.
 /// </para>
 ///
 /// <para>
@@ -31,6 +45,8 @@ namespace BgDataTypes_Lib;
 /// consumers should advance state via <see cref="ApplyPlay(Play)"/>, which
 /// applies a whole play through the one play rule, refusing an invalid one, and
 /// transparently flips perspective so the next call still reasons in on-roll POV.
+/// <see cref="ToPosition"/> takes the board as a <see cref="BoardPosition"/>
+/// value, which is how two boards are compared.
 /// </para>
 ///
 /// <para>
@@ -41,53 +57,99 @@ namespace BgDataTypes_Lib;
 /// </summary>
 public class BoardState
 {
+    private readonly int[] _points = new int[26];
+
     /// <summary>
-    /// The raw 26-element point array (layout in the type summary). Exposed
-    /// for hot-path reads and deliberate bulk writes; direct mutation
-    /// bypasses the incremental bookkeeping, so follow it with
-    /// <see cref="RecalcHighPoint"/> or <see cref="HighPointOccupied"/>
-    /// desyncs.
+    /// The 26 counts, read-only (layout in the type summary). Exposed for
+    /// hot-path reads: a span over the board's own storage, so reading
+    /// allocates nothing and a write does not compile. It reads the board as
+    /// it stands; <see cref="ToPosition"/> takes a value that later changes do
+    /// not reach.
     /// </summary>
-    public readonly int[] Points = new int[26];
+    public ReadOnlySpan<int> Points => _points;
 
     /// <summary>
     /// Highest point (1–25) with an on-roll checker, 0 if none.
     /// Maintained incrementally by <see cref="ApplyMove(Move)"/> /
-    /// <see cref="UndoMove(Move)"/>; recomputed by <see cref="RecalcHighPoint"/>
-    /// after bulk mutation (e.g., <see cref="FromMop"/>, internal flip).
-    /// External code that mutates <see cref="Points"/> directly must call
-    /// <see cref="RecalcHighPoint"/> or this field will desync.
+    /// <see cref="UndoMove(Move)"/>, and recomputed whenever the board is
+    /// built or flipped. Only this type writes it.
     /// </summary>
-    public int HighPointOccupied;
+    public int HighPointOccupied { get; private set; }
 
     /// <summary>
-    /// An empty board — all points zero, <see cref="HighPointOccupied"/> 0.
-    /// Use the factories (<see cref="Standard"/>, <see cref="Nackgammon"/>,
-    /// <see cref="Bg960"/>, <see cref="FromMop"/>) for populated starts.
+    /// A board holding <paramref name="position"/> — the construction from a
+    /// position value, which every other way in goes through.
     /// </summary>
-    public BoardState() { }
+    /// <param name="position">The position to start from; well-formed by its own invariant.</param>
+    public BoardState(BoardPosition position)
+    {
+        position.CopyTo(_points);
+        RecalcHighPoint();
+    }
+
+    /// <summary>A board at the standard start, <see cref="BoardPosition.Standard"/>.</summary>
+    public static BoardState Standard() => new(BoardPosition.Standard);
+
+    /// <summary>A board at the Nackgammon start, <see cref="BoardPosition.Nackgammon"/>.</summary>
+    public static BoardState Nackgammon() => new(BoardPosition.Nackgammon);
 
     /// <summary>
-    /// Recompute <see cref="HighPointOccupied"/> from scratch. Call after
-    /// directly mutating <see cref="Points"/>.
+    /// A board at a random Bg960 start, <see cref="BoardPosition.Bg960"/>
+    /// (whose summary states the constraints).
     /// </summary>
-    public void RecalcHighPoint()
+    /// <param name="seed">Optional RNG seed for reproducibility. Null = random.</param>
+    /// <exception cref="InvalidOperationException">No valid position found in 1000 attempts.</exception>
+    public static BoardState Bg960(int? seed = null) => new(BoardPosition.Bg960(seed));
+
+    /// <summary>The copy constructor behind <see cref="Copy"/>.</summary>
+    private BoardState(BoardState source)
+    {
+        Array.Copy(source._points, _points, _points.Length);
+        HighPointOccupied = source.HighPointOccupied;
+    }
+
+    /// <summary>
+    /// Build a board from 26 counts in the <see cref="Points"/> layout — the
+    /// door from raw outside data, such as a count array in a test or a
+    /// parser. The counts must form a well-formed position
+    /// (<see cref="BoardPosition"/>'s invariant); partial boards are fine,
+    /// since borne-off checkers are not tracked. Equivalent to
+    /// <c>new BoardState(new BoardPosition(mop))</c>, and validated by that
+    /// one rule.
+    /// </summary>
+    /// <param name="mop">Exactly 26 counts forming a well-formed position.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="mop"/> does not hold exactly 26 counts, or they do not
+    /// form a well-formed position; the message names the fault.
+    /// </exception>
+    public static BoardState FromMop(ReadOnlySpan<int> mop)
+    {
+        if (!BoardPosition.TryCreate(mop, out var position, out var fault))
+            throw new ArgumentException(fault, nameof(mop));
+        return new BoardState(position);
+    }
+
+    /// <summary>
+    /// The board as it stands, as a <see cref="BoardPosition"/> value — a
+    /// snapshot: later changes to this board do not reach it. Allocation-free.
+    /// </summary>
+    public BoardPosition ToPosition() => BoardPosition.FromWellFormed(_points);
+
+    /// <summary>
+    /// Recompute <see cref="HighPointOccupied"/> from scratch, after the
+    /// board is built or flipped.
+    /// </summary>
+    private void RecalcHighPoint()
     {
         HighPointOccupied = 0;
         for (int i = 25; i >= 1; i--)
         {
-            if (Points[i] > 0) { HighPointOccupied = i; return; }
+            if (_points[i] > 0) { HighPointOccupied = i; return; }
         }
     }
 
     /// <summary>Deep copy.</summary>
-    public BoardState Copy()
-    {
-        var copy = new BoardState();
-        Array.Copy(Points, copy.Points, 26);
-        copy.HighPointOccupied = HighPointOccupied;
-        return copy;
-    }
+    public BoardState Copy() => new(this);
 
     /// <summary>
     /// Return a new <see cref="BoardState"/> re-expressed from the opponent's
@@ -113,256 +175,6 @@ public class BoardState
         return copy;
     }
 
-    // ── Mop bridge ────────────────────────────────────────────────
-
-    /// <summary>
-    /// Build a BoardState from a 26-element on-roll-relative point array
-    /// (the <c>Mop</c> shape used by <c>PositionData.Mop</c> and
-    /// <c>IDecisionFilterData.Board</c>). Layout matches <see cref="Points"/> exactly:
-    /// <c>[0]</c> = opponent bar, <c>[1..24]</c> = playing surface, <c>[25]</c> = on-roll bar;
-    /// positive = on-roll's checkers, negative = opponent's.
-    /// <see cref="HighPointOccupied"/> is recomputed from the copied points.
-    /// No checker-count or sign validation is performed — pseudoboards
-    /// (e.g., cube-decision references) are legitimate inputs.
-    /// </summary>
-    public static BoardState FromMop(IReadOnlyList<int> mop)
-    {
-        ArgumentNullException.ThrowIfNull(mop);
-        if (mop.Count != 26)
-            throw new ArgumentException(
-                $"Mop must have exactly 26 elements; got {mop.Count}.", nameof(mop));
-
-        var s = new BoardState();
-        for (int i = 0; i < 26; i++)
-            s.Points[i] = mop[i];
-        s.RecalcHighPoint();
-        return s;
-    }
-
-    /// <summary>
-    /// Return <see cref="Points"/> as a fresh 26-element list — same layout
-    /// as <see cref="FromMop"/> accepts. Defensive copy: subsequent mutations
-    /// of this BoardState do not affect the returned list, and vice versa.
-    /// </summary>
-    public IReadOnlyList<int> ToMop()
-    {
-        var copy = new int[26];
-        Array.Copy(Points, copy, 26);
-        return copy;
-    }
-
-    // ── Standard starting positions ───────────────────────────────
-
-    /// <summary>
-    /// Standard backgammon starting position.
-    /// Player's checkers: 6-pt(5), 8-pt(3), 13-pt(5), 24-pt(2)
-    /// Opponent's checkers: 19-pt(-5), 17-pt(-3), 12-pt(-5), 1-pt(-2)
-    /// </summary>
-    public static BoardState Standard()
-    {
-        var s = new BoardState();
-        s.Points[6] = 5;
-        s.Points[8] = 3;
-        s.Points[13] = 5;
-        s.Points[24] = 2;
-        s.Points[19] = -5;
-        s.Points[17] = -3;
-        s.Points[12] = -5;
-        s.Points[1] = -2;
-        s.RecalcHighPoint();
-        return s;
-    }
-
-    /// <summary>Nackgammon starting position.</summary>
-    public static BoardState Nackgammon()
-    {
-        var s = new BoardState();
-        s.Points[6] = 4;
-        s.Points[8] = 3;
-        s.Points[13] = 4;
-        s.Points[23] = 2;
-        s.Points[24] = 2;
-        s.Points[19] = -4;
-        s.Points[17] = -3;
-        s.Points[12] = -4;
-        s.Points[2] = -2;
-        s.Points[1] = -2;
-        s.RecalcHighPoint();
-        return s;
-    }
-
-    // ── Bg960 setup ───────────────────────────────────────────────
-
-    // Quadrant boundaries (1-indexed point indices)
-    private static readonly (int from, int to)[] Quadrants =
-    [
-        (1,  6),   // home board
-        (7,  12),  // outer board
-        (13, 18),  // opponent outer board
-        (19, 24),  // opponent home board
-    ];
-
-    // Made-point weights: num_points → weight
-    private static readonly (int points, int weight)[] MadePointWeights =
-    [
-        (2, 1), (3, 3), (4, 10), (5, 10), (6, 5), (7, 2),
-    ];
-
-    /// <summary>
-    /// Generate a random Bg960 starting position.
-    /// Constraints: symmetrical, no blots (≥ 2 per point), one point per quadrant,
-    /// no mirror conflicts, pip count ≥ 100, weighted toward 4–5 made points.
-    /// </summary>
-    /// <param name="seed">Optional RNG seed for reproducibility. Null = random.</param>
-    /// <exception cref="InvalidOperationException">No valid position found in 1000 attempts.</exception>
-    public static BoardState Bg960(int? seed = null)
-    {
-        var rng = seed.HasValue ? new Random(seed.Value) : new Random();
-
-        // Precompute sampling distribution
-        int maxPoints = 15 / 2;  // min 2 checkers per point → max 7 points
-        int totalWeight = 0;
-        for (int i = 0; i < MadePointWeights.Length; i++)
-            if (MadePointWeights[i].points >= 4 && MadePointWeights[i].points <= maxPoints)
-                totalWeight += MadePointWeights[i].weight;
-
-        for (int attempt = 0; attempt < 1000; attempt++)
-        {
-            int numPoints = SampleNumPoints(rng, totalWeight);
-            int[]? points = SelectPoints(rng, numPoints);
-            if (points == null) continue;
-
-            int[] checkers = DistributeCheckers(rng, points, 15, 2);
-
-            // Check pip count (1-indexed: point i contributes checkers[i-1] * i)
-            int pips = 0;
-            for (int i = 0; i < points.Length; i++)
-                pips += checkers[i] * points[i];
-            if (pips < 100) continue;
-
-            // Build board
-            var s = new BoardState();
-            for (int i = 0; i < points.Length; i++)
-            {
-                int pt = points[i];
-                int mirror = 25 - pt;   // 1-indexed mirror
-                s.Points[pt] = checkers[i];
-                s.Points[mirror] = -checkers[i];
-            }
-            s.RecalcHighPoint();
-            return s;
-        }
-
-        throw new InvalidOperationException("Bg960: failed to generate valid position in 1000 attempts");
-    }
-
-    private static int SampleNumPoints(Random rng, int totalWeight)
-    {
-        int r = rng.Next(totalWeight);
-        int cumulative = 0;
-        for (int i = 0; i < MadePointWeights.Length; i++)
-        {
-            var (points, weight) = MadePointWeights[i];
-            if (points < 4 || points > 15 / 2) continue;
-            cumulative += weight;
-            if (r < cumulative) return points;
-        }
-        return MadePointWeights[^1].points;
-    }
-
-    /// <summary>
-    /// Select numPoints distinct points satisfying quadrant coverage and no mirror conflicts.
-    /// Returns null if 1000 inner attempts fail.
-    /// </summary>
-    private static int[]? SelectPoints(Random rng, int numPoints)
-    {
-        for (int attempt = 0; attempt < 1000; attempt++)
-        {
-            var blocked = new HashSet<int>();
-            var mandatory = new List<int>();
-            bool failed = false;
-
-            // One mandatory point per quadrant
-            foreach (var (from, to) in Quadrants)
-            {
-                var candidates = new List<int>();
-                for (int p = from; p <= to; p++)
-                    if (!blocked.Contains(p)) candidates.Add(p);
-
-                if (candidates.Count == 0) { failed = true; break; }
-
-                int pt = candidates[rng.Next(candidates.Count)];
-                mandatory.Add(pt);
-                blocked.Add(pt);
-                blocked.Add(25 - pt);   // block mirror
-            }
-
-            if (failed) continue;
-
-            if (numPoints < mandatory.Count) continue;
-
-            // Fill remaining slots
-            int remaining = numPoints - mandatory.Count;
-            var available = new List<int>();
-            for (int p = 1; p <= 24; p++)
-                if (!blocked.Contains(p)) available.Add(p);
-
-            if (remaining > available.Count) continue;
-
-            var extra = new List<int>();
-            for (int i = 0; i < remaining; i++)
-            {
-                if (available.Count == 0) break;
-                int idx = rng.Next(available.Count);
-                int pt = available[idx];
-                extra.Add(pt);
-                available.RemoveAt(idx);
-                available.Remove(25 - pt);  // remove mirror
-            }
-
-            if (extra.Count < remaining) continue;
-
-            mandatory.AddRange(extra);
-            mandatory.Sort();
-            return mandatory.ToArray();
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Distribute totalCheckers across points with at least minPerPoint each.
-    /// Remainder distributed via stars-and-bars (sorted random dividers).
-    /// </summary>
-    private static int[] DistributeCheckers(Random rng, int[] points, int totalCheckers, int minPerPoint)
-    {
-        int k = points.Length;
-        int remainder = totalCheckers - minPerPoint * k;
-        int[] extra = new int[k];
-
-        if (remainder > 0)
-        {
-            // Stars and bars: k-1 random dividers in [0, remainder]
-            int[] dividers = new int[k - 1];
-            for (int i = 0; i < dividers.Length; i++)
-                dividers[i] = rng.Next(remainder + 1);
-            Array.Sort(dividers);
-
-            int prev = 0;
-            for (int i = 0; i < k - 1; i++)
-            {
-                extra[i] = dividers[i] - prev;
-                prev = dividers[i];
-            }
-            extra[k - 1] = remainder - prev;
-        }
-
-        int[] result = new int[k];
-        for (int i = 0; i < k; i++)
-            result[i] = minPerPoint + extra[i];
-        return result;
-    }
-
     // ── Apply / Undo (instance, hot-path) ─────────────────────────
 
     /// <summary>
@@ -385,30 +197,30 @@ public class BoardState
     /// </summary>
     public void ApplyMove(Move move)
     {
-        Debug.Assert(Points[move.FrPt] > 0,
+        Debug.Assert(_points[move.FrPt] > 0,
             "ApplyMove: the source point holds none of the mover's checkers.");
-        Debug.Assert(move.ToPt < 0 ? Points[-move.ToPt] == -1 : move.ToPt == 0 || Points[move.ToPt] >= 0,
+        Debug.Assert(move.ToPt < 0 ? _points[-move.ToPt] == -1 : move.ToPt == 0 || _points[move.ToPt] >= 0,
             "ApplyMove: the hit mark disagrees with the landing point.");
 
-        Points[move.FrPt]--;
+        _points[move.FrPt]--;
         if (move.ToPt > 0)
         {
-            Points[move.ToPt]++;
+            _points[move.ToPt]++;
         }
         else if (move.ToPt < 0)
         {
             int dest = -move.ToPt;
-            Points[dest] = 1;
-            Points[0]--;
+            _points[dest] = 1;
+            _points[0]--;
         }
         // ToPt == 0: bear off, checker disappears.
 
-        if (move.FrPt == HighPointOccupied && Points[move.FrPt] == 0)
+        if (move.FrPt == HighPointOccupied && _points[move.FrPt] == 0)
         {
             HighPointOccupied = 0;
             for (int i = move.FrPt - 1; i >= 1; i--)
             {
-                if (Points[i] > 0) { HighPointOccupied = i; break; }
+                if (_points[i] > 0) { HighPointOccupied = i; break; }
             }
         }
     }
@@ -428,21 +240,21 @@ public class BoardState
     /// </summary>
     public void UndoMove(Move move)
     {
-        Debug.Assert(move.ToPt < 0 ? Points[-move.ToPt] == 1 : move.ToPt == 0 || Points[move.ToPt] > 0,
+        Debug.Assert(move.ToPt < 0 ? _points[-move.ToPt] == 1 : move.ToPt == 0 || _points[move.ToPt] > 0,
             "UndoMove: the landing point is not as the move left it.");
 
         if (move.ToPt > 0)
         {
-            Points[move.ToPt]--;
+            _points[move.ToPt]--;
         }
         else if (move.ToPt < 0)
         {
             int dest = -move.ToPt;
-            Points[dest] = -1;
-            Points[0]++;
+            _points[dest] = -1;
+            _points[0]++;
         }
 
-        Points[move.FrPt]++;
+        _points[move.FrPt]++;
         if (move.FrPt > HighPointOccupied)
             HighPointOccupied = move.FrPt;
     }
@@ -498,10 +310,10 @@ public class BoardState
     private PlayFault Advance(in Play play, out Move culprit)
     {
         Span<int> reached = stackalloc int[26];
-        var fault = Reach(Points, in play, reached, out culprit);
+        var fault = Reach(_points, in play, reached, out culprit);
         if (fault == PlayFault.None)
         {
-            reached.CopyTo(Points);
+            reached.CopyTo(_points);
             Flip();
         }
         return fault;
@@ -557,17 +369,18 @@ public class BoardState
     /// Neither validity nor the position reached depends on the order the
     /// moves are written in. An invalid play reaches no position, so it is
     /// never the same play as any play, an identical encoding included.
-    /// Positions compare by all 26 counts of <see cref="Points"/>, both bars
-    /// included; borne-off checkers need no comparison, since both plays
-    /// leave from this one position.
+    /// Positions compare as <see cref="BoardPosition"/> values, the one
+    /// definition of "the same position": all 26 counts, both bars included.
+    /// Borne-off checkers need no comparison, since both plays leave from
+    /// this one position.
     /// </para>
     /// <para>
     /// <b>This is not a legality check.</b> The dice, forced moves, entering
     /// from the bar before any other checker moves, and the bear-off
     /// conditions stay with the move generator (BgMoveGen): a play no roll
     /// could produce can still be valid here. What the rule guarantees is that
-    /// a valid play reaches a well-formed position, and the same one however
-    /// the play is written.
+    /// a valid play reaches a well-formed position (<see cref="BoardPosition"/>'s
+    /// invariant), and the same one however the play is written.
     /// </para>
     /// <para>
     /// <see cref="ApplyPlay"/> and <see cref="TryApplyPlay"/> apply this same
@@ -578,11 +391,9 @@ public class BoardState
     /// </remarks>
     public bool IsSamePlay(Play first, Play second)
     {
-        Span<int> target = stackalloc int[26];
-        if (Reach(Points, in first, target, out _) != PlayFault.None)
-            return false;
         Span<int> scratch = stackalloc int[26];
-        return ReachesTarget(in second, target, scratch);
+        return TryReachPosition(in first, scratch, out var target)
+            && ReachesTarget(in second, in target, scratch);
     }
 
     /// <summary>
@@ -606,14 +417,13 @@ public class BoardState
     {
         ArgumentNullException.ThrowIfNull(plays);
 
-        Span<int> target = stackalloc int[26];
-        if (Reach(Points, in play, target, out _) != PlayFault.None)
-            return -1;
         Span<int> scratch = stackalloc int[26];
+        if (!TryReachPosition(in play, scratch, out var target))
+            return -1;
         for (int i = 0; i < plays.Count; i++)
         {
             var candidate = plays[i];
-            if (ReachesTarget(in candidate, target, scratch))
+            if (ReachesTarget(in candidate, in target, scratch))
                 return i;
         }
         return -1;
@@ -623,12 +433,30 @@ public class BoardState
     /// The identity comparison, single-sourced for <see cref="IsSamePlay"/>
     /// and <see cref="IndexOfSamePlay"/>: whether <paramref name="play"/> is
     /// valid from this position and reaches <paramref name="target"/>, a
-    /// position a valid play reaches from here. <paramref name="scratch"/> is
-    /// working space.
+    /// position a valid play reaches from here — compared by
+    /// <see cref="BoardPosition"/>'s equality, never here.
+    /// <paramref name="scratch"/> is working space.
     /// </summary>
-    private bool ReachesTarget(in Play play, ReadOnlySpan<int> target, Span<int> scratch) =>
-        Reach(Points, in play, scratch, out _) == PlayFault.None
-        && scratch.SequenceEqual(target);
+    private bool ReachesTarget(in Play play, in BoardPosition target, Span<int> scratch) =>
+        TryReachPosition(in play, scratch, out var reached) && reached == target;
+
+    /// <summary>
+    /// The position <paramref name="play"/> reaches from this one by the play
+    /// rule, as a value in the mover's frame (unflipped), or false when the
+    /// play is invalid. <paramref name="scratch"/> is working space. The
+    /// reached board is well-formed because this one is and the rule keeps
+    /// it so, which is what lets the value skip its outside-data check.
+    /// </summary>
+    private bool TryReachPosition(in Play play, Span<int> scratch, out BoardPosition reached)
+    {
+        if (Reach(_points, in play, scratch, out _) != PlayFault.None)
+        {
+            reached = default;
+            return false;
+        }
+        reached = BoardPosition.FromWellFormed(scratch);
+        return true;
+    }
 
     /// <summary>How a play fails the rule stated on <see cref="IsSamePlay"/>.</summary>
     private enum PlayFault
@@ -785,10 +613,10 @@ public class BoardState
         for (int i = 0; i < 13; i++)
         {
             int j = 25 - i;
-            int a = Points[i];
-            int b = Points[j];
-            Points[i] = -b;
-            Points[j] = -a;
+            int a = _points[i];
+            int b = _points[j];
+            _points[i] = -b;
+            _points[j] = -a;
         }
         // Flip changed which point is "high"; recompute from scratch.
         RecalcHighPoint();
@@ -820,7 +648,7 @@ public class BoardState
             int total = 0;
             for (int i = 1; i <= 25; i++)
             {
-                int n = Points[i];
+                int n = _points[i];
                 if (n > 0) total += i * n;
             }
             return total;
@@ -841,7 +669,7 @@ public class BoardState
             int total = 0;
             for (int i = 0; i <= 24; i++)
             {
-                int n = Points[i];
+                int n = _points[i];
                 if (n < 0) total += (25 - i) * (-n);
             }
             return total;
@@ -868,7 +696,7 @@ public class BoardState
             int minOpponent = int.MaxValue;
             for (int i = 0; i <= 25; i++)
             {
-                int n = Points[i];
+                int n = _points[i];
                 if (n > 0) { if (i > maxOnRoll) maxOnRoll = i; }
                 else if (n < 0) { if (i < minOpponent) minOpponent = i; }
             }

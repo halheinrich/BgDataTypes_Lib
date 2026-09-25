@@ -102,9 +102,7 @@ namespace BgDataTypes_Lib;
 /// <b>Real-board posture.</b> Fact validation requires a physically possible
 /// position: at most 15 checkers per side, per-point counts within ±15, each
 /// bar holding only its own side's checkers, and at least one checker on the
-/// board. <see cref="BoardState.FromMop"/> deliberately tolerates
-/// pseudoboards — that is an affordance of a general board utility;
-/// <see cref="ProblemKey"/> identifies real analysed decisions, whose
+/// board. <see cref="ProblemKey"/> identifies real analysed decisions, whose
 /// producer-stamped boards always satisfy these bounds, so a violation is
 /// corruption and corruption gets no key.
 /// </para>

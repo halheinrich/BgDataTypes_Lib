@@ -21,7 +21,7 @@ public class RaceTests
     public void EmptyBoard_IsRace()
     {
         // Both sides borne off — vacuous race.
-        Assert.True(new BoardState().IsRace);
+        Assert.True(new BoardState(BoardPosition.Empty).IsRace);
     }
 
     [Fact]
