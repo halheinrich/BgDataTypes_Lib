@@ -48,9 +48,11 @@ and `Directory.Packages.props` (Central Package Management — no inline
   is the content identity: *which problem is this* — the key stats and
   dedupe recognise across files.
 - **Move and board primitives** — `Move`, `Play`, `PlayChain`,
-  `CanonicalPlay` (a play's display form), and `BoardState`, the one
-  mutable type in the library and the owner of play identity. Value types
-  here inherit hot-path zero-alloc constraints from move generation.
+  `CanonicalPlay` (a play's display form), `BoardPosition` (an immutable
+  position, the one definition of "the same position"), and `BoardState`,
+  the one mutable type in the library and the owner of play identity.
+  Value types here inherit hot-path zero-alloc constraints from move
+  generation.
 - **Enums and the depth taxonomy** — `CubeOwner`, `CubeAction`, `CubeClaim`
   (the three-valued doubler claim of SPEC-scoring §3, with
   `CubeClaimExtensions` for the claim→action collapse), and
@@ -217,6 +219,7 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. **No equality** (`halheinrich/backgammon#273`, ruling A): `==`/`!=` are not defined, and `Equals`/`GetHashCode` throw `NotSupportedException` so every runtime route (comparers, hashed collections, `Distinct`, records and tuples holding a play) fails loudly. Play identity is `BoardState.IsSamePlay`, from a starting position — see "Play identity" below. `IsSameEncoding` compares exact encodings (order, hops, marks) for storage and round-trips; it is not identity. `ToCanonical()` is the display form. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly. |
+| `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
 | `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
 | `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used to apply the candidate and to match a play against the candidates with `BoardState.IndexOfSamePlay`). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
@@ -285,6 +288,42 @@ and the formatter renders from this form):
 - Duplicate chains (doubles moving two checkers along the same route) are
   kept as repeated entries — `"(2)"` grouping, `"bar"`/`"off"` labels and all
   other notation rendering stay in `BgMoveGen`'s formatter.
+
+### BoardPosition
+
+An immutable position: the 26 checker counts of a board in `BoardState`'s
+frame. **The invariant and the equality contract are stated once, in the
+type's `<remarks>`**, and not restated here. Design points a maintainer
+needs before touching it:
+
+- **The one "same position"** (halheinrich/backgammon#273). Equality is
+  over all 26 counts, both bars included; the hash is consistent with it
+  and never identity (`HashCode`, seeded per process). Code that asks
+  whether two boards are the same position asks this type, never a hash
+  of its own.
+- **Well-formed by construction.** The constructor and `TryCreate` refuse
+  counts that break the invariant, so no instance holds a malformed board.
+  `default` is the empty board, which is well-formed, so unlike `DiceRoll`'s
+  the default is meaningful; `Empty` names it.
+- **Representation.** The counts are stored inline as 26 `sbyte`s (an
+  `[InlineArray]`), which the invariant makes lossless; the storage is
+  private and every read widens to `int`. Equality is one 26-byte span
+  comparison and the hash one `HashCode.AddBytes` pass, so creating,
+  comparing and hashing allocate nothing — pinned by test with
+  `GC.GetAllocatedBytesForCurrentThread`, because the move generator
+  deduplicates plays by the position they reach, on its hot path.
+- **Name and placement.** It names the position of the checkers, distinct
+  from `PositionData` (the record category, which adds score and cube) and
+  from `BoardState` (the mutable working board), and it collides with no
+  member named `Position` or `Board`. It lives beside `BoardState` because
+  `BoardState` builds from it and compares through it.
+- **No frame of its own.** A position does not record whose turn it
+  describes; every member that stores one states its frame.
+- **Read surface.** The indexer (slots 0–25), `CopyTo`, and a `ToString`
+  of `slot:count` pairs for the occupied slots (`"empty"` for the empty
+  board), which a test failure shows side by side. Deliberately no
+  ordering, no text parsing, and no enumeration: it is a value, not a
+  collection.
 
 ### BoardState
 
@@ -1011,6 +1050,22 @@ public readonly struct CanonicalPlay              // the display form; no equali
     public PlayChain this[int index] { get; }     // canonical order (FrPt desc)
     public override bool Equals(object? obj);     // throws NotSupportedException
     public override int GetHashCode();            // throws NotSupportedException
+}
+
+// An immutable position: 26 counts in BoardState's frame, well-formed by
+// construction (the invariant: the type's remarks). The one "same
+// position": equality over all 26 counts; the hash is never identity.
+// Creating, comparing and hashing allocate nothing.
+public readonly struct BoardPosition :
+    IEquatable<BoardPosition>, IEqualityOperators<BoardPosition, BoardPosition, bool>
+{
+    public BoardPosition(ReadOnlySpan<int> counts);           // malformed → ArgumentException
+    public static bool TryCreate(ReadOnlySpan<int> counts, out BoardPosition position);
+    public static BoardPosition Empty { get; }                // == default; well-formed
+    public int this[int point] { get; }                       // slots 0–25
+    public void CopyTo(Span<int> destination);                // at least 26 elements
+    public bool Equals(BoardPosition other);                  // + ==, !=, Equals(object), GetHashCode
+    public override string ToString();                        // "1:-2 6:5 …", or "empty"
 }
 
 public class BoardState

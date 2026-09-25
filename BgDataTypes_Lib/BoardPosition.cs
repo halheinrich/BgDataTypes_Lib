@@ -1,0 +1,264 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace BgDataTypes_Lib;
+
+/// <summary>
+/// An immutable backgammon position: the checker count on each of a board's
+/// 26 slots, in <see cref="BoardState"/>'s frame. Index 0 is the opponent's
+/// bar, 1–24 are the points, and 25 is the bar of the player the frame
+/// belongs to — the player on roll, who moves from the 25 toward the 1.
+/// Positive counts are that player's checkers, negative counts the
+/// opponent's. This type is the one definition of "the same position".
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>Well-formed, always.</b> Every position satisfies two conditions:
+/// </para>
+/// <list type="bullet">
+/// <item><description>each bar holds only its own side's checkers — the
+/// opponent's bar (index 0) a count of 0 or less, the on-roll player's bar
+/// (index 25) a count of 0 or more;</description></item>
+/// <item><description>each side has at most 15 checkers on the board — the
+/// positive counts sum to at most 15, and so do the magnitudes of the
+/// negative counts.</description></item>
+/// </list>
+/// <para>
+/// Fewer than 15 is well-formed, since borne-off checkers are not tracked, so
+/// the empty board is a position: every count 0, which is
+/// <see cref="Empty"/> and <see langword="default"/>. The invariant is
+/// enforced wherever a position is built from outside data — the
+/// constructor and <see cref="TryCreate(ReadOnlySpan{int}, out BoardPosition)"/>
+/// refuse counts that break it —
+/// so no instance can hold a malformed board.
+/// </para>
+/// <para>
+/// <b>Same position.</b> Two positions are equal exactly when all 26 counts
+/// are equal, both bars included. <see cref="GetHashCode"/> is consistent
+/// with that equality and is never identity: equal positions hash equally,
+/// but equal hashes prove nothing, and equality decides. The hash is seeded
+/// per process, so it is never stored or compared across processes.
+/// </para>
+/// <para>
+/// <b>Allocation-free.</b> Creating, comparing and hashing a position
+/// allocate nothing: the move generator deduplicates plays by the position
+/// they reach, on its hot path. The counts are stored inline and narrowed,
+/// which the invariant makes lossless (no count exceeds 15 in magnitude);
+/// the storage is private and reads widen back to <see langword="int"/>.
+/// </para>
+/// <para>
+/// <b>The frame is the holder's to state.</b> A position does not record
+/// whose turn it describes; every member that stores one states its frame
+/// in its own documentation. <see cref="BoardState.FlippedCopy"/> re-expresses
+/// a position from the other player's frame.
+/// </para>
+/// </remarks>
+public readonly struct BoardPosition :
+    IEquatable<BoardPosition>,
+    IEqualityOperators<BoardPosition, BoardPosition, bool>
+{
+    /// <summary>The number of slots: two bars and 24 points.</summary>
+    private const int SlotCount = 26;
+
+    /// <summary>The checkers each side owns; at most this many are on the board.</summary>
+    private const int CheckersPerSide = 15;
+
+    private readonly Counts _counts;
+
+    /// <summary>
+    /// Creates a position from its 26 counts, in the layout of the type
+    /// summary.
+    /// </summary>
+    /// <param name="counts">Exactly 26 counts forming a well-formed board (see the type remarks).</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="counts"/> does not hold exactly 26 counts, or the
+    /// board they describe is not well-formed; the message names the fault.
+    /// </exception>
+    public BoardPosition(ReadOnlySpan<int> counts)
+    {
+        if (FindFault(counts) is { } fault)
+            throw new ArgumentException(fault, nameof(counts));
+        _counts = Narrow(counts);
+    }
+
+    private BoardPosition(Counts counts) => _counts = counts;
+
+    /// <summary>
+    /// The empty board: every count 0. Equal to <see langword="default"/>, and
+    /// well-formed — no checkers on the board is a position.
+    /// </summary>
+    public static BoardPosition Empty => default;
+
+    /// <summary>
+    /// Creates a position from its 26 counts without throwing: the
+    /// non-throwing form of <see cref="BoardPosition(ReadOnlySpan{int})"/>.
+    /// </summary>
+    /// <param name="counts">The candidate counts, in the layout of the type summary.</param>
+    /// <param name="position">
+    /// The position when <paramref name="counts"/> forms one; otherwise
+    /// <see cref="Empty"/>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when <paramref name="counts"/> holds exactly 26
+    /// counts forming a well-formed board; otherwise <see langword="false"/>.
+    /// </returns>
+    public static bool TryCreate(ReadOnlySpan<int> counts, out BoardPosition position)
+        => TryCreate(counts, out position, out _);
+
+    /// <summary>
+    /// <see cref="TryCreate(ReadOnlySpan{int}, out BoardPosition)"/>, also
+    /// naming the fault, for a caller that reports it in its own exception.
+    /// </summary>
+    internal static bool TryCreate(
+        ReadOnlySpan<int> counts, out BoardPosition position, [NotNullWhen(false)] out string? fault)
+    {
+        fault = FindFault(counts);
+        position = fault is null ? new BoardPosition(Narrow(counts)) : default;
+        return fault is null;
+    }
+
+    /// <summary>
+    /// The count on one slot: negative for the opponent's checkers, positive
+    /// for the on-roll player's, 0 for an empty slot.
+    /// </summary>
+    /// <param name="point">
+    /// The slot, 0–25: 0 is the opponent's bar, 1–24 the points, 25 the
+    /// on-roll player's bar.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="point"/> is outside 0–25.</exception>
+    public int this[int point]
+    {
+        get
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(point);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(point, SlotCount);
+            return _counts[point];
+        }
+    }
+
+    /// <summary>
+    /// Copies the 26 counts, in the layout of the type summary, into the
+    /// first 26 elements of <paramref name="destination"/>.
+    /// </summary>
+    /// <param name="destination">A span of at least 26 elements.</param>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than 26 elements.</exception>
+    public void CopyTo(Span<int> destination)
+    {
+        if (destination.Length < SlotCount)
+            throw new ArgumentException(
+                $"The destination must hold at least {SlotCount} counts; it holds {destination.Length}.",
+                nameof(destination));
+
+        ReadOnlySpan<sbyte> counts = _counts;
+        for (int i = 0; i < SlotCount; i++)
+            destination[i] = counts[i];
+    }
+
+    /// <summary>
+    /// Whether <paramref name="other"/> is the same position: all 26 counts
+    /// equal, both bars included.
+    /// </summary>
+    public bool Equals(BoardPosition other) =>
+        ((ReadOnlySpan<sbyte>)_counts).SequenceEqual(other._counts);
+
+    /// <inheritdoc/>
+    public override bool Equals([NotNullWhen(true)] object? obj) =>
+        obj is BoardPosition other && Equals(other);
+
+    /// <summary>
+    /// A hash over all 26 counts, consistent with <see cref="Equals(BoardPosition)"/>.
+    /// Never identity, and seeded per process — see the type remarks.
+    /// </summary>
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.AddBytes(MemoryMarshal.AsBytes((ReadOnlySpan<sbyte>)_counts));
+        return hash.ToHashCode();
+    }
+
+    /// <summary>Whether the two are the same position (<see cref="Equals(BoardPosition)"/>).</summary>
+    public static bool operator ==(BoardPosition left, BoardPosition right) => left.Equals(right);
+
+    /// <summary>Whether the two are different positions (<see cref="Equals(BoardPosition)"/>).</summary>
+    public static bool operator !=(BoardPosition left, BoardPosition right) => !left.Equals(right);
+
+    /// <summary>
+    /// The occupied slots as <c>slot:count</c> pairs in ascending slot order,
+    /// separated by spaces — <c>"1:-2 6:5 8:3 12:-5 13:5 17:-3 19:-5 24:2"</c>
+    /// for the standard start — or <c>"empty"</c> for the empty board. Each
+    /// pair names its slot, so two positions that differ are easy to tell
+    /// apart in a test failure.
+    /// </summary>
+    public override string ToString()
+    {
+        ReadOnlySpan<sbyte> counts = _counts;
+        var text = new StringBuilder();
+        for (int i = 0; i < SlotCount; i++)
+        {
+            if (counts[i] == 0)
+                continue;
+            if (text.Length > 0)
+                text.Append(' ');
+            text.Append(i).Append(':').Append(counts[i]);
+        }
+        return text.Length == 0 ? "empty" : text.ToString();
+    }
+
+    /// <summary>
+    /// The first way <paramref name="counts"/> fails to form a position, as
+    /// a message naming it, or <see langword="null"/> when it forms one. The
+    /// one statement of the invariant in code.
+    /// </summary>
+    private static string? FindFault(ReadOnlySpan<int> counts)
+    {
+        if (counts.Length != SlotCount)
+            return $"A position has exactly {SlotCount} counts; got {counts.Length}.";
+
+        // Each count's magnitude first, so the side totals below cannot
+        // overflow; one slot beyond a side's checkers is already malformed.
+        for (int i = 0; i < SlotCount; i++)
+        {
+            if (counts[i] is < -CheckersPerSide or > CheckersPerSide)
+                return $"Slot {i} holds a count of {counts[i]}; a side has only {CheckersPerSide} checkers.";
+        }
+
+        if (counts[0] > 0)
+            return $"The opponent's bar (slot 0) holds {counts[0]} of the on-roll player's checkers; it holds only the opponent's.";
+        if (counts[SlotCount - 1] < 0)
+            return $"The on-roll player's bar (slot {SlotCount - 1}) holds {-counts[SlotCount - 1]} of the opponent's checkers; it holds only the on-roll player's.";
+
+        int onRoll = 0, opponent = 0;
+        foreach (int count in counts)
+        {
+            if (count > 0) onRoll += count;
+            else opponent -= count;
+        }
+        if (onRoll > CheckersPerSide)
+            return $"The on-roll player has {onRoll} checkers on the board; a side has at most {CheckersPerSide}.";
+        if (opponent > CheckersPerSide)
+            return $"The opponent has {opponent} checkers on the board; a side has at most {CheckersPerSide}.";
+        return null;
+    }
+
+    /// <summary>
+    /// The counts in storage form. Lossless for any board the invariant
+    /// admits; callers establish it first.
+    /// </summary>
+    private static Counts Narrow(ReadOnlySpan<int> counts)
+    {
+        var narrowed = new Counts();
+        for (int i = 0; i < SlotCount; i++)
+            narrowed[i] = (sbyte)counts[i];
+        return narrowed;
+    }
+
+    /// <summary>The 26 counts, stored inline.</summary>
+    [InlineArray(SlotCount)]
+    private struct Counts
+    {
+        private sbyte _element0;
+    }
+}
