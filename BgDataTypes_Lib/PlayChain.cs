@@ -12,11 +12,18 @@ namespace BgDataTypes_Lib;
 ///     Zero: bear off (checker removed from board).
 ///     Negative (-1 to -24): hit — land on |ToPt| and send opponent blot to bar.
 ///
-/// Unlike a <see cref="Move"/>, which is always a single-die hop, a chain may
-/// span several dice (13/10 followed by 10/8 collapses to the chain 13/8). A
-/// hit can only ever sit at a chain's endpoint, and each hit point's mark sits
-/// on exactly one chain, its carrier: canonicalization never joins the
-/// carrier across the point it hits, so the hit stays visible — see
-/// <see cref="CanonicalPlay"/> for the collapse and hit-attribution rules.
+/// A <see cref="Move"/> is one hop of one checker — usually a single die, but
+/// an encoding may also carry a multi-die move (XG data stores some, such as
+/// 8/1* with 5-2). A chain joins consecutive moves of one checker where they
+/// meet, so it may span several of them (13/10 followed by 10/8 collapses to
+/// the chain 13/8). A hit can only ever sit at a chain's endpoint, and each hit
+/// point's mark sits on exactly one chain, its carrier: canonicalization
+/// never joins the carrier across the point it hits, so the hit stays
+/// visible — see <see cref="CanonicalPlay"/> for the collapse and
+/// hit-attribution rules.
+///
+/// The record-struct equality serves display grouping (the formatter's "(2)"
+/// for identical chains) and is not play identity, which is
+/// <see cref="BoardState.IsSamePlay"/>.
 /// </summary>
 public readonly record struct PlayChain(int FrPt, int ToPt);
