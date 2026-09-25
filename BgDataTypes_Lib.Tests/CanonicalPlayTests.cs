@@ -2,15 +2,30 @@ using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
 
+/// <summary>
+/// The display rule: which chains a play's notation shows and where its hit
+/// marks go. <see cref="CanonicalPlay"/> has no equality (halheinrich/backgammon#273,
+/// ruling A), so forms are compared chain by chain through <see cref="Chains"/>;
+/// play identity is pinned in <see cref="PlayIdentityTests"/>.
+/// </summary>
 public class CanonicalPlayTests
 {
+    /// <summary>A form's chains in canonical order, for chain-by-chain comparison.</summary>
+    private static PlayChain[] Chains(CanonicalPlay form)
+    {
+        var chains = new PlayChain[form.Count];
+        for (int i = 0; i < form.Count; i++)
+            chains[i] = form[i];
+        return chains;
+    }
+
     [Fact]
     public void EmptyPlay_CanonicalizesToDefault()
     {
         var canonical = new Play().ToCanonical();
 
         Assert.Equal(0, canonical.Count);
-        Assert.Equal(default, canonical);
+        Assert.Equal(Chains(default), Chains(canonical));
     }
 
     [Fact]
@@ -44,12 +59,12 @@ public class CanonicalPlayTests
     public void DifferentDecompositionRoutes_SameCanonicalForm()
     {
         // 13/8 played big die first (via 10) or small die first (via 11):
-        // the intermediate touch-down point is not part of the play's identity.
+        // the intermediate touch-down point is not shown.
         var viaTen = Play.Create(new(13, 10), new(10, 8)).ToCanonical();
         var viaEleven = Play.Create(new(13, 11), new(11, 8)).ToCanonical();
 
-        Assert.Equal(viaTen, viaEleven);
-        Assert.Equal(viaTen.GetHashCode(), viaEleven.GetHashCode());
+        Assert.Equal([new PlayChain(13, 8)], Chains(viaTen));
+        Assert.Equal(Chains(viaTen), Chains(viaEleven));
     }
 
     [Fact]
@@ -87,16 +102,16 @@ public class CanonicalPlayTests
 
         var intermediateOnly = Play.Create(new(13, -10), new(10, 8)).ToCanonical();
         var endpointOnly = Play.Create(new(13, 10), new(10, -8)).ToCanonical();
-        Assert.NotEqual(both, intermediateOnly);
-        Assert.NotEqual(both, endpointOnly);
+        Assert.NotEqual(Chains(both), Chains(intermediateOnly));
+        Assert.NotEqual(Chains(both), Chains(endpointOnly));
     }
 
     [Fact]
     public void PointMadeOnBlot_EitherAttribution_MarkOnCarrier()
     {
         // halheinrich/backgammon#273: 5-4 making the 3-point on a blot. One
-        // blot, hit once; which checker's move records the hit is not part of
-        // identity. The mark goes to the carrier — the first chain in
+        // blot, hit once; which checker's move records the hit does not change
+        // the display. The mark goes to the carrier — the first chain in
         // canonical order ending on 3 — whichever move recorded it.
         var hitOnEight = Play.Create(new(8, -3), new(7, 3)).ToCanonical();
         var hitOnSeven = Play.Create(new(8, 3), new(7, -3)).ToCanonical();
@@ -104,16 +119,15 @@ public class CanonicalPlayTests
         Assert.Equal(2, hitOnSeven.Count);
         Assert.Equal(new PlayChain(8, -3), hitOnSeven[0]);
         Assert.Equal(new PlayChain(7, 3), hitOnSeven[1]);
-        Assert.Equal(hitOnEight, hitOnSeven);
-        Assert.Equal(hitOnEight.GetHashCode(), hitOnSeven.GetHashCode());
+        Assert.Equal(Chains(hitOnEight), Chains(hitOnSeven));
     }
 
     [Fact]
-    public void Doubles_ThreeCheckersPointOnBlot_EveryAttributionEqual()
+    public void Doubles_ThreeCheckersPointOnBlot_EveryAttributionSameForm()
     {
         // 2-2 with a blot on 4: 8/4 and two checkers 6/4. Every move landing
         // on 4 may record the hit, in the collapsed encoding (8/4 as one
-        // move) and the single-die one (8/6 6/4); all are one play, with the
+        // move) and the single-die one (8/6 6/4); all display alike, with the
         // mark on the carrier 8/4.
         Play[] encodings =
         [
@@ -132,7 +146,6 @@ public class CanonicalPlayTests
             Assert.Equal(new PlayChain(8, -4), canonical[0]);
             Assert.Equal(new PlayChain(6, 4), canonical[1]);
             Assert.Equal(new PlayChain(6, 4), canonical[2]);
-            Assert.Equal(encodings[0].ToCanonical().GetHashCode(), canonical.GetHashCode());
         }
     }
 
@@ -141,7 +154,7 @@ public class CanonicalPlayTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
-    public void Doubles_FourCheckersOnOnePoint_EveryAttributionEqual(int hitter)
+    public void Doubles_FourCheckersOnOnePoint_EveryAttributionSameForm(int hitter)
     {
         // 2-2, four checkers 6/4 onto a blot. Legal single-die moves onto one
         // point share a source, so the four attributions are one multiset of
@@ -217,15 +230,15 @@ public class CanonicalPlayTests
         Assert.Equal(2, singleDie.Count);
         Assert.Equal(new PlayChain(8, -6), singleDie[0]);
         Assert.Equal(new PlayChain(8, 4), singleDie[1]);
-        Assert.Equal(collapsed, singleDie);
+        Assert.Equal(Chains(collapsed), Chains(singleDie));
     }
 
     [Fact]
     public void Doubles_HitsOnTwoPoints_DistinctFromEitherAlone()
     {
         // 2-2, two checkers 8/6/4 over blots. Attribution is per point: a hit
-        // on 6 and one on 4 is a different play from a hit on only one of
-        // them, and neither equals the quiet play.
+        // on 6 and one on 4 displays differently from a hit on only one of
+        // them, and from the quiet play.
         var both = Play.Create(new(8, -6), new(6, -4), new(8, 6), new(6, 4)).ToCanonical();
         var sixOnly = Play.Create(new(8, -6), new(6, 4), new(8, 6), new(6, 4)).ToCanonical();
         var fourOnly = Play.Create(new(8, 6), new(6, -4), new(8, 6), new(6, 4)).ToCanonical();
@@ -234,21 +247,21 @@ public class CanonicalPlayTests
         CanonicalPlay[] all = [both, sixOnly, fourOnly, quiet];
         for (int i = 0; i < all.Length; i++)
             for (int j = i + 1; j < all.Length; j++)
-                Assert.NotEqual(all[i], all[j]);
+                Assert.NotEqual(Chains(all[i]), Chains(all[j]));
     }
 
     [Fact]
     public void EncodingDomain_TwoMarksOnOnePoint_CountAsTheOneHit()
     {
         // Encoding-domain pin (no legal play hits one point twice — it holds
-        // at most one blot): identity is which points are hit, so a second
+        // at most one blot): the form shows which points are hit, so a second
         // mark on the same point adds nothing.
         var twoMarks = Play.Create(new(8, -3), new(7, -3)).ToCanonical();
         var oneMark = Play.Create(new(8, -3), new(7, 3)).ToCanonical();
 
         Assert.Equal(new PlayChain(8, -3), twoMarks[0]);
         Assert.Equal(new PlayChain(7, 3), twoMarks[1]);
-        Assert.Equal(oneMark, twoMarks);
+        Assert.Equal(Chains(oneMark), Chains(twoMarks));
     }
 
     [Fact]
@@ -289,7 +302,7 @@ public class CanonicalPlayTests
         var direct = Play.Create(new Move(5, 0)).ToCanonical();
         var decomposed = Play.Create(new(5, 2), new(2, 0)).ToCanonical();
 
-        Assert.Equal(direct, decomposed);
+        Assert.Equal(Chains(direct), Chains(decomposed));
     }
 
     [Fact]
@@ -306,7 +319,7 @@ public class CanonicalPlayTests
     public void Doubles_TwoCheckersSameRoute_TwoEqualChains()
     {
         // Two checkers each playing 13/11 11/9. Duplicate chains are kept —
-        // "(2)" grouping is a display concern, not an identity one.
+        // "(2)" grouping is the formatter's rendering of them.
         var interleaved = Play.Create(
             new(13, 11), new(11, 9), new(13, 11), new(11, 9)).ToCanonical();
         var grouped = Play.Create(
@@ -315,17 +328,17 @@ public class CanonicalPlayTests
         Assert.Equal(2, interleaved.Count);
         Assert.Equal(new PlayChain(13, 9), interleaved[0]);
         Assert.Equal(new PlayChain(13, 9), interleaved[1]);
-        Assert.Equal(interleaved, grouped);
+        Assert.Equal(Chains(interleaved), Chains(grouped));
     }
 
     [Fact]
-    public void DuplicateChainCount_IsPartOfIdentity()
+    public void DuplicateChainCount_IsPartOfTheForm()
     {
         var twoCheckers = Play.Create(
             new(13, 11), new(11, 9), new(13, 11), new(11, 9)).ToCanonical();
         var oneChecker = Play.Create(new(13, 11), new(11, 9)).ToCanonical();
 
-        Assert.NotEqual(twoCheckers, oneChecker);
+        Assert.NotEqual(Chains(twoCheckers), Chains(oneChecker));
     }
 
     [Fact]
@@ -373,17 +386,23 @@ public class CanonicalPlayTests
     }
 
     [Fact]
-    public void Equality_Operators_AndHashCode()
+    public void Equality_Retired_NoOperators_AndEveryRouteThrows()
     {
+        // Rewritten from Equality_Operators_AndHashCode (halheinrich/backgammon#273,
+        // ruling A): the display form has no equality. == and != must be
+        // compile errors, so no operator is declared, and every runtime route
+        // to Equals or GetHashCode fails loudly.
         var a = Play.Create(new(13, 10), new(10, 8)).ToCanonical();
         var b = Play.Create(new Move(13, 8)).ToCanonical();
-        var c = Play.Create(new Move(13, -8)).ToCanonical();
 
-        Assert.True(a == b);
-        Assert.False(a != b);
-        Assert.Equal(a.GetHashCode(), b.GetHashCode());
-        Assert.True(a != c);
-        Assert.True(a.Equals((object)b));
-        Assert.False(a.Equals(null));
+        Assert.Null(typeof(CanonicalPlay).GetMethod("op_Equality"));
+        Assert.Null(typeof(CanonicalPlay).GetMethod("op_Inequality"));
+        Assert.DoesNotContain(typeof(IEquatable<CanonicalPlay>), typeof(CanonicalPlay).GetInterfaces());
+
+        Assert.Throws<NotSupportedException>(() => a.Equals(b));
+        Assert.Throws<NotSupportedException>(() => a.Equals(null));
+        Assert.Throws<NotSupportedException>(() => a.GetHashCode());
+        Assert.Throws<NotSupportedException>(() => EqualityComparer<CanonicalPlay>.Default.Equals(a, b));
+        Assert.Throws<NotSupportedException>(() => new HashSet<CanonicalPlay> { a });
     }
 }

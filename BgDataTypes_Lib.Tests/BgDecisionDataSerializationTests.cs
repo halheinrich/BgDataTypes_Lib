@@ -273,7 +273,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(2, restored.Play.Count);
         Assert.Equal(new Move(13, 7), restored.Play[0]);
         Assert.Equal(new Move(8, 5), restored.Play[1]);
-        Assert.True(restored.Play.Equals(original.Play));
+        Assert.True(restored.Play.IsSameEncoding(original.Play));
     }
 
     [Fact]

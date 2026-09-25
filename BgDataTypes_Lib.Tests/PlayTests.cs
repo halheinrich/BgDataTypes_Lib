@@ -66,7 +66,7 @@ public class PlayTests
         var p = Play.Create();
 
         Assert.Equal(0, p.Count);
-        Assert.Equal(new Play(), p);
+        Assert.True(p.IsSameEncoding(new Play()));
     }
 
     [Fact]
@@ -229,7 +229,7 @@ public class PlayTests
         Assert.Equal(added.Count, created.Count);
         Assert.Equal(added[0], created[0]);
         Assert.Equal(added[1], created[1]);
-        Assert.True(added == created);
+        Assert.True(added.IsSameEncoding(created));
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class PlayTests
         Play p = [];
 
         Assert.Equal(0, p.Count);
-        Assert.Equal(new Play(), p);
+        Assert.True(p.IsSameEncoding(new Play()));
     }
 
     [Fact]
@@ -322,132 +322,119 @@ public class PlayTests
         Assert.Equal(2, p.Count);
     }
 
-    [Fact]
-    public void Equals_AndHashCode_AreOrderInvariant()
-    {
-        Play p1 = [new(13, 7), new(8, 5)];
-        Play p2 = [new(8, 5), new(13, 7)];
+    // ── Retired equality (halheinrich/backgammon#273, ruling A) ───
+    //
+    // The identity pins that used to live here (Equals_AndHashCode_AreOrderInvariant
+    // and the rest of the Equals_* family) are rewritten against
+    // BoardState.IsSamePlay from stated positions, in PlayIdentityTests.
 
-        Assert.True(p1.Equals(p2));
-        Assert.True(p1 == p2);
-        Assert.Equal(p1.GetHashCode(), p2.GetHashCode());
+    private record struct PlayHolder(Play Play);
+
+    [Fact]
+    public void Equality_NoOperators_NoIEquatable()
+    {
+        // == and != must be compile errors; with no operator declared, the
+        // language offers none for a struct.
+        Assert.Null(typeof(Play).GetMethod("op_Equality"));
+        Assert.Null(typeof(Play).GetMethod("op_Inequality"));
+        Assert.DoesNotContain(typeof(IEquatable<Play>), typeof(Play).GetInterfaces());
     }
 
     [Fact]
-    public void Equals_DecomposedEntry_MatchesCombinedEncoding()
+    public void Equals_Throws()
     {
-        // The quiz-entry repro: a user enters 13/8 as two clicks (13/10, then
-        // 10/8); the candidate list stores the collapsed encoding {(13,8)}.
-        // Both canonicalize to the single chain 13/8, so they are equal.
-        Play decomposed = [new(13, 10), new(10, 8)];
+        Play a = [new(13, 7)];
+        Play b = [new(13, 7)];
+
+        Assert.Throws<NotSupportedException>(() => a.Equals(b));
+        Assert.Throws<NotSupportedException>(() => a.Equals((object)b));
+        Assert.Throws<NotSupportedException>(() => a.Equals(null));
+    }
+
+    [Fact]
+    public void GetHashCode_Throws()
+    {
+        Play a = [new(13, 7)];
+
+        Assert.Throws<NotSupportedException>(() => a.GetHashCode());
+    }
+
+    [Fact]
+    public void Equality_EveryRuntimeRoute_FailsLoudly()
+    {
+        // Each way the runtime reaches a struct's equality or hash: the
+        // default comparer, hashed collections, Distinct, and the compiler-
+        // generated equality of a record or tuple holding a play. None may
+        // fall back to the default field-wise comparison.
+        Play a = [new(13, 7)];
+        Play b = [new(13, 7)];
+
+        Assert.Throws<NotSupportedException>(() => EqualityComparer<Play>.Default.Equals(a, b));
+        Assert.Throws<NotSupportedException>(() => new HashSet<Play> { a });
+        Assert.Throws<NotSupportedException>(() => new Dictionary<Play, int> { [a] = 0 });
+        Assert.Throws<NotSupportedException>(() => new[] { a, b }.Distinct().ToList());
+        Assert.Throws<NotSupportedException>(() => new PlayHolder(a) == new PlayHolder(b));
+        Assert.Throws<NotSupportedException>(() => new PlayHolder(a).GetHashCode());
+        Assert.Throws<NotSupportedException>(() => (a, 0).Equals((b, 0)));
+    }
+
+    // ── IsSameEncoding: exact encodings, for storage ──────────────
+
+    [Fact]
+    public void IsSameEncoding_IdenticalMoves_True()
+    {
+        Play a = [new(8, -3), new(7, 3)];
+        Play b = [new(8, -3), new(7, 3)];
+
+        Assert.True(a.IsSameEncoding(b));
+        Assert.True(a.IsSameEncoding(a));
+    }
+
+    [Fact]
+    public void IsSameEncoding_EmptyPlays_True()
+    {
+        Assert.True(new Play().IsSameEncoding([]));
+    }
+
+    [Fact]
+    public void IsSameEncoding_DistinguishesWhatIdentityIgnores()
+    {
+        // Order, decomposition and which checker carries a hit mark are all
+        // part of the encoding, though none is part of the play's identity.
+        Play written = [new(13, 7), new(8, 5)];
+        Assert.False(written.IsSameEncoding([new(8, 5), new(13, 7)]));
+
         Play combined = [new(13, 8)];
+        Assert.False(combined.IsSameEncoding([new(13, 10), new(10, 8)]));
 
-        Assert.True(decomposed == combined);
-        Assert.Equal(decomposed.GetHashCode(), combined.GetHashCode());
+        Play markOnEight = [new(8, -3), new(7, 3)];
+        Assert.False(markOnEight.IsSameEncoding([new(8, 3), new(7, -3)]));
     }
 
     [Fact]
-    public void Equals_HitOnIntermediatePoint_DistinctFromNonHitting()
-    {
-        // Deliberate reversal of the old hit-stripped DeduplicationKey pin
-        // (hit and non-hit compared equal). 13/10*/8 and 13/8 are different
-        // plays — one sends a blot to the bar — and the stripped key let a
-        // hit-less encoding of a hitting play validate and apply without
-        // barring the blot (the booked ApplyPlay/IsLegalPlay board-corruption
-        // hazard). Equality is sensitive to which points are hit.
-        Play hitting = [new(13, -10), new(10, 8)];
-        Play quiet = [new(13, 8)];
-
-        Assert.True(hitting != quiet);
-    }
-
-    [Fact]
-    public void Equals_HitAtFinalPoint_MatchesAcrossDecompositions()
-    {
-        // A hit at the trajectory's final landing point does not block the
-        // collapse: 13/10 + 10/8* and the combined 13/8* are the same play.
-        Play decomposed = [new(13, 10), new(10, -8)];
-        Play combined = [new(13, -8)];
-
-        Assert.True(decomposed == combined);
-        Assert.Equal(decomposed.GetHashCode(), combined.GetHashCode());
-    }
-
-    [Fact]
-    public void Equals_PointMadeOnBlot_HitAttributionIgnored()
-    {
-        // The halheinrich/backgammon#273 repro: 5-4, making the 3-point on a
-        // blot. XG's candidate carries the hit on one checker, board entry
-        // can record it on the other; one blot, hit once, same resulting
-        // position — so the same play.
-        Play hitOnEight = [new(8, -3), new(7, 3)];
-        Play hitOnSeven = [new(8, 3), new(7, -3)];
-
-        Assert.True(hitOnEight == hitOnSeven);
-        Assert.Equal(hitOnEight.GetHashCode(), hitOnSeven.GetHashCode());
-    }
-
-    [Fact]
-    public void Equals_PointMadeOnBlot_VsSameMovesWithoutHit_NotEqual()
-    {
-        // Attribution is free; the hit itself is not. Making the 3-point on a
-        // blot and making it on an empty point are different plays.
-        Play hitting = [new(8, -3), new(7, 3)];
-        Play quiet = [new(8, 3), new(7, 3)];
-
-        Assert.True(hitting != quiet);
-    }
-
-    [Fact]
-    public void Equals_HitsOnTwoPoints_VsHitOnOne_NotEqual()
-    {
-        // 5-4 from the 13-point over blots on 9 and 8: which points are hit
-        // is part of identity, so hitting both differs from hitting either.
-        Play both = [new(13, -9), new(13, -8)];
-        Play nineOnly = [new(13, -9), new(13, 8)];
-        Play eightOnly = [new(13, 9), new(13, -8)];
-
-        Assert.True(both != nineOnly);
-        Assert.True(both != eightOnly);
-        Assert.True(nineOnly != eightOnly);
-    }
-
-    [Fact]
-    public void Equals_HitVsNonHit_SameTrajectory_NotEqual()
+    public void IsSameEncoding_DistinguishesMarkFromNoMark()
     {
         Play hit = [new(13, -7)];
-        Play noHit = [new(13, 7)];
 
-        Assert.True(hit != noHit);
+        Assert.False(hit.IsSameEncoding([new(13, 7)]));
     }
 
     [Fact]
-    public void Equals_DifferentPlays_NotEqual()
+    public void IsSameEncoding_DistinguishesLength()
     {
-        Play p1 = [new(13, 7)];
-        Play p2 = [new(13, 5)];
+        Play one = [new(13, 7)];
 
-        Assert.False(p1.Equals(p2));
-        Assert.True(p1 != p2);
+        Assert.False(one.IsSameEncoding([new(13, 7), new(8, 5)]));
+        Assert.False(one.IsSameEncoding([]));
     }
 
     [Fact]
-    public void Equals_EmptyPlays_Equal_AndDistinctFromNonEmpty()
+    public void IsSameEncoding_StaleBufferSlots_AreNotPartOfTheEncoding()
     {
-        Play e1 = [];
-        Play e2 = [];
-        Play p = [new(13, 7)];
-
-        Assert.True(e1 == e2);
-        Assert.Equal(e1.GetHashCode(), e2.GetHashCode());
-        Assert.True(e1 != p);
-    }
-
-    [Fact]
-    public void Equals_StaleBufferSlots_DoNotLeakIntoEquality()
-    {
-        // RemoveLast leaves the popped move in the buffer; equality must see
-        // only the first Count moves.
+        // Rewritten from Equals_StaleBufferSlots_DoNotLeakIntoEquality (its
+        // identity half is PlayIdentityTests.IsSamePlay_StaleBufferSlots_DoNotLeakIntoIdentity).
+        // RemoveLast leaves the popped move in the buffer — exactly what the
+        // default struct equality would have compared.
         var trimmed = new Play();
         trimmed.Add(new Move(13, 7));
         trimmed.Add(new Move(8, 5));
@@ -456,7 +443,7 @@ public class PlayTests
         var fresh = new Play();
         fresh.Add(new Move(13, 7));
 
-        Assert.True(trimmed == fresh);
-        Assert.Equal(trimmed.GetHashCode(), fresh.GetHashCode());
+        Assert.True(trimmed.IsSameEncoding(fresh));
+        Assert.True(fresh.IsSameEncoding(trimmed));
     }
 }

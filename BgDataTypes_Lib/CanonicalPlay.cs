@@ -1,32 +1,38 @@
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// The canonical chain form of a <see cref="Play"/> — the single source of play
-/// equivalence. Produced by <see cref="Play.ToCanonical"/>; <see cref="Play"/>
-/// equality and hashing delegate here.
+/// The canonical chain form of a <see cref="Play"/> — the play's display form:
+/// which chains its notation shows, and on which chain each hit mark (the
+/// <c>*</c>) goes. Produced by <see cref="Play.ToCanonical"/>.
+///
+/// <para>
+/// <b>This is the display rule, not identity.</b> Whether two plays are the
+/// same play is <see cref="BoardState.IsSamePlay"/>, asked of the position
+/// they are played from; two encodings of one play can display differently
+/// (a multi-die move pairs sources with destinations as written). So
+/// <see cref="CanonicalPlay"/>, like <see cref="Play"/>, has no equality:
+/// <c>==</c> and <c>!=</c> are not defined, and <see cref="Equals(object)"/>
+/// and <see cref="GetHashCode"/> throw (halheinrich/backgammon#273, ruling A).
+/// Read a form through <see cref="Count"/> and the indexer.
+/// </para>
 ///
 /// <para>
 /// Consecutive single-die hops of one checker collapse into a single
 /// <see cref="PlayChain"/> recording only the source and final landing point:
 /// {(13,10),(10,8)} and {(13,8)} both canonicalize to the one chain 13/8, so
-/// differently-decomposed entries of the same play compare equal. Equality is
-/// therefore notation-level (XG's candidate-list semantics), not
-/// encoding-level: it is insensitive to move order and to how a trajectory is
-/// split into hops, and sensitive to which points are hit — but not to which
-/// checker carries a point's hit mark.
+/// differently-decomposed entries display alike, in any move order.
 /// </para>
 ///
 /// <para>
 /// A hit belongs to its point. A point holds at most one opposing blot, so it
 /// is hit at most once, and among the moves or chains landing on one point,
-/// which one records the hit is not part of the play's identity.
+/// which one records the hit does not change the display.
 /// Canonicalization lifts the marks off the moves into the play's set of hit
 /// points, builds chains from the unmarked moves, and places each point's
 /// mark on exactly one chain, its <i>carrier</i>: the first, in canonical
 /// order, of the chains ending there. 8/3* 7/3 and 8/3 7/3* therefore both
-/// canonicalize to {8/3*, 7/3} and are the same play, while a play that hits
-/// on a point never equals the same moves without the hit. Two marks on one
-/// point, which no legal play produces, count as the one hit.
+/// canonicalize to {8/3*, 7/3}. Two marks on one point display as the one
+/// hit.
 /// </para>
 ///
 /// <para>
@@ -35,21 +41,19 @@ namespace BgDataTypes_Lib;
 /// ending there, so it is allowed unless P is hit and that segment is P's
 /// carrier. The carrier thus keeps P as its endpoint, where the mark is
 /// visible. A lone trajectory with an intermediate hit is split at the hit
-/// into two chains: 13/10*/8 canonicalizes to {13/10*, 10/8} and is distinct
-/// from 13/8, while 13/10/8* collapses to the one chain 13/8* and equals any
-/// other encoding of 13/8*. When several chains land on the hit point, only
-/// the carrier stops there and the others may continue through it:
-/// {(15,9),(12,9),(9,6)} with the hit on 9 canonicalizes to {15/9*, 12/6},
-/// whichever move landing on 9 recorded the hit.
+/// into two chains: 13/10*/8 canonicalizes to {13/10*, 10/8}, while 13/10/8*
+/// collapses to the one chain 13/8*. When several chains land on the hit
+/// point, only the carrier stops there and the others may continue through
+/// it: {(15,9),(12,9),(9,6)} with the hit on 9 canonicalizes to
+/// {15/9*, 12/6}, whichever move landing on 9 recorded the hit.
 /// </para>
 ///
 /// <para>
 /// Canonical order: chains are sorted by FrPt descending, then |ToPt|
 /// descending. Because a point's mark goes to the first chain ending there,
-/// a marked chain precedes its unmarked duplicates. Equality and hash compare
-/// the sorted chain sequence, so equal canonical forms are structurally
-/// identical. The form is deterministic for any multiset of moves, and
-/// depends only on the unmarked moves and the set of hit points.
+/// a marked chain precedes its unmarked duplicates. The form is
+/// deterministic for any multiset of moves, and depends only on the unmarked
+/// moves and the set of hit points.
 /// </para>
 ///
 /// <para>
@@ -67,7 +71,7 @@ namespace BgDataTypes_Lib;
 /// checkers identically) appear here as repeated entries.
 /// </para>
 /// </summary>
-public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
+public readonly struct CanonicalPlay
 {
     // Fixed buffer: at most one chain per move, max 4 moves (doubles).
     private readonly PlayChain _c0, _c1, _c2, _c3;
@@ -296,32 +300,23 @@ public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
     private readonly record struct Segment(int From, int To);
 
     /// <summary>
-    /// Structural equality of the sorted chain sequences. Because every
-    /// instance is canonical, this is exactly play equivalence — see the
-    /// type summary.
+    /// Not supported: <see cref="CanonicalPlay"/> is the display form, not
+    /// identity, and has no equality (see the type summary), so this throws.
+    /// It is overridden only so that every comparison the runtime routes here
+    /// fails loudly, instead of falling back to the default field-wise struct
+    /// equality.
     /// </summary>
-    public bool Equals(CanonicalPlay other)
-    {
-        if (Count != other.Count) return false;
-        for (int i = 0; i < Count; i++)
-            if (this[i] != other[i]) return false;
-        return true;
-    }
+    /// <exception cref="NotSupportedException">Always.</exception>
+    public override bool Equals(object? obj) => throw NoEquality();
 
-    /// <inheritdoc cref="Equals(CanonicalPlay)"/>
-    public override bool Equals(object? obj) => obj is CanonicalPlay c && Equals(c);
+    /// <summary>
+    /// Not supported, as for <see cref="Equals(object)"/>: the form has no
+    /// equality, so it has no hash either, and this throws.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    public override int GetHashCode() => throw NoEquality();
 
-    /// <summary>Hash of the chain sequence, consistent with <see cref="Equals(CanonicalPlay)"/>.</summary>
-    public override int GetHashCode()
-    {
-        var hc = new HashCode();
-        hc.Add(Count);
-        for (int i = 0; i < Count; i++) hc.Add(this[i]);
-        return hc.ToHashCode();
-    }
-
-    /// <inheritdoc cref="Equals(CanonicalPlay)"/>
-    public static bool operator ==(CanonicalPlay left, CanonicalPlay right) => left.Equals(right);
-    /// <summary>Negation of <see cref="op_Equality"/>.</summary>
-    public static bool operator !=(CanonicalPlay left, CanonicalPlay right) => !left.Equals(right);
+    private static NotSupportedException NoEquality() => new(
+        "CanonicalPlay has no equality: it is a play's display form, not its identity. Whether two "
+        + "plays are the same play is BoardState.IsSamePlay, from the position they are played from.");
 }

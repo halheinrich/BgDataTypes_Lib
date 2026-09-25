@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+
 namespace BgDataTypes_Lib;
 
 /// <summary>
@@ -24,9 +27,16 @@ namespace BgDataTypes_Lib;
 ///
 /// <para>
 /// Hot-path consumers use <see cref="ApplyMove(Move)"/> / <see cref="UndoMove(Move)"/>
-/// to recurse through candidate plays. Non-hot-path consumers should advance
-/// state via <see cref="ApplyPlay(Play)"/>, which applies all moves and
+/// to recurse through candidate plays; that pair trusts its moves. Non-hot-path
+/// consumers should advance state via <see cref="ApplyPlay(Play)"/>, which
+/// applies a whole play through the one play rule, refusing an invalid one, and
 /// transparently flips perspective so the next call still reasons in on-roll POV.
+/// </para>
+///
+/// <para>
+/// Play identity is a question about positions, so it is asked of the starting
+/// position: <see cref="IsSamePlay"/> (whose remarks state the contract and the
+/// rule) and the list match <see cref="IndexOfSamePlay"/>.
 /// </para>
 /// </summary>
 public class BoardState
@@ -356,12 +366,30 @@ public class BoardState
     // ── Apply / Undo (instance, hot-path) ─────────────────────────
 
     /// <summary>
-    /// Apply a single move in place. Maintains <see cref="HighPointOccupied"/>
+    /// Apply a single move in place — the raw, trusting half of the hot-path
+    /// pair with <see cref="UndoMove(Move)"/>. Maintains <see cref="HighPointOccupied"/>
     /// incrementally — when emptying the highest point, scans down for the new high.
-    /// No legality validation; callers (e.g. BgMoveGen.MoveGenerator) own that.
+    ///
+    /// <para>
+    /// <b>Precondition: the move agrees with the board as it stands.</b> Its
+    /// source holds one of the mover's checkers, and its hit mark agrees with
+    /// its landing point: a marked move lands on a point holding exactly one
+    /// opposing checker, an unmarked move on a point holding none. The mark is
+    /// trusted, not derived — a marked move sets the landing point to one
+    /// mover's checker and bars the blot, an unmarked one adds to the point —
+    /// so a move that breaks the precondition corrupts the board. Debug builds
+    /// assert it; release builds do not check. No legality validation either;
+    /// callers (e.g. BgMoveGen.MoveGenerator) own that. Callers outside the
+    /// hot path apply whole plays with <see cref="ApplyPlay(Play)"/>, which checks.
+    /// </para>
     /// </summary>
     public void ApplyMove(Move move)
     {
+        Debug.Assert(Points[move.FrPt] > 0,
+            "ApplyMove: the source point holds none of the mover's checkers.");
+        Debug.Assert(move.ToPt < 0 ? Points[-move.ToPt] == -1 : move.ToPt == 0 || Points[move.ToPt] >= 0,
+            "ApplyMove: the hit mark disagrees with the landing point.");
+
         Points[move.FrPt]--;
         if (move.ToPt > 0)
         {
@@ -388,9 +416,21 @@ public class BoardState
     /// <summary>
     /// Reverse a previously applied move in place. The move encodes everything
     /// needed (regular / hit / bear-off) — no separate undo log required.
+    ///
+    /// <para>
+    /// <b>Precondition: the board is as the move left it.</b> Its landing point
+    /// holds one of the mover's checkers — for a marked move exactly one, the
+    /// hitter, because undoing a hit restores the opposing blot there. Undoing
+    /// in the reverse order of applying guarantees it; undoing a hit while
+    /// another mover's checker shares its point corrupts the board. Debug
+    /// builds assert it; release builds do not check.
+    /// </para>
     /// </summary>
     public void UndoMove(Move move)
     {
+        Debug.Assert(move.ToPt < 0 ? Points[-move.ToPt] == 1 : move.ToPt == 0 || Points[move.ToPt] > 0,
+            "UndoMove: the landing point is not as the move left it.");
+
         if (move.ToPt > 0)
         {
             Points[move.ToPt]--;
@@ -410,27 +450,322 @@ public class BoardState
     // ── Turn boundary: ApplyPlay (apply-all + flip) ───────────────
 
     /// <summary>
-    /// Apply all moves in <paramref name="play"/> and flip perspective so the
-    /// state is re-expressed from the next mover's POV. After this call, the
-    /// previous opponent is on roll; positive values are now their checkers.
+    /// Apply <paramref name="play"/> and flip perspective so the state is
+    /// re-expressed from the next mover's POV. After this call, the previous
+    /// opponent is on roll; positive values are now their checkers.
+    ///
+    /// <para>
+    /// The position reached, and which plays are invalid, are the rule stated
+    /// on <see cref="IsSamePlay"/>, so applying a play never disagrees with its
+    /// identity and never leaves a corrupt board. An invalid play is refused
+    /// with <see cref="ArgumentException"/> and the board is left untouched;
+    /// <see cref="TryApplyPlay"/> is the non-throwing form. Legality (the dice
+    /// and the rest) stays with the move generator (<c>BgMoveGen</c>).
+    /// </para>
     ///
     /// <para>
     /// This is the turn-boundary primitive: callers reasoning in on-roll POV
     /// never need to flip directly. Empty plays (<c>play.Count == 0</c>) still
     /// flip — they represent a forced pass.
     /// </para>
-    ///
-    /// <para>
-    /// No legality validation. Validating wrappers (legal-play check + apply)
-    /// belong with the move generator (<c>BgMoveGen</c>); BoardState here is
-    /// the raw data primitive.
-    /// </para>
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="play"/> is invalid from this position; the message
+    /// names the fault. The board is unchanged.
+    /// </exception>
     public void ApplyPlay(Play play)
     {
-        foreach (var move in play)
-            ApplyMove(move);
-        Flip();
+        var fault = Advance(in play, out var culprit);
+        if (fault != PlayFault.None)
+            ThrowInvalidPlay(fault, culprit, nameof(play));
+    }
+
+    /// <summary>
+    /// Apply <paramref name="play"/> and flip perspective exactly as
+    /// <see cref="ApplyPlay"/> does when the play is valid from this position,
+    /// and return true; return false and leave the board untouched when it is
+    /// not. Validity is the rule stated on <see cref="IsSamePlay"/>.
+    /// </summary>
+    public bool TryApplyPlay(Play play) => Advance(in play, out _) == PlayFault.None;
+
+    /// <summary>
+    /// The one body of <see cref="ApplyPlay"/> and <see cref="TryApplyPlay"/>:
+    /// computes the position <paramref name="play"/> reaches by the play rule
+    /// and, when it is valid, commits it and flips. On a fault nothing is
+    /// written — the rule computes into scratch space, never into
+    /// <see cref="Points"/>.
+    /// </summary>
+    private PlayFault Advance(in Play play, out Move culprit)
+    {
+        Span<int> reached = stackalloc int[26];
+        var fault = Reach(Points, in play, reached, out culprit);
+        if (fault == PlayFault.None)
+        {
+            reached.CopyTo(Points);
+            Flip();
+        }
+        return fault;
+    }
+
+    // ── Play identity: the one rule, from this position ───────────
+
+    /// <summary>
+    /// Whether <paramref name="first"/> and <paramref name="second"/> are the
+    /// same play from this position — play identity. These remarks are the
+    /// one statement of the identity contract and of the rule behind it; the
+    /// other members and documents that depend on it point here.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Two plays are the same play from a starting position exactly when
+    /// both are valid from it and reach the same position</b>
+    /// (halheinrich/backgammon#273, halheinrich/backgammon#277). Identity
+    /// belongs to positions, not notation, so one rule covers the order the
+    /// moves are written in, how a checker's trajectory is decomposed into
+    /// hops, how sources pair with destinations (<c>25/10 20/15*</c> and
+    /// <c>25/15* 20/10</c> with 5-5), and which checker carries a hit mark
+    /// (<c>8/3* 7/3</c> and <c>8/3 7/3*</c>). A <see cref="Play"/> carries no
+    /// board, so no board-less comparison exists: neither <see cref="Play"/>
+    /// nor <see cref="CanonicalPlay"/> has equality.
+    /// </para>
+    /// <para>
+    /// <b>The position a play reaches.</b> Each move is a hop of one of the
+    /// mover's checkers, and its destination is a <em>stated landing
+    /// point</em>, whether intermediate to that checker's trajectory or final.
+    /// Hits come from the board, and the marks are checked against it: a
+    /// stated landing point holding exactly one opposing checker in this
+    /// position is hit, sending that checker to the opponent's bar, and some
+    /// hop landing there must carry the hit mark. Which hop carries it, and
+    /// whether more than one does, does not matter. The play is
+    /// <b>invalid</b> when:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>a hop carries a mark on a point that does not hold
+    /// exactly one opposing checker;</description></item>
+    /// <item><description>a hop lands on an opposing blot and no hop landing
+    /// there carries a mark;</description></item>
+    /// <item><description>a hop lands on a point the opponent holds with two
+    /// or more checkers;</description></item>
+    /// <item><description>a hop starts from a point holding none of the
+    /// mover's checkers, counting the checkers the play's other hops bring
+    /// there;</description></item>
+    /// <item><description>a hop does not move toward home within the board:
+    /// from a point 1–24 or the bar (25) to a lower point, or off
+    /// (0).</description></item>
+    /// </list>
+    /// <para>
+    /// Neither validity nor the position reached depends on the order the
+    /// moves are written in. An invalid play reaches no position, so it is
+    /// never the same play as any play, an identical encoding included.
+    /// Positions compare by all 26 counts of <see cref="Points"/>, both bars
+    /// included; borne-off checkers need no comparison, since both plays
+    /// leave from this one position.
+    /// </para>
+    /// <para>
+    /// <b>This is not a legality check.</b> The dice, forced moves, entering
+    /// from the bar before any other checker moves, and the bear-off
+    /// conditions stay with the move generator (BgMoveGen): a play no roll
+    /// could produce can still be valid here. What the rule guarantees is that
+    /// a valid play reaches a well-formed position, and the same one however
+    /// the play is written.
+    /// </para>
+    /// <para>
+    /// <see cref="ApplyPlay"/> and <see cref="TryApplyPlay"/> apply this same
+    /// rule, so applying a play never disagrees with its identity;
+    /// <see cref="IndexOfSamePlay"/> is the list match built on it. This
+    /// position is only read.
+    /// </para>
+    /// </remarks>
+    public bool IsSamePlay(Play first, Play second)
+    {
+        Span<int> target = stackalloc int[26];
+        if (Reach(Points, in first, target, out _) != PlayFault.None)
+            return false;
+        Span<int> scratch = stackalloc int[26];
+        return ReachesTarget(in second, target, scratch);
+    }
+
+    /// <summary>
+    /// The index of the first entry of <paramref name="plays"/> that is the
+    /// same play as <paramref name="play"/> from this position, or -1 when none
+    /// is — the list match, for finding a play among the legal ones or a
+    /// submitted play among a decision's candidates.
+    /// </summary>
+    /// <remarks>
+    /// Identity is <see cref="IsSamePlay"/>'s, so an entry is found whatever
+    /// its encoding. An invalid <paramref name="play"/> matches nothing and
+    /// yields -1. The list is not validated; each entry is held to the same
+    /// rule, so an invalid entry reaches no position, matches nothing, and is
+    /// passed over. When several entries are the same play — a list of
+    /// distinct plays never holds two — the lowest index among them is
+    /// returned. Acting on a match, applying either play reaches the same
+    /// position. This position is only read.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="plays"/> is null.</exception>
+    public int IndexOfSamePlay(Play play, IReadOnlyList<Play> plays)
+    {
+        ArgumentNullException.ThrowIfNull(plays);
+
+        Span<int> target = stackalloc int[26];
+        if (Reach(Points, in play, target, out _) != PlayFault.None)
+            return -1;
+        Span<int> scratch = stackalloc int[26];
+        for (int i = 0; i < plays.Count; i++)
+        {
+            var candidate = plays[i];
+            if (ReachesTarget(in candidate, target, scratch))
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// The identity comparison, single-sourced for <see cref="IsSamePlay"/>
+    /// and <see cref="IndexOfSamePlay"/>: whether <paramref name="play"/> is
+    /// valid from this position and reaches <paramref name="target"/>, a
+    /// position a valid play reaches from here. <paramref name="scratch"/> is
+    /// working space.
+    /// </summary>
+    private bool ReachesTarget(in Play play, ReadOnlySpan<int> target, Span<int> scratch) =>
+        Reach(Points, in play, scratch, out _) == PlayFault.None
+        && scratch.SequenceEqual(target);
+
+    /// <summary>How a play fails the rule stated on <see cref="IsSamePlay"/>.</summary>
+    private enum PlayFault
+    {
+        /// <summary>The play is valid.</summary>
+        None,
+        /// <summary>A hop does not move toward home within the board.</summary>
+        NotForward,
+        /// <summary>A hop lands on a point the opponent holds with two or more checkers.</summary>
+        Blocked,
+        /// <summary>A hop's mark sits on a point not holding exactly one opposing checker.</summary>
+        MarkWithoutBlot,
+        /// <summary>An opposing blot is landed on and no hop landing there is marked.</summary>
+        BlotUnmarked,
+        /// <summary>A hop starts from a point holding none of the mover's checkers.</summary>
+        SourceEmpty,
+    }
+
+    /// <summary>
+    /// The play rule stated on <see cref="IsSamePlay"/> — the one computation
+    /// behind identity, the list match and applying a play. Writes the
+    /// position <paramref name="play"/> reaches from <paramref name="start"/>
+    /// into <paramref name="reached"/>, in the mover's frame (unflipped), and
+    /// returns <see cref="PlayFault.None"/>; or returns the first fault found,
+    /// with <paramref name="culprit"/> the offending move and
+    /// <paramref name="reached"/> unspecified. Allocation-free.
+    /// </summary>
+    private static PlayFault Reach(
+        ReadOnlySpan<int> start, in Play play, Span<int> reached, out Move culprit)
+    {
+        culprit = default;
+        int n = play.Count;
+        Span<Move> hops = stackalloc Move[4];
+        for (int i = 0; i < n; i++)
+            hops[i] = play[i];
+        hops = hops[..n];
+
+        // The encoding range first, so no later step indexes off the board
+        // (and Math.Abs never meets int.MinValue): from a point 1-24 or the
+        // bar, to a lower point or off.
+        foreach (var hop in hops)
+        {
+            if (hop.FrPt is < 1 or > 25 || hop.ToPt is < -24 or > 24
+                || Math.Abs(hop.ToPt) >= hop.FrPt)
+            {
+                culprit = hop;
+                return PlayFault.NotForward;
+            }
+        }
+
+        // Every stated landing point, against the starting position: a made
+        // point is closed, and a point is hit exactly when it holds an
+        // opposing blot, which some hop landing there must mark.
+        foreach (var hop in hops)
+        {
+            int to = Math.Abs(hop.ToPt);
+            if (to == 0) continue;   // borne off: no landing point
+            int held = start[to];
+            culprit = hop;
+            if (held <= -2) return PlayFault.Blocked;
+            if (hop.ToPt < 0 && held != -1) return PlayFault.MarkWithoutBlot;
+            if (held == -1 && !AnyMarkedLanding(hops, to)) return PlayFault.BlotUnmarked;
+        }
+        culprit = default;
+
+        // The hits come from the board: each hit point's blot goes to the
+        // opponent's bar, once however many hops mark it. Every -1 at a
+        // landing point is a hit point now that the marks have checked out.
+        start.CopyTo(reached);
+        foreach (var hop in hops)
+        {
+            int to = Math.Abs(hop.ToPt);
+            if (to != 0 && reached[to] == -1)
+            {
+                reached[to] = 0;
+                reached[0]--;
+            }
+        }
+
+        // Then the hops, highest source first. Every hop moves toward home,
+        // so any checker arriving at a point comes from a higher one: this
+        // order lets a hop start from a point another hop reaches, whatever
+        // order the play writes them in, and a hop that still finds no
+        // mover's checker at its source has none to move.
+        SortBySourceDescending(hops);
+        foreach (var hop in hops)
+        {
+            if (reached[hop.FrPt] <= 0)
+            {
+                culprit = hop;
+                return PlayFault.SourceEmpty;
+            }
+            reached[hop.FrPt]--;
+            int to = Math.Abs(hop.ToPt);
+            if (to != 0) reached[to]++;
+        }
+        return PlayFault.None;
+    }
+
+    private static bool AnyMarkedLanding(ReadOnlySpan<Move> hops, int point)
+    {
+        foreach (var hop in hops)
+            if (hop.ToPt == -point) return true;
+        return false;
+    }
+
+    private static void SortBySourceDescending(Span<Move> hops)
+    {
+        for (int i = 1; i < hops.Length; i++)
+            for (int j = i; j > 0 && hops[j].FrPt > hops[j - 1].FrPt; j--)
+                (hops[j], hops[j - 1]) = (hops[j - 1], hops[j]);
+    }
+
+    /// <summary>
+    /// The <see cref="ApplyPlay"/> refusal, out of line: the message names
+    /// the fault and the offending move, for a caller holding a play it
+    /// believed valid.
+    /// </summary>
+    [DoesNotReturn]
+    private static void ThrowInvalidPlay(PlayFault fault, Move culprit, string paramName)
+    {
+        string hop = $"({culprit.FrPt}, {culprit.ToPt})";
+        // Only a move past the encoding check has a landing point; an
+        // off-board ToPt may be int.MinValue, which Math.Abs cannot take.
+        int to = fault == PlayFault.NotForward ? 0 : Math.Abs(culprit.ToPt);
+        string reason = fault switch
+        {
+            PlayFault.NotForward => $"the move {hop} does not move toward home within the board",
+            PlayFault.Blocked => $"the move {hop} lands on point {to}, which the opponent holds with two or more checkers",
+            PlayFault.MarkWithoutBlot => $"the move {hop} is marked as a hit, but point {to} does not hold exactly one opposing checker",
+            PlayFault.BlotUnmarked => $"point {to} holds an opposing blot, but no move landing there is marked as a hit",
+            PlayFault.SourceEmpty => $"the move {hop} starts from point {culprit.FrPt}, which holds none of the mover's checkers",
+            _ => throw new UnreachableException(),
+        };
+        throw new ArgumentException(
+            $"The play is invalid from this position: {reason}. See BoardState.IsSamePlay for the rule.",
+            paramName);
     }
 
     /// <summary>

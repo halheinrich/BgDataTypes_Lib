@@ -48,9 +48,9 @@ and `Directory.Packages.props` (Central Package Management — no inline
   is the content identity: *which problem is this* — the key stats and
   dedupe recognise across files.
 - **Move and board primitives** — `Move`, `Play`, `PlayChain`,
-  `CanonicalPlay` (the play-equivalence SSOT), and `BoardState`, the one
-  mutable type in the library. Value types here inherit hot-path zero-alloc
-  constraints from move generation.
+  `CanonicalPlay` (a play's display form), and `BoardState`, the one
+  mutable type in the library and the owner of play identity. Value types
+  here inherit hot-path zero-alloc constraints from move generation.
 - **Enums and the depth taxonomy** — `CubeOwner`, `CubeAction`, `CubeClaim`
   (the three-valued doubler claim of SPEC-scoring §3, with
   `CubeClaimExtensions` for the claim→action collapse), and
@@ -216,10 +216,10 @@ via `ApplyPlay`, never via raw point-array mutation.
 | `CubeClaimPair` | `readonly record struct (CubeClaim Claim, CubeAction Taker)` — the two-part cube answer of SPEC-scoring §3 (`halheinrich/backgammon#86`): the claim-layer counterpart of `CubeDecisionPair`, pairing the three-valued claim with the taker response if doubled. Same construction-guard idiom (`Claim` any defined member, `Taker` ∈ {`Take`, `Pass`}). A closed 3×2 of six named canonical instances: five verdict cells (`NoDoubleTake`, `DoubleTake`, `DoublePass`, `TooGoodTake`, `TooGoodPass`) plus `NoDoublePass`, the incoherent cell — representable *by ruling* (a selectable user answer; cross-disabling the axes was rejected), named by `IsIncoherent` for review surfaces. One type serves both scored roles — a user's submitted answer and the derived truth (`DecisionData.BestClaimPair`). Scoring semantics stay with the consuming legs. No parse/format story: display strings are consumer copy per SPEC-scoring §3, and no wire token is ruled — its wire debut (and wire shape) belongs to the first document that embeds it. `default` is non-meaningful — see Pitfalls. |
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
-| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. Equality / hash delegate to `ToCanonical()` — notation-level equivalence, see "Canonical play form" below. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly — canonicalization affects equality, never storage. |
+| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. **No equality** (`halheinrich/backgammon#273`, ruling A): `==`/`!=` are not defined, and `Equals`/`GetHashCode` throw `NotSupportedException` so every runtime route (comparers, hashed collections, `Distinct`, records and tuples holding a play) fails loudly. Play identity is `BoardState.IsSamePlay`, from a starting position — see "Play identity" below. `IsSameEncoding` compares exact encodings (order, hops, marks) for storage and round-trips; it is not identity. `ToCanonical()` is the display form. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly. |
 | `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a single checker's collapsed trajectory for the turn. Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
-| `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, full equality surface (`IEquatable`, `==`/`!=`, hash). The canonical chain form of a `Play` and the single source of play equivalence. Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used for structural comparison and downstream consumers). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
+| `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
+| `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used to apply the candidate and to match a play against the candidates with `BoardState.IndexOfSamePlay`). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 | `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `TryDerive` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. Both doors run the same fact validation, and facts that would force a guess get **no key** rather than a wrong one (see "ProblemKey" below and Pitfalls). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
@@ -239,12 +239,10 @@ overshoot, etc.) live in `BgMoveGen` — `Move` here is just the encoding.
 
 ### Canonical play form
 
-`Play.ToCanonical()` produces a `CanonicalPlay` — the single source of play
-equivalence. `Play.Equals` / `GetHashCode` / `==` delegate to it, so play
-equality is **notation-level, not encoding-level**: insensitive to move order
-and to how a checker's trajectory is decomposed into single-die hops;
-sensitive to **which points are hit**, but not to which checker carries a
-point's hit mark.
+`Play.ToCanonical()` produces a `CanonicalPlay` — a play's **display form**:
+which chains its notation shows and on which chain each hit mark (`*`) goes.
+It is not identity, and it has no equality; whether two plays are the same
+play is decided by position (see "Play identity" below).
 
 Collapse semantics (the XG chain-collapse rules, previously encoded
 display-side in `BgMoveGen.MoveNotationFormatter` — the rule now lives here
@@ -255,21 +253,20 @@ and the formatter renders from this form):
   `{(13,10),(10,8)}` and `{(13,8)}` both canonicalize to the chain `13/8`.
 - **A hit belongs to its point** (`halheinrich/backgammon#273`). A point
   holds at most one opposing blot, so it is hit at most once, and which move
-  or chain landing there records the hit is not part of identity.
+  or chain landing there records the hit does not change the display.
   Canonicalization lifts the marks off the moves into the play's set of hit
   points, builds chains from the unmarked moves, and places each point's mark
   on its **carrier**: the first chain, in canonical order, ending there. So
-  `8/3* 7/3` and `8/3 7/3*` both canonicalize to `{8/3*, 7/3}`, while hitting
-  on a point still differs from the same moves without the hit. The form
+  `8/3* 7/3` and `8/3 7/3*` both canonicalize to `{8/3*, 7/3}`. The form
   depends only on the unmarked moves and the hit-point set, so encodings
-  differing only in attribution are equal by construction. Two marks on one
-  point (no legal play has them) count as the one hit.
+  differing only in attribution display alike by construction. Two marks on
+  one point display as the one hit.
 - **Hit-visibility rule** (the one predicate gating every join): a join at
   point P consumes the segment *ending* at P, so it is allowed unless P is
   hit and that segment is P's carrier — the carrier keeps P as its endpoint,
   where the mark is visible. A lone trajectory with an intermediate hit
-  therefore splits: `13/10*/8` gives chains `{13/10*, 10/8}` (≠ `13/8`),
-  while `13/10 10/8*` collapses to `13/8*`. When several chains land on the
+  therefore splits: `13/10*/8` gives chains `{13/10*, 10/8}`, while
+  `13/10 10/8*` collapses to `13/8*`. When several chains land on the
   hit point, only the carrier stops there: `{(15,9),(12,9),(9,6)}` with the
   hit on 9 gives `{15/9*, 12/6}` whichever move recorded it. A hit only ever
   sits at a chain's endpoint.
@@ -279,11 +276,12 @@ and the formatter renders from this form):
   bidirectional with a fixpoint fuse pass, keeping the whole `Move` encoding
   domain deterministic (bar entry, bear-off, doubles, out-of-order legs, even
   physically-impossible zigzags).
-- **Limit — pairing stays notation-level.** Checkers are interchangeable, so
-  encodings holding multi-die moves can pair sources with destinations
-  differently for one position: `25/10 20/15*` and `25/15* 20/10` (5-5, a
-  hit on 15) are distinct canonical forms, as `13/9 11/7` and `13/7 11/9`
-  are. Hit attribution is canonical; pairing is not.
+- **Pairing displays as written.** Encodings holding multi-die moves can
+  pair sources with destinations differently for one position —
+  `25/10 20/15*` and `25/15* 20/10` (5-5, a hit on 15), `13/9 11/7` and
+  `13/7 11/9` — and each shows its own pairing. That is why the display form
+  cannot be identity (`halheinrich/backgammon#277`); position identity
+  treats them as one play.
 - Duplicate chains (doubles moving two checkers along the same route) are
   kept as repeated entries — `"(2)"` grouping, `"bar"`/`"off"` labels and all
   other notation rendering stay in `BgMoveGen`'s formatter.
@@ -304,14 +302,19 @@ Three layers of mutation, in increasing scope:
   candidate plays. Maintain `HighPointOccupied` incrementally: apply
   scans down only when emptying the highest point; undo raises
   `HighPointOccupied` when a move's `FrPt` exceeds the current high.
-  No legality validation — that's the move generator's job.
+  A raw, trusting pair: each move's hit mark is taken as given, so their
+  docs state the precondition that it agrees with the board (and, for
+  undo, that the board is as the move left it). No legality validation —
+  that's the move generator's job.
 
-- **`ApplyPlay(Play)`** — turn-boundary primitive. Applies every move
-  in the play (using `play.Count`) then flips perspective so the state
-  is re-expressed from the next mover's POV. Empty plays still flip —
-  they represent a forced pass. This is the only public way to advance
-  past a turn boundary; callers reasoning in on-roll POV never need to
-  flip explicitly.
+- **`ApplyPlay(Play)`** / **`TryApplyPlay(Play)`** — turn-boundary
+  primitive. Applies the play through the one play rule (see "Play
+  identity") then flips perspective so the state is re-expressed from the
+  next mover's POV. An invalid play is refused — `ApplyPlay` throws
+  `ArgumentException`, `TryApplyPlay` returns false — and the board is
+  left untouched. Empty plays still flip — they represent a forced pass.
+  This is the only public way to advance past a turn boundary; callers
+  reasoning in on-roll POV never need to flip explicitly.
 
 - **`Flip()`** — `private`. Implementation mechanic for `ApplyPlay` and
   `FlippedCopy()`. Negates and reverses the array (point `i` ↔ point
@@ -347,6 +350,45 @@ These are pure derivations from `Points`. They are *distinct from*
 XG-parser-supplied values and may differ if XG ever rounds. Use the
 `PositionData` ones when reading parsed decisions; use the `BoardState`
 ones when computing from a live state.
+
+### Play identity
+
+**The contract is not restated here.** Plays compare only from a starting
+position, and the one statement of what makes two plays the same play — the
+position a play reaches, what makes a play invalid, and where the rule stops
+short of legality — is the doc comment on `BoardState.IsSamePlay`
+(`halheinrich/backgammon#273`, `halheinrich/backgammon#277`; Hal's rulings of
+2026-09-25 are recorded on the first). A copy here would be a second source
+that rots silently.
+
+Design points a maintainer needs before touching it:
+
+- **Placement: on the starting position.** Identity (`IsSamePlay`), the list
+  match (`IndexOfSamePlay`) and the rule behind them are `BoardState`
+  members. The rule computes positions from `Points`, and `ApplyPlay` must
+  run the same computation, so one type owns one private rule and nothing
+  can drift from it. `Play` stays a pure encoding with no board knowledge.
+- **One rule, four doors.** `ApplyPlay` and `TryApplyPlay` commit what the
+  rule computes; `IsSamePlay` and `IndexOfSamePlay` compare what it
+  computes. None of them goes through `ApplyMove`, so the order a play's
+  moves are written in never reaches the board. Written order was how the
+  tester's play of `halheinrich/backgammon#273` corrupted it: the unmarked
+  landing on the blot applied first.
+- **Invalid is a distinct outcome.** An invalid play matches nothing, not
+  even an identical encoding; the list match returns -1 for it and passes
+  over invalid entries. `ApplyPlay` refuses with an `ArgumentException`
+  naming the fault and the move; `TryApplyPlay` returns false.
+- **How positions compare.** By all 26 point counts, inside the rule's
+  callers, computed into stack scratch — allocation-free. `BoardState`
+  deliberately gets no value equality: it is a mutable class, and a hash
+  that changes under mutation corrupts any set or dictionary holding it.
+- **The raw pair stays raw.** `ApplyMove`/`UndoMove` trust their moves on
+  the generator's hot path. `Debug.Assert` checks their stated
+  preconditions in Debug builds only, and a failed assertion terminates the
+  process — consumers build this library by project reference, so a Debug
+  test run that breaks the precondition stops there rather than failing one
+  test.
+- **`CanonicalPlay` is the display rule** — see "Canonical play form".
 
 ### DecisionId
 
@@ -933,7 +975,7 @@ public readonly record struct Move(int FrPt, int ToPt);
 public readonly record struct PlayChain(int FrPt, int ToPt);
 
 [CollectionBuilder(typeof(Play), nameof(Create))]
-public struct Play : IEquatable<Play>
+public struct Play                                // no equality: see BoardState.IsSamePlay
 {
     public static Play Create(Move m0);           // fixed-arity: parity with Add, no argument
     public static Play Create(Move m0, Move m1);  // buffer. Overload resolution picks these for
@@ -953,27 +995,22 @@ public struct Play : IEquatable<Play>
     public void Add(Move move);
     public void RemoveLast();
     public Play Snapshot();                       // readonly
-    public CanonicalPlay ToCanonical();           // readonly; equality SSOT
+    public CanonicalPlay ToCanonical();           // readonly; the display form
+    public bool IsSameEncoding(Play other);       // readonly; exact encodings, for storage
     public Enumerator GetEnumerator();            // readonly; foreach pattern, allocation-free
     public struct Enumerator { /* Current, MoveNext() */ }
-    public bool Equals(Play other);               // canonical equivalence
-    public override bool Equals(object? obj);
-    public override int GetHashCode();
-    public static bool operator ==(Play left, Play right);
-    public static bool operator !=(Play left, Play right);
+    public override bool Equals(object? obj);     // throws NotSupportedException
+    public override int GetHashCode();            // throws NotSupportedException
 }
 
-public readonly struct CanonicalPlay : IEquatable<CanonicalPlay>
+public readonly struct CanonicalPlay              // the display form; no equality
 {
     // No public constructor path — produced by Play.ToCanonical() only,
-    // so every instance is guaranteed canonical. default == empty play's form.
+    // so every instance is guaranteed canonical. default is the empty play's form.
     public int Count { get; }                     // 0-4 chains
     public PlayChain this[int index] { get; }     // canonical order (FrPt desc)
-    public bool Equals(CanonicalPlay other);
-    public override bool Equals(object? obj);
-    public override int GetHashCode();
-    public static bool operator ==(CanonicalPlay left, CanonicalPlay right);
-    public static bool operator !=(CanonicalPlay left, CanonicalPlay right);
+    public override bool Equals(object? obj);     // throws NotSupportedException
+    public override int GetHashCode();            // throws NotSupportedException
 }
 
 public class BoardState
@@ -1001,8 +1038,13 @@ public class BoardState
     public void ApplyMove(Move move);
     public void UndoMove(Move move);
 
-    // Turn boundary (apply-all + flip, atomic)
-    public void ApplyPlay(Play play);
+    // Turn boundary (the play rule + flip, atomic)
+    public void ApplyPlay(Play play);             // invalid → ArgumentException, board untouched
+    public bool TryApplyPlay(Play play);          // invalid → false, board untouched
+
+    // Play identity, from this position (the contract: IsSamePlay's remarks)
+    public bool IsSamePlay(Play first, Play second);
+    public int IndexOfSamePlay(Play play, IReadOnlyList<Play> plays);   // -1 when none
 
     // Derived
     public int PipCount { get; }
@@ -1437,19 +1479,15 @@ measure" is not a valid comparison on this hardware.
   regression guard). A future construction path adds an overload that
   calls `SetSlot` with literal indices — it does not write slots itself,
   and it does not loop over `Add`.
-- **`Play` equality is notation-level, not encoding-level.** Equality /
-  hash / `==` delegate to `ToCanonical()`: insensitive to move order *and*
-  to hop decomposition (`{(13,10),(10,8)}` equals `{(13,8)}`; a one-hop
-  overshoot bear-off equals its two-hop decomposition), and sensitive to
-  **which points are hit** (`13/10*/8` ≠ `13/8`) but not to which checker
-  carries a point's hit mark (`8/3* 7/3` equals `8/3 7/3*`). Do not rely on
-  `Equals` to distinguish different encodings of the same play — including
-  which move of an encoding records a hit — compare move sequences directly
-  if encoding identity matters. Conversely, do rely on it to distinguish
-  hitting from non-hitting plays: the old hit-stripped `DeduplicationKey()`
-  (which compared them equal) is gone, deliberately — it let a hit-less
-  encoding of a hitting play validate as legal and apply without barring
-  the blot.
+- **`Play` and `CanonicalPlay` have no equality — by ruling, not
+  omission.** `==` does not compile; `Equals`, `GetHashCode`, and so any
+  comparer, hashed collection, `Distinct`, or record or tuple holding a
+  play, throw `NotSupportedException`. Compare plays with
+  `BoardState.IsSamePlay` from their starting position, find one in a list
+  with `IndexOfSamePlay`, and compare stored encodings with
+  `Play.IsSameEncoding`. Do not reintroduce a board-less comparison, a
+  notation key, or a `CanonicalPlay`-based dedupe: the display form differs
+  between encodings of one play (`halheinrich/backgammon#277`).
 - **`Play` requires its bundled `JsonConverter`.** Default property-based
   serialization only sees `Count`, losing every move. The
   `[JsonConverter(typeof(PlayJsonConverter))]` attribute is intrinsic to

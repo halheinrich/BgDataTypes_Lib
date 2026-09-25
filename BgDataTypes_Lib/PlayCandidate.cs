@@ -15,9 +15,11 @@ public class PlayCandidate
     /// <summary>
     /// Structural play — the sequence of (FrPt, ToPt) moves that produces
     /// this candidate. Complements <see cref="MoveNotation"/>: the notation
-    /// is for display, the <see cref="Play"/> for structural comparison and
-    /// downstream consumers (e.g. submitted-play grading). Empty
-    /// (<c>Count == 0</c>) when not populated.
+    /// is for display, the <see cref="Play"/> for applying and matching the
+    /// candidate (e.g. submitted-play grading, which finds a submitted play
+    /// among the candidates with <see cref="BoardState.IndexOfSamePlay"/>
+    /// from the decision's position). Empty (<c>Count == 0</c>) when not
+    /// populated.
     /// </summary>
     public Play Play { get; init; }
 

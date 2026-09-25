@@ -21,22 +21,23 @@ namespace BgDataTypes_Lib;
 /// (move-generation recursion). Read with <c>foreach</c> (see
 /// <see cref="GetEnumerator"/>) or the indexer.
 ///
-/// Equality is notation-level, not encoding-level: two plays are equal iff
-/// their canonical chain forms (<see cref="ToCanonical"/>) are equal —
-/// insensitive to move order and to how a checker's trajectory is decomposed
-/// into single-die hops, and sensitive to which points are hit but not to
-/// which checker carries a point's hit mark (8/3* 7/3 equals 8/3 7/3*). See
-/// <see cref="CanonicalPlay"/> for the collapse and hit-attribution semantics.
+/// A play has no equality. Whether two plays are the same play depends on the
+/// position they are played from, which a play does not carry: identity is
+/// <see cref="BoardState.IsSamePlay"/>, asked of the starting position, and
+/// the list match is <see cref="BoardState.IndexOfSamePlay"/>. So
+/// <c>==</c> and <c>!=</c> are not defined, and <see cref="Equals(object)"/>
+/// and <see cref="GetHashCode"/> throw (halheinrich/backgammon#273, ruling A).
+/// <see cref="IsSameEncoding"/> compares exact encodings, for storage.
+/// <see cref="ToCanonical"/> is the play's display form.
 ///
 /// Serialised as a JSON array of <see cref="Move"/> via <see cref="PlayJsonConverter"/>;
-/// the raw move sequence round-trips exactly — canonicalization affects
-/// equality, never storage. The private buffer fields and the
+/// the raw move sequence round-trips exactly. The private buffer fields and the
 /// <see cref="Count"/> setter are not exposed to the default property-based
 /// serialiser.
 /// </summary>
 [JsonConverter(typeof(PlayJsonConverter))]
 [CollectionBuilder(typeof(Play), nameof(Create))]
-public struct Play : IEquatable<Play>
+public struct Play
 {
     // Fixed buffer: max 4 moves (doubles)
     private Move _m0, _m1, _m2, _m3;
@@ -263,27 +264,52 @@ public struct Play : IEquatable<Play>
     }
 
     /// <summary>
-    /// The canonical chain form of this play — the single source of play
-    /// equivalence (see <see cref="CanonicalPlay"/>). <see cref="Equals(Play)"/>
-    /// and <see cref="GetHashCode"/> delegate here; a caller comparing one play
-    /// against many should hoist its canonical form out of the loop.
+    /// The canonical chain form of this play — its display form: the chains
+    /// its notation shows and where the hit marks go (see
+    /// <see cref="CanonicalPlay"/>). Not identity; see the type summary.
     /// </summary>
     public readonly CanonicalPlay ToCanonical() => CanonicalPlay.FromPlay(in this);
 
     /// <summary>
-    /// Canonical (notation-level) equivalence — delegates to
-    /// <see cref="ToCanonical"/>; see the type summary for what compares equal.
+    /// Whether <paramref name="other"/> is the identical encoding: the same
+    /// moves, in the same order, with the same hit marks. For storage and
+    /// round-trip checks. <b>This is not play identity</b> — two encodings of
+    /// one play (another move order, another decomposition into hops, the
+    /// hit mark on another checker) differ here; identity is
+    /// <see cref="BoardState.IsSamePlay"/>. Only the first <see cref="Count"/>
+    /// moves are compared: a slot left behind by <see cref="RemoveLast"/> is
+    /// not part of the encoding.
     /// </summary>
-    public readonly bool Equals(Play other) => ToCanonical().Equals(other.ToCanonical());
-    /// <inheritdoc cref="Equals(Play)"/>
-    public override readonly bool Equals(object? obj) => obj is Play p && Equals(p);
-    /// <summary>Hash of the canonical form, consistent with <see cref="Equals(Play)"/>.</summary>
-    public override readonly int GetHashCode() => ToCanonical().GetHashCode();
+    public readonly bool IsSameEncoding(Play other)
+    {
+        if (Count != other.Count) return false;
+        for (int i = 0; i < Count; i++)
+            if (this[i] != other[i]) return false;
+        return true;
+    }
 
-    /// <inheritdoc cref="Equals(Play)"/>
-    public static bool operator ==(Play left, Play right) => left.Equals(right);
-    /// <summary>Negation of <see cref="op_Equality"/>.</summary>
-    public static bool operator !=(Play left, Play right) => !left.Equals(right);
+    /// <summary>
+    /// Not supported: <see cref="Play"/> has no equality (see the type
+    /// summary), so this throws. It is overridden only so that every
+    /// comparison the runtime routes here — a boxed <c>Equals</c>, an equality
+    /// comparer, a hash set or dictionary, <c>Distinct</c>, a record or tuple
+    /// holding a play — fails loudly, instead of falling back to the default
+    /// field-wise struct equality, which would compare stale slots.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    public override readonly bool Equals(object? obj) => throw NoEquality();
+
+    /// <summary>
+    /// Not supported, as for <see cref="Equals(object)"/>: a play has no
+    /// equality, so it has no hash either, and this throws.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    public override readonly int GetHashCode() => throw NoEquality();
+
+    private static NotSupportedException NoEquality() => new(
+        "Play has no equality: whether two plays are the same play depends on the position they "
+        + "are played from. Use BoardState.IsSamePlay, or BoardState.IndexOfSamePlay to find a play "
+        + "in a list; Play.IsSameEncoding compares exact encodings, for storage.");
 
     /// <summary>
     /// An allocation-free enumerator over the moves in insertion order,
