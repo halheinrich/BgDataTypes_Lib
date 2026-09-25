@@ -19,7 +19,7 @@ namespace BgDataTypes_Lib;
 /// (<see cref="BgDecisionData"/>, <see cref="DecisionRow"/>) and the types
 /// that define their own wire token via a bundled converter
 /// (<see cref="Play"/>, <see cref="DecisionId"/>, <see cref="ProblemKey"/>,
-/// <see cref="DiceRoll"/>, and the five enums — <see cref="CubeClaim"/>
+/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and the five enums — <see cref="CubeClaim"/>
 /// among them ahead of its first embedding document, so the claim
 /// vocabulary of halheinrich/backgammon#86 is born source-genned and
 /// downstream contexts chain rather than re-cover it). Composite parts
@@ -34,6 +34,31 @@ namespace BgDataTypes_Lib;
 /// declaration is what that resolution finds in a trimmed consumer. A
 /// completeness test keeps the declarations honest: the serialized-property
 /// closure of the roots must resolve through this context, member by member.
+/// </para>
+///
+/// <para>
+/// <b>Absence on the wire</b> (halheinrich/backgammon#222) — the one
+/// statement of the rule for every type in this graph. Every serialized
+/// member is one of two kinds, and no member arrives silently as a default:
+/// </para>
+/// <list type="bullet">
+/// <item><description>a member that must be present is <c>required</c>: an
+/// object initializer that omits it does not compile, and a document that
+/// omits it is a <see cref="System.Text.Json.JsonException"/> on both the
+/// reflection path and this context's (C# <c>required</c> on the init
+/// members; <see cref="JsonRequiredAttribute"/> on <see cref="Move"/>'s
+/// constructor-bound pair, which <c>required</c> cannot reach);</description></item>
+/// <item><description>a member whose absence means something is nullable and
+/// not required: absent, it reads as <see langword="null"/> on both paths,
+/// and its own documentation says what <see langword="null"/>
+/// means.</description></item>
+/// </list>
+/// <para>
+/// The paths agree because no member keeps a property initializer for the
+/// reflection path to honour and the generated creator to drop: a required
+/// member needs none, and a nullable one defaults to
+/// <see langword="null"/>. A test walks every member of the graph and pins
+/// both halves on both paths.
 /// </para>
 ///
 /// <para>
@@ -87,6 +112,7 @@ namespace BgDataTypes_Lib;
 [JsonSerializable(typeof(DecisionId))]
 [JsonSerializable(typeof(ProblemKey))]
 [JsonSerializable(typeof(DiceRoll))]
+[JsonSerializable(typeof(BoardPosition))]
 [JsonSerializable(typeof(AnalysisMode))]
 [JsonSerializable(typeof(AnalysisLevel))]
 [JsonSerializable(typeof(CubeAction))]

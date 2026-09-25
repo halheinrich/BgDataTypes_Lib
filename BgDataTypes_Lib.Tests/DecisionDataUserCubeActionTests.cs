@@ -21,7 +21,7 @@ public class DecisionDataUserCubeActionTests
     [InlineData(CubeAction.Double)]
     public void UserDoublerAction_DoublerHalfOrNull_Accepted(CubeAction? action)
     {
-        var d = new DecisionData { IsCube = true, UserDoublerAction = action };
+        var d = TestRecords.Decision(isCube: true, userDoublerAction: action);
 
         Assert.Equal(action, d.UserDoublerAction);
     }
@@ -32,7 +32,7 @@ public class DecisionDataUserCubeActionTests
     [InlineData(CubeAction.Pass)]
     public void UserTakerAction_TakerHalfOrNull_Accepted(CubeAction? action)
     {
-        var d = new DecisionData { IsCube = true, UserTakerAction = action };
+        var d = TestRecords.Decision(isCube: true, userTakerAction: action);
 
         Assert.Equal(action, d.UserTakerAction);
     }
@@ -48,7 +48,7 @@ public class DecisionDataUserCubeActionTests
     public void UserDoublerAction_NonDoublerAction_Throws(CubeAction takerAction)
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => new DecisionData { IsCube = true, UserDoublerAction = takerAction });
+            () => TestRecords.Decision(isCube: true, userDoublerAction: takerAction));
     }
 
     [Theory]
@@ -58,7 +58,7 @@ public class DecisionDataUserCubeActionTests
     public void UserTakerAction_NonTakerAction_Throws(CubeAction doublerAction)
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => new DecisionData { IsCube = true, UserTakerAction = doublerAction });
+            () => TestRecords.Decision(isCube: true, userTakerAction: doublerAction));
     }
 
     // ---------------------------------------------------------------------

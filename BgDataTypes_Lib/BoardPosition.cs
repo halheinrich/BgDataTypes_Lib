@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
@@ -56,13 +57,19 @@ namespace BgDataTypes_Lib;
 /// in its own documentation. <see cref="BoardState.FlippedCopy"/> re-expresses
 /// a position from the other player's frame.
 /// </para>
+/// <para>
+/// <b>On the wire</b> a position is a JSON array of its 26 counts in slot
+/// order, through the bundled <see cref="BoardPositionJsonConverter"/>; a
+/// read that does not form a position is a <c>JsonException</c>.
+/// </para>
 /// </remarks>
+[JsonConverter(typeof(BoardPositionJsonConverter))]
 public readonly struct BoardPosition :
     IEquatable<BoardPosition>,
     IEqualityOperators<BoardPosition, BoardPosition, bool>
 {
     /// <summary>The number of slots: two bars and 24 points.</summary>
-    private const int SlotCount = 26;
+    internal const int SlotCount = 26;
 
     /// <summary>The checkers each side owns; at most this many are on the board.</summary>
     private const int CheckersPerSide = 15;

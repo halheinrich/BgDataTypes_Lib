@@ -4,30 +4,33 @@ namespace BgDataTypes_Lib;
 /// The position-and-match-state category of a <see cref="BgDecisionData"/>:
 /// the board, the score context, and the cube state at the moment of the
 /// decision. Everything here is producer-supplied from the source file
-/// (see <c>ConvertXgToJson_Lib</c>), not derived.
+/// (see <c>ConvertXgToJson_Lib</c>), not derived. Every member but the
+/// nullable <see cref="IsJacoby"/> is <c>required</c>, per the wire rule
+/// stated on <see cref="BgDataTypesJsonContext"/>.
 /// </summary>
 public class PositionData
 {
     /// <summary>
-    /// Men on Point — 26-element board array.
-    /// [0]    = opponent's bar  (value always &lt;= 0)
-    /// [1-24] = points 1-24 from on-roll player's perspective
-    /// [25]   = on-roll player's bar (value always &gt;= 0)
-    /// Positive = on-roll player's checkers; negative = opponent's.
+    /// Men on Point — the board at the moment of the decision.
+    /// <b>Frame: the player on roll's</b>, the decision-maker's:
+    /// slot 0 is the opponent's bar, 1–24 the points from the on-roll
+    /// player's perspective, 25 the on-roll player's bar; positive counts are
+    /// the on-roll player's checkers, negative the opponent's (the
+    /// <see cref="BoardPosition"/> layout, well-formed by its invariant).
     /// </summary>
-    public IReadOnlyList<int> Mop { get; init; } = new int[26];
+    public required BoardPosition Mop { get; init; }
 
     /// <summary>
     /// Away score for the player on roll — points still needed to win the
     /// match (e.g. 3 means "3-away"). 0 for money games.
     /// </summary>
-    public int OnRollNeeds { get; init; }
+    public required int OnRollNeeds { get; init; }
 
     /// <summary>
     /// Away score for the opponent — points still needed to win the match.
     /// 0 for money games.
     /// </summary>
-    public int OpponentNeeds { get; init; }
+    public required int OpponentNeeds { get; init; }
 
     /// <summary>
     /// On-roll player's pip count as supplied by the producing parser (XG's
@@ -35,32 +38,32 @@ public class PositionData
     /// is computed from a live board — use this one when reading parsed
     /// decisions.
     /// </summary>
-    public int OnRollPipCount { get; init; }
+    public required int OnRollPipCount { get; init; }
 
     /// <summary>
     /// Opponent's pip count as supplied by the producing parser (XG's stored
     /// value). Distinct from <see cref="BoardState.OpponentPipCount"/> — see
     /// <see cref="OnRollPipCount"/>.
     /// </summary>
-    public int OpponentPipCount { get; init; }
+    public required int OpponentPipCount { get; init; }
 
     /// <summary>
-    /// Face value of the doubling cube: 1 (start), 2, 4, 8, … Defaults to 1.
+    /// Face value of the doubling cube: 1 (start), 2, 4, 8, …
     /// </summary>
-    public int CubeSize { get; init; } = 1;
+    public required int CubeSize { get; init; }
 
     /// <summary>
     /// Who may next use the doubling cube. On-roll-relative (like
     /// <see cref="Mop"/>), not seat-relative — see <see cref="BgDataTypes_Lib.CubeOwner"/>.
     /// </summary>
-    public CubeOwner CubeOwner { get; init; }
+    public required CubeOwner CubeOwner { get; init; }
 
     /// <summary>
     /// True when this decision occurred in the Crawford game (the one game,
     /// immediately after a player reaches match point, in which doubling is
     /// barred).
     /// </summary>
-    public bool IsCrawford { get; init; }
+    public required bool IsCrawford { get; init; }
 
     /// <summary>
     /// Whether the Jacoby rule was in force — <b>a money-game fact

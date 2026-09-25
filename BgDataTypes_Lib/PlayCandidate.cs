@@ -5,12 +5,15 @@ namespace BgDataTypes_Lib;
 /// producing analyser's move list, carried in <see cref="DecisionData.Plays"/>.
 /// Which candidate is the best or the user's play is recorded on the parent
 /// (<see cref="DecisionData.BestPlayIndex"/> / <see cref="DecisionData.UserPlayIndex"/>),
-/// not flagged per-candidate.
+/// not flagged per-candidate. The nullable probabilities'
+/// <see langword="null"/> means the candidate was not evaluated; every other
+/// member is <c>required</c>, per the wire rule stated on
+/// <see cref="BgDataTypesJsonContext"/>.
 /// </summary>
 public class PlayCandidate
 {
     /// <summary>Move notation, e.g. "8/5(2) 6/3(2)".</summary>
-    public string MoveNotation { get; init; } = string.Empty;
+    public required string MoveNotation { get; init; }
 
     /// <summary>
     /// Structural play — the sequence of (FrPt, ToPt) moves that produces
@@ -18,48 +21,49 @@ public class PlayCandidate
     /// is for display, the <see cref="Play"/> for applying and matching the
     /// candidate (e.g. submitted-play grading, which finds a submitted play
     /// among the candidates with <see cref="BoardState.IndexOfSamePlay"/>
-    /// from the decision's position). Empty (<c>Count == 0</c>) when not
-    /// populated.
+    /// from the decision's position).
     /// </summary>
-    public Play Play { get; init; }
+    public required Play Play { get; init; }
 
     /// <summary>Analysis depth label for this candidate, e.g. "3-ply",
     /// "XG Roller++", "Rollout: 1296 trials. 3-ply". Rendered in the
-    /// Depth column of the move-decision play panel. Empty when not set.</summary>
-    public string Depth { get; init; } = string.Empty;
+    /// Depth column of the move-decision play panel. Empty when the producer
+    /// recorded no label.</summary>
+    public required string Depth { get; init; }
 
     /// <summary>Compact display form of the analysis depth, e.g.
     /// "3-ply", "R++", "3p1296". Rendered in the Depth column of the
-    /// move-decision play panel. Empty when not set.</summary>
-    public string DepthAbbreviation { get; init; } = string.Empty;
+    /// move-decision play panel. Empty when the producer recorded no
+    /// label.</summary>
+    public required string DepthAbbreviation { get; init; }
 
     /// <summary>Ordinal ranking of the analysis depth; higher = deeper /
     /// more rigorous. Semantics (category boundaries, rollout-vs-static
     /// ordering) are defined by the producer — see ConvertXgToJson_Lib's
     /// depth-resolution logic. Used by BackgammonDiagram_Lib to flag
     /// out-of-order analysis depths across sorted-by-equity plays.
-    /// Defaults to 0 (treated as lowest).</summary>
-    public int DepthRank { get; init; }
+    /// 0 is treated as lowest.</summary>
+    public required int DepthRank { get; init; }
 
     /// <summary>How this candidate's numbers were produced — the mode axis of
     /// the two-axis depth taxonomy behind the <see cref="Depth"/> /
     /// <see cref="DepthAbbreviation"/> / <see cref="DepthRank"/> display
     /// forms, used for depth filtering together with
     /// <see cref="AnalysisLevel"/>. Producer-stamped;
-    /// <see cref="AnalysisMode.Unknown"/> when not set (including JSON
-    /// written before the two-axis pair existed).</summary>
-    public AnalysisMode AnalysisMode { get; init; }
+    /// <see cref="AnalysisMode.Unknown"/> when the producer did not record
+    /// it.</summary>
+    public required AnalysisMode AnalysisMode { get; init; }
 
     /// <summary>Evaluation level of the analysis behind this candidate — the
     /// level axis paired with <see cref="AnalysisMode"/>. For a rollout this
     /// is the inner moves level (checker rows never carry Roller-family
     /// rollout levels — see <see cref="BgDataTypes_Lib.AnalysisMode"/>).
-    /// Producer-stamped; <see cref="AnalysisLevel.Unknown"/> when not
-    /// set.</summary>
-    public AnalysisLevel AnalysisLevel { get; init; }
+    /// Producer-stamped; <see cref="AnalysisLevel.Unknown"/> when the
+    /// producer did not record it.</summary>
+    public required AnalysisLevel AnalysisLevel { get; init; }
 
     /// <summary>Primary equity value, displayed top-right in the analysis panel.</summary>
-    public double Equity { get; init; }
+    public required double Equity { get; init; }
 
     /// <summary>
     /// Equity loss vs. best-equity play, in match-equity units. <c>0.0</c> means
@@ -68,9 +72,9 @@ public class PlayCandidate
     /// <see cref="DecisionData.BestPlayIndex"/> names a canonical single best
     /// when one representative is needed; <c>EquityLoss == 0.0</c> is the valid
     /// test for "is this a best play" / membership in the best-equity equivalence
-    /// class. Defaults to <c>0.0</c>.
+    /// class.
     /// </summary>
-    public double EquityLoss { get; init; }
+    public required double EquityLoss { get; init; }
 
     // Outcome probabilities of this candidate, on-roll POV, fractions in
     // [0, 1] despite the Pct suffix, surfaced verbatim from XG's evaluation

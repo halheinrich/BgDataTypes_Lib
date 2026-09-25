@@ -46,23 +46,19 @@ public class ProblemKeyTests
         CubeOwner cubeOwner = CubeOwner.Centered,
         bool? isJacoby = null,
         int[]? dice = null,
-        DescriptiveData? descriptive = null) => new()
-    {
-        Id = new XgpDecisionId("fixture.xgp"),
-        Xgid = "XGID=not-consulted-by-derivation",
-        Position = new PositionData
-        {
-            Mop = mop ?? StandardMop(),
-            OnRollNeeds = onRollNeeds,
-            OpponentNeeds = opponentNeeds,
-            IsCrawford = isCrawford,
-            CubeSize = cubeSize,
-            CubeOwner = cubeOwner,
-            IsJacoby = isJacoby,
-        },
-        Decision = new DecisionData { IsCube = false, Dice = dice ?? [3, 1] },
-        Descriptive = descriptive ?? new DescriptiveData(),
-    };
+        DescriptiveData? descriptive = null) => TestRecords.Record(
+        id: new XgpDecisionId("fixture.xgp"),
+        xgid: "XGID=not-consulted-by-derivation",
+        position: TestRecords.Position(
+            mop: new BoardPosition(mop ?? StandardMop()),
+            onRollNeeds: onRollNeeds,
+            opponentNeeds: opponentNeeds,
+            isCrawford: isCrawford,
+            cubeSize: cubeSize,
+            cubeOwner: cubeOwner,
+            isJacoby: isJacoby),
+        decision: TestRecords.Decision(isCube: false, dice: dice ?? [3, 1]),
+        descriptive: descriptive ?? TestRecords.Descriptive());
 
     private static BgDecisionData CubeDecision(
         int[]? mop = null,
@@ -72,23 +68,19 @@ public class ProblemKeyTests
         int cubeSize = 2,
         CubeOwner cubeOwner = CubeOwner.OnRoll,
         bool? isJacoby = null,
-        DescriptiveData? descriptive = null) => new()
-    {
-        Id = new XgpDecisionId("fixture.xgp"),
-        Xgid = "XGID=not-consulted-by-derivation",
-        Position = new PositionData
-        {
-            Mop = mop ?? StandardMop(),
-            OnRollNeeds = onRollNeeds,
-            OpponentNeeds = opponentNeeds,
-            IsCrawford = isCrawford,
-            CubeSize = cubeSize,
-            CubeOwner = cubeOwner,
-            IsJacoby = isJacoby,
-        },
-        Decision = new DecisionData { IsCube = true },
-        Descriptive = descriptive ?? new DescriptiveData(),
-    };
+        DescriptiveData? descriptive = null) => TestRecords.Record(
+        id: new XgpDecisionId("fixture.xgp"),
+        xgid: "XGID=not-consulted-by-derivation",
+        position: TestRecords.Position(
+            mop: new BoardPosition(mop ?? StandardMop()),
+            onRollNeeds: onRollNeeds,
+            opponentNeeds: opponentNeeds,
+            isCrawford: isCrawford,
+            cubeSize: cubeSize,
+            cubeOwner: cubeOwner,
+            isJacoby: isJacoby),
+        decision: TestRecords.Decision(isCube: true),
+        descriptive: descriptive ?? TestRecords.Descriptive());
 
     /// <summary>
     /// A money-game (0-away/0-away) checker play carrying the Jacoby fact —
@@ -425,24 +417,20 @@ public class ProblemKeyTests
     [Fact]
     public void TryDerive_IgnoresProvenanceXgidAndDescriptive()
     {
-        var a = PlayDecision(descriptive: new DescriptiveData
-        {
-            MatchLength = 7,
-            OnRollName = "Alice",
-            OpponentName = "Bob",
-            SourceFile = "one.xg",
-            Game = 1,
-            MoveNumber = 4,
-        });
-        var b = PlayDecision(descriptive: new DescriptiveData
-        {
-            MatchLength = 7,
-            OnRollName = "Carol",
-            OpponentName = "Dave",
-            SourceFile = "two.xgp",
-            Game = 3,
-            MoveNumber = 17,
-        });
+        var a = PlayDecision(descriptive: TestRecords.Descriptive(
+            matchLength: 7,
+            onRollName: "Alice",
+            opponentName: "Bob",
+            sourceFile: "one.xg",
+            game: 1,
+            moveNumber: 4));
+        var b = PlayDecision(descriptive: TestRecords.Descriptive(
+            matchLength: 7,
+            onRollName: "Carol",
+            opponentName: "Dave",
+            sourceFile: "two.xgp",
+            game: 3,
+            moveNumber: 17));
 
         Assert.Equal(Derive(a), Derive(b));
     }
@@ -454,9 +442,9 @@ public class ProblemKeyTests
         // problem whether the match is to 7 or to 11 — match length is
         // subsumed by away scores and must not participate.
         var shortMatch = PlayDecision(onRollNeeds: 3, opponentNeeds: 2,
-            descriptive: new DescriptiveData { MatchLength = 7 });
+            descriptive: TestRecords.Descriptive(matchLength: 7));
         var longMatch = PlayDecision(onRollNeeds: 3, opponentNeeds: 2,
-            descriptive: new DescriptiveData { MatchLength = 11 });
+            descriptive: TestRecords.Descriptive(matchLength: 11));
 
         Assert.Equal(Derive(shortMatch), Derive(longMatch));
     }
@@ -468,20 +456,16 @@ public class ProblemKeyTests
         // with the seats swapped presents identical on-roll-relative facts —
         // turn/seat is normalized away by the Mop convention, so only the
         // descriptive frame differs and the keys must unify.
-        var seatsA = CubeDecision(descriptive: new DescriptiveData
-        {
-            OnRollName = "Alice",
-            OpponentName = "Bob",
-            Game = 2,
-            MoveNumber = 6,
-        });
-        var seatsB = CubeDecision(descriptive: new DescriptiveData
-        {
-            OnRollName = "Bob",
-            OpponentName = "Alice",
-            Game = 5,
-            MoveNumber = 11,
-        });
+        var seatsA = CubeDecision(descriptive: TestRecords.Descriptive(
+            onRollName: "Alice",
+            opponentName: "Bob",
+            game: 2,
+            moveNumber: 6));
+        var seatsB = CubeDecision(descriptive: TestRecords.Descriptive(
+            onRollName: "Bob",
+            opponentName: "Alice",
+            game: 5,
+            moveNumber: 11));
 
         Assert.Equal(Derive(seatsA), Derive(seatsB));
     }
@@ -518,14 +502,19 @@ public class ProblemKeyTests
     [Fact]
     public void NoKey_NullDiceListOnPlay()
     {
-        // Lenient JSON input can null the dice list through init.
+        // Lenient JSON input can null the dice list through init: the member
+        // is required (present), but a present null is not refused. Rewritten
+        // to take the null through JSON, since the builder states a list.
         var template = PlayDecision();
-        AssertNoKey(new BgDecisionData
-        {
-            Id = template.Id,
-            Position = template.Position,
-            Decision = new DecisionData { IsCube = false, Dice = null! },
-        });
+        var decision = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(template.Decision))!.AsObject();
+        decision["Dice"] = null;
+        var nullDice = JsonSerializer.Deserialize<DecisionData>(decision.ToJsonString())!;
+        Assert.Null(nullDice.Dice);
+
+        AssertNoKey(TestRecords.Record(
+            id: template.Id,
+            position: template.Position,
+            decision: nullDice));
     }
 
     [Fact]
@@ -534,57 +523,73 @@ public class ProblemKeyTests
         AssertNoKey(PlayDecision(mop: new int[26]));
     }
 
-    [Fact]
-    public void NoKey_MalformedBoardShape()
-    {
-        AssertNoKey(PlayDecision(mop: new int[25]));
+    // The four malformed-board rungs below were TryDerive pins until the
+    // board became a BoardPosition: a record can no longer hold a malformed
+    // board, so TryDerive never meets one. Each is rewritten to pin the
+    // refusal at the two doors that remain — the board's own (a record
+    // cannot be built with it) and the key's parse door (a key string
+    // spelling it yields no key) — against the same key with the standard
+    // board, which parses.
 
-        var nullMop = PlayDecision();
-        AssertNoKey(new BgDecisionData
-        {
-            Id = nullMop.Id,
-            Position = new PositionData { Mop = null! },
-            Decision = nullMop.Decision,
-        });
+    private static void AssertBoardRefusedAtEveryDoor(int[] mop)
+    {
+        Assert.False(BoardPosition.TryCreate(mop, out _));
+        Assert.Throws<ArgumentException>(() => PlayDecision(mop: mop));
+
+        string boardToken = string.Join(",", mop.Select(c => c.ToString(CultureInfo.InvariantCulture)));
+        Assert.True(ProblemKey.TryParse(StandardBoardToken + "/7a7/1c/31", null, out _));
+        Assert.False(ProblemKey.TryParse(boardToken + "/7a7/1c/31", null, out _));
     }
 
     [Fact]
-    public void NoKey_PerPointCountOutOfRange()
+    public void MalformedBoardShape_RefusedAtEveryDoor()
     {
+        // Rewritten from NoKey_MalformedBoardShape. Its null-board half has
+        // no successor: the board is a value type, so a record cannot hold a
+        // null one.
+        AssertBoardRefusedAtEveryDoor(new int[25]);
+        AssertBoardRefusedAtEveryDoor([.. StandardMop(), 0]);
+    }
+
+    [Fact]
+    public void PerPointCountOutOfRange_RefusedAtEveryDoor()
+    {
+        // Rewritten from NoKey_PerPointCountOutOfRange.
         var mop = StandardMop();
         mop[6] = 16;
-        AssertNoKey(PlayDecision(mop: mop));
+        AssertBoardRefusedAtEveryDoor(mop);
     }
 
     [Fact]
-    public void NoKey_MoreThanFifteenCheckersPerSide()
+    public void MoreThanFifteenCheckersPerSide_RefusedAtEveryDoor()
     {
-        // Real-board posture: totals capped at 15 per side even when every
-        // individual point is in range.
+        // Rewritten from NoKey_MoreThanFifteenCheckersPerSide. Real-board
+        // posture: totals capped at 15 per side even when every individual
+        // point is in range.
         var onRollHeavy = StandardMop();
         onRollHeavy[24] = 3;        // positives now 16
-        AssertNoKey(PlayDecision(mop: onRollHeavy));
+        AssertBoardRefusedAtEveryDoor(onRollHeavy);
 
         var opponentHeavy = StandardMop();
         opponentHeavy[1] = -3;      // |negatives| now 16
-        AssertNoKey(PlayDecision(mop: opponentHeavy));
+        AssertBoardRefusedAtEveryDoor(opponentHeavy);
     }
 
     [Fact]
-    public void NoKey_CheckerOnWrongBar()
+    public void CheckerOnWrongBar_RefusedAtEveryDoor()
     {
-        // Each bar holds only its own side's checkers: Mop[0] <= 0 (opponent
-        // bar), Mop[25] >= 0 (on-roll bar). Totals kept at 15 so only the
-        // bar-sign rung can reject.
+        // Rewritten from NoKey_CheckerOnWrongBar. Each bar holds only its own
+        // side's checkers: Mop[0] <= 0 (opponent bar), Mop[25] >= 0 (on-roll
+        // bar). Totals kept at 15 so only the bar-sign rule can reject.
         var onRollOnOpponentBar = StandardMop();
         onRollOnOpponentBar[0] = 1;
         onRollOnOpponentBar[24] = 1;
-        AssertNoKey(PlayDecision(mop: onRollOnOpponentBar));
+        AssertBoardRefusedAtEveryDoor(onRollOnOpponentBar);
 
         var opponentOnOnRollBar = StandardMop();
         opponentOnOnRollBar[25] = -1;
         opponentOnOnRollBar[19] = -4;
-        AssertNoKey(PlayDecision(mop: opponentOnOnRollBar));
+        AssertBoardRefusedAtEveryDoor(opponentOnOnRollBar);
     }
 
     [Theory]
@@ -720,14 +725,13 @@ public class ProblemKeyTests
     /// Rebuilds a fixture under a different <see cref="BgDecisionData.Xgid"/>,
     /// leaving every decomposed fact untouched.
     /// </summary>
-    private static BgDecisionData WithXgid(BgDecisionData data, string xgid) => new()
-    {
-        Id = data.Id,
-        Xgid = xgid,
-        Position = data.Position,
-        Decision = data.Decision,
-        Descriptive = data.Descriptive,
-    };
+    private static BgDecisionData WithXgid(BgDecisionData data, string xgid) => TestRecords.Record(
+        id: data.Id,
+        xgid: xgid,
+        position: data.Position,
+        decision: data.Decision,
+        descriptive: data.Descriptive,
+        outcome: data.Outcome);
 
     [Fact]
     public void TryParse_RetiredV2MoneySpelling_Rejected()

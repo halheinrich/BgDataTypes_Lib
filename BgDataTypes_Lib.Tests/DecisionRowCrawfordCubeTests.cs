@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
@@ -16,6 +17,11 @@ namespace BgDataTypes_Lib.Tests;
 /// <c>{ IsCrawford = true, Roll = 31 }</c> constructs. The
 /// <c>UserDoublerAction</c> rejection tests are the pattern.
 /// </summary>
+/// <remarks>
+/// Every stored member of the row is required or nullable
+/// (halheinrich/backgammon#222), so each initializer here states the whole
+/// row; the two members under test come first, in the order under test.
+/// </remarks>
 public class DecisionRowCrawfordCubeTests
 {
     private static readonly JsonSerializerOptions ContextOptions = new()
@@ -36,6 +42,10 @@ public class DecisionRowCrawfordCubeTests
             Id = new XgpDecisionId("test.xgp"),
             Roll = 0,
             IsCrawford = true,
+            Xgid = "", Error = 0, MatchLength = 5, Player = "", Game = 1, MoveNumber = 1,
+            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
+            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
+            Board = BoardPosition.Standard,
         });
 
         Assert.Equal("IsCrawford", ex.ParamName);
@@ -50,6 +60,10 @@ public class DecisionRowCrawfordCubeTests
             Id = new XgpDecisionId("test.xgp"),
             IsCrawford = true,
             Roll = 0,
+            Xgid = "", Error = 0, MatchLength = 5, Player = "", Game = 1, MoveNumber = 1,
+            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
+            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
+            Board = BoardPosition.Standard,
         });
 
         Assert.Equal("Roll", ex.ParamName);
@@ -66,12 +80,20 @@ public class DecisionRowCrawfordCubeTests
             Id = new XgpDecisionId("test.xgp"),
             IsCrawford = true,
             Roll = 31,
+            Xgid = "", Error = 0, MatchLength = 5, Player = "", Game = 1, MoveNumber = 1,
+            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
+            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
+            Board = BoardPosition.Standard,
         };
         var rollFirst = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
             Roll = 31,
             IsCrawford = true,
+            Xgid = "", Error = 0, MatchLength = 5, Player = "", Game = 1, MoveNumber = 1,
+            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
+            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
+            Board = BoardPosition.Standard,
         };
 
         Assert.True(crawfordFirst.IsCrawford);
@@ -90,12 +112,20 @@ public class DecisionRowCrawfordCubeTests
             Id = new XgpDecisionId("test.xgp"),
             Roll = 0,
             IsCrawford = false,
+            Xgid = "", Error = 0, MatchLength = 5, Player = "", Game = 1, MoveNumber = 1,
+            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
+            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
+            Board = BoardPosition.Standard,
         };
         var crawfordFirst = new DecisionRow
         {
             Id = new XgpDecisionId("test.xgp"),
             IsCrawford = false,
             Roll = 0,
+            Xgid = "", Error = 0, MatchLength = 5, Player = "", Game = 1, MoveNumber = 1,
+            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
+            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
+            Board = BoardPosition.Standard,
         };
 
         Assert.True(rollFirst.IsCube);
@@ -111,27 +141,56 @@ public class DecisionRowCrawfordCubeTests
     //  rather than defaulting to a cube
     // ---------------------------------------------------------------------
 
+    /// <summary>
+    /// A full row document with <paramref name="leading"/> first, in the
+    /// order given, and the row's other members after it; a member given
+    /// <see langword="null"/> is left out. Rewritten from literal JSON: every
+    /// other member of the row is required, so the rest of a full row
+    /// travels with the members under test.
+    /// </summary>
+    private static string RowDocument(params (string Name, JsonNode? Value)[] leading)
+    {
+        var full = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Row(roll: 31)))!.AsObject();
+        var document = new JsonObject { ["Id"] = "test.xgp" };
+        foreach (var (name, value) in leading)
+            if (value is not null)
+                document[name] = value;
+        foreach (var (name, value) in full)
+            if (name != "Id" && !leading.Any(l => l.Name == name))
+                document[name] = value?.DeepClone();
+        return document.ToJsonString();
+    }
+
+    public static TheoryData<string> CrawfordCubeDocuments =>
+    [
+        RowDocument(("Roll", 0), ("IsCrawford", true)),
+        RowDocument(("IsCrawford", true), ("Roll", 0)),
+    ];
+
     [Theory]
-    [InlineData("{\"Id\":\"test.xgp\",\"Roll\":0,\"IsCrawford\":true}")]
-    [InlineData("{\"Id\":\"test.xgp\",\"IsCrawford\":true,\"Roll\":0}")]
+    [MemberData(nameof(CrawfordCubeDocuments))]
     public void Deserialize_CrawfordCube_Throws(string json)
     {
         Assert.Throws<ArgumentException>(
             () => JsonSerializer.Deserialize<DecisionRow>(json));
     }
 
-    [Fact]
-    public void Deserialize_CrawfordCube_ThroughContext_Throws()
+    [Theory]
+    [MemberData(nameof(CrawfordCubeDocuments))]
+    public void Deserialize_CrawfordCube_ThroughContext_Throws(string json)
     {
-        const string json = "{\"Id\":\"test.xgp\",\"IsCrawford\":true,\"Roll\":0}";
-
         Assert.Throws<ArgumentException>(
             () => JsonSerializer.Deserialize<DecisionRow>(json, ContextOptions));
     }
 
+    public static TheoryData<string> RollAbsentDocuments =>
+    [
+        RowDocument(("Roll", null)),
+        RowDocument(("IsCrawford", true), ("Roll", null)),
+    ];
+
     [Theory]
-    [InlineData("{\"Id\":\"test.xgp\"}")]
-    [InlineData("{\"Id\":\"test.xgp\",\"IsCrawford\":true}")]
+    [MemberData(nameof(RollAbsentDocuments))]
     public void Deserialize_RollAbsent_Throws(string json)
     {
         // Roll is required on the wire too: the second document is exactly
@@ -140,18 +199,22 @@ public class DecisionRowCrawfordCubeTests
             () => JsonSerializer.Deserialize<DecisionRow>(json));
     }
 
-    [Fact]
-    public void Deserialize_RollAbsent_ThroughContext_Throws()
+    [Theory]
+    [MemberData(nameof(RollAbsentDocuments))]
+    public void Deserialize_RollAbsent_ThroughContext_Throws(string json)
     {
-        const string json = "{\"Id\":\"test.xgp\",\"IsCrawford\":true}";
-
         Assert.Throws<JsonException>(
             () => JsonSerializer.Deserialize<DecisionRow>(json, ContextOptions));
     }
 
+    public static TheoryData<string> CrawfordPlayDocuments =>
+    [
+        RowDocument(("IsCrawford", true), ("Roll", 31)),
+        RowDocument(("Roll", 31), ("IsCrawford", true)),
+    ];
+
     [Theory]
-    [InlineData("{\"Id\":\"test.xgp\",\"IsCrawford\":true,\"Roll\":31}")]
-    [InlineData("{\"Id\":\"test.xgp\",\"Roll\":31,\"IsCrawford\":true}")]
+    [MemberData(nameof(CrawfordPlayDocuments))]
     public void Deserialize_CrawfordPlay_Loads(string json)
     {
         var restored = JsonSerializer.Deserialize<DecisionRow>(json)!;
@@ -165,7 +228,7 @@ public class DecisionRowCrawfordCubeTests
     public void Deserialize_NonCrawfordCube_Loads()
     {
         var restored = JsonSerializer.Deserialize<DecisionRow>(
-            "{\"Id\":\"test.xgp\",\"Roll\":0,\"IsCrawford\":false}")!;
+            RowDocument(("Roll", 0), ("IsCrawford", false)))!;
 
         Assert.True(restored.IsCube);
         Assert.False(restored.IsCrawford);

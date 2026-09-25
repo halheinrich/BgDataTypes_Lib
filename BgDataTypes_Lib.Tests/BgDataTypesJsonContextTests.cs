@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using BgDataTypes_Lib;
@@ -42,143 +43,122 @@ public class BgDataTypesJsonContextTests
         var afterPlayer = new int[26];
         afterPlayer[5] = 2; afterPlayer[6] = -5; afterPlayer[19] = -2;
 
-        return new BgDecisionData
-        {
-            Id = new XgDecisionId("match.xg", Game: 4, MoveNumber: 22, IsCube: false),
-            Xgid = "XGID=-b----E-C---eE---c-e----B-:0:0:1:64:0:0:0:0:10",
-            Position = new PositionData
-            {
-                Mop = mop,
-                OnRollNeeds = 3,
-                OpponentNeeds = 5,
-                OnRollPipCount = 131,
-                OpponentPipCount = 144,
-                CubeSize = 2,
-                CubeOwner = CubeOwner.OnRoll,
-                IsCrawford = true
-            },
-            Decision = new DecisionData
-            {
-                Dice = [6, 4],
-                Plays =
-                [
-                    new PlayCandidate
-                    {
-                        MoveNotation = "24/18 13/9",
-                        Play = [new(24, 18), new(13, 9)],
-                        Depth = "Rollout: 1296 trials. 3-ply",
-                        DepthAbbreviation = "3p1296",
-                        DepthRank = 7,
-                        AnalysisMode = AnalysisMode.Rollout,
-                        AnalysisLevel = AnalysisLevel.Ply3,
-                        Equity = 0.211,
-                        WinPct = 0.481,
-                        WinGammonPct = 0.112,
-                        WinBgPct = 0.004,
-                        LosePct = 0.519,
-                        LoseGammonPct = 0.143,
-                        LoseBgPct = 0.006
-                    },
-                    new PlayCandidate
-                    {
-                        MoveNotation = "24/18 24/20*",
-                        Play = [new(24, 18), new(24, -20)],
-                        Depth = "3-ply",
-                        DepthAbbreviation = "3-ply",
-                        DepthRank = 4,
-                        AnalysisMode = AnalysisMode.Evaluation,
-                        AnalysisLevel = AnalysisLevel.Ply3Red,
-                        Equity = 0.198,
-                        EquityLoss = 0.013
-                    }
+        return TestRecords.Record(
+            id: new XgDecisionId("match.xg", Game: 4, MoveNumber: 22, IsCube: false),
+            xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:64:0:0:0:0:10",
+            position: TestRecords.Position(
+                mop: new BoardPosition(mop),
+                onRollNeeds: 3,
+                opponentNeeds: 5,
+                onRollPipCount: 131,
+                opponentPipCount: 144,
+                cubeSize: 2,
+                cubeOwner: CubeOwner.OnRoll,
+                isCrawford: true),
+            decision: TestRecords.Decision(
+                dice: [6, 4],
+                plays: [
+                    TestRecords.Candidate(
+                        moveNotation: "24/18 13/9",
+                        play: [new(24, 18), new(13, 9)],
+                        depth: "Rollout: 1296 trials. 3-ply",
+                        depthAbbreviation: "3p1296",
+                        depthRank: 7,
+                        analysisMode: AnalysisMode.Rollout,
+                        analysisLevel: AnalysisLevel.Ply3,
+                        equity: 0.211,
+                        winPct: 0.481,
+                        winGammonPct: 0.112,
+                        winBgPct: 0.004,
+                        losePct: 0.519,
+                        loseGammonPct: 0.143,
+                        loseBgPct: 0.006),
+                    TestRecords.Candidate(
+                        moveNotation: "24/18 24/20*",
+                        play: [new(24, 18), new(24, -20)],
+                        depth: "3-ply",
+                        depthAbbreviation: "3-ply",
+                        depthRank: 4,
+                        analysisMode: AnalysisMode.Evaluation,
+                        analysisLevel: AnalysisLevel.Ply3Red,
+                        equity: 0.198,
+                        equityLoss: 0.013)
                 ],
-                BestPlayIndex = 0,
-                UserPlayIndex = 1,
-                UserPlayError = 0.013,
-                IsCube = false
-            },
-            Descriptive = new DescriptiveData
-            {
-                MatchLength = 9,
-                OnRollName = "Mochy",
-                OpponentName = "Falafel",
-                Title = "Final",
-                Date = new DateOnly(2024, 11, 15),
-                Event = "Monte Carlo 2024",
-                SourceFile = "mochy-falafel.xg",
-                Game = 4,
-                MoveNumber = 22,
-                IsStandardStart = true,
-                Comment = "Blitz or prime?",
-                Flagged = true
-            },
-            Outcome = new PlayOutcomeData
-            {
-                AfterBestBoard = afterBest,
-                AfterPlayerBoard = afterPlayer
-            }
-        };
+                bestPlayIndex: 0,
+                userPlayIndex: 1,
+                userPlayError: 0.013,
+                isCube: false),
+            descriptive: TestRecords.Descriptive(
+                matchLength: 9,
+                onRollName: "Mochy",
+                opponentName: "Falafel",
+                title: "Final",
+                date: new DateOnly(2024, 11, 15),
+                @event: "Monte Carlo 2024",
+                sourceFile: "mochy-falafel.xg",
+                game: 4,
+                moveNumber: 22,
+                isStandardStart: true,
+                comment: "Blitz or prime?",
+                flagged: true),
+            outcome: TestRecords.Outcome(
+                afterBestBoard: new BoardPosition(afterBest),
+                afterPlayerBoard: new BoardPosition(afterPlayer)));
     }
 
-    private static BgDecisionData FullCubeDecision() => new()
-    {
-        Id = new XgDecisionId("session.xg", Game: 2, MoveNumber: 7, IsCube: true),
-        Xgid = "XGID=-b----E-C---eE---c-e----B-:1:1:1:00:0:0:1:0:10",
-        Position = new PositionData
-        {
-            Mop = new int[26],
-            OnRollPipCount = 92,
-            OpponentPipCount = 108,
-            CubeSize = 2,
-            CubeOwner = CubeOwner.Centered,
-            IsJacoby = true
-        },
-        Decision = new DecisionData
-        {
-            Dice = [0, 0],
-            IsCube = true,
-            CubeDepth = "Rollout: 1296 trials. 3-ply",
-            CubeDepthAbbreviation = "3p1296",
-            CubeDepthRank = 7,
-            CubeAnalysisMode = AnalysisMode.BookRollout,
-            CubeAnalysisLevel = AnalysisLevel.XgRoller,
-            NoDoubleEquity = 0.312,
-            DoubleTakeEquity = 0.287,
-            CubelessNoDoubleEquity = 0.205,
-            CubelessDoubleTakeEquity = 0.198,
-            WinPctAfterNoDouble = 0.621,
-            GammonPctAfterNoDouble = 0.183,
-            BgPctAfterNoDouble = 0.012,
-            LosePctAfterNoDouble = 0.379,
-            LoseGammonPctAfterNoDouble = 0.091,
-            LoseBgPctAfterNoDouble = 0.003,
-            WinPctAfterDoubleTake = 0.618,
-            GammonPctAfterDoubleTake = 0.181,
-            BgPctAfterDoubleTake = 0.011,
-            LosePctAfterDoubleTake = 0.382,
-            LoseGammonPctAfterDoubleTake = 0.093,
-            LoseBgPctAfterDoubleTake = 0.004,
-            ProbOfOpponentErrorJustifyingDouble = 0.078,
-            UserDoubleError = 0.025,
-            UserTakeError = 0.011,
-            UserDoublerAction = CubeAction.Double,
-            UserTakerAction = CubeAction.Take
-        },
-        Descriptive = new DescriptiveData
-        {
-            MatchLength = 0,
-            OnRollName = "Hal",
-            OpponentName = "Bot",
-            SourceFile = "hal-bot.xg",
-            Game = 2,
-            MoveNumber = 7
-        }
-    };
+    private static BgDecisionData FullCubeDecision() => TestRecords.Record(
+        id: new XgDecisionId("session.xg", Game: 2, MoveNumber: 7, IsCube: true),
+        xgid: "XGID=-b----E-C---eE---c-e----B-:1:1:1:00:0:0:1:0:10",
+        position: TestRecords.Position(
+            mop: BoardPosition.Empty,
+            onRollPipCount: 92,
+            opponentPipCount: 108,
+            cubeSize: 2,
+            cubeOwner: CubeOwner.Centered,
+            isJacoby: true),
+        decision: TestRecords.Decision(
+            dice: [0, 0],
+            isCube: true,
+            cubeDepth: "Rollout: 1296 trials. 3-ply",
+            cubeDepthAbbreviation: "3p1296",
+            cubeDepthRank: 7,
+            cubeAnalysisMode: AnalysisMode.BookRollout,
+            cubeAnalysisLevel: AnalysisLevel.XgRoller,
+            noDoubleEquity: 0.312,
+            doubleTakeEquity: 0.287,
+            cubelessNoDoubleEquity: 0.205,
+            cubelessDoubleTakeEquity: 0.198,
+            winPctAfterNoDouble: 0.621,
+            gammonPctAfterNoDouble: 0.183,
+            bgPctAfterNoDouble: 0.012,
+            losePctAfterNoDouble: 0.379,
+            loseGammonPctAfterNoDouble: 0.091,
+            loseBgPctAfterNoDouble: 0.003,
+            winPctAfterDoubleTake: 0.618,
+            gammonPctAfterDoubleTake: 0.181,
+            bgPctAfterDoubleTake: 0.011,
+            losePctAfterDoubleTake: 0.382,
+            loseGammonPctAfterDoubleTake: 0.093,
+            loseBgPctAfterDoubleTake: 0.004,
+            probOfOpponentErrorJustifyingDouble: 0.078,
+            userDoubleError: 0.025,
+            userTakeError: 0.011,
+            userDoublerAction: CubeAction.Double,
+            userTakerAction: CubeAction.Take),
+        descriptive: TestRecords.Descriptive(
+            matchLength: 0,
+            onRollName: "Hal",
+            opponentName: "Bot",
+            sourceFile: "hal-bot.xg",
+            game: 2,
+            moveNumber: 7),
+        outcome: TestRecords.Outcome());   // a cube decision: both after-boards absent
 
-    private static BgDecisionData MinimalDecision() => new()
-    {
-        Id = new XgpDecisionId("minimal.xgp")
-    };
+    // Every member at the value it defaulted to before the wire rule
+    // (halheinrich/backgammon#222) — the record that used to be spelled by
+    // its Id alone, now stated in full by the builder.
+    private static BgDecisionData MinimalDecision() =>
+        TestRecords.Record(id: new XgpDecisionId("minimal.xgp"));
 
     private static DecisionRow FullDecisionRow()
     {
@@ -187,30 +167,28 @@ public class BgDataTypesJsonContextTests
         var after = new int[26];
         after[2] = 2; after[6] = -5;
 
-        return new DecisionRow
-        {
-            Id = new XgDecisionId("match.xg", Game: 3, MoveNumber: 14, IsCube: false),
-            Xgid = "XGID=-b----E-C---eE---c-e----B-:0:0:1:52:0:0:0:0:10",
-            Error = 0.045,
-            MatchLength = 7,
-            Player = "Mochy",
-            SourceFile = "match.xg",
-            Game = 3,
-            MoveNumber = 14,
-            IsStandardStart = true,
-            Roll = 52,
-            AnalysisDepth = "3-ply",
-            AnalysisMode = AnalysisMode.Evaluation,
-            AnalysisLevel = AnalysisLevel.Ply3,
-            Equity = -0.118,
-            OnRollNeeds = 4,
-            OpponentNeeds = 2,
-            IsCrawford = true,
-            IsJacoby = null,
-            Board = board,
-            AfterBestBoard = after,
-            AfterPlayerBoard = after
-        };
+        return TestRecords.Row(
+            id: new XgDecisionId("match.xg", Game: 3, MoveNumber: 14, IsCube: false),
+            xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:52:0:0:0:0:10",
+            error: 0.045,
+            matchLength: 7,
+            player: "Mochy",
+            sourceFile: "match.xg",
+            game: 3,
+            moveNumber: 14,
+            isStandardStart: true,
+            roll: 52,
+            analysisDepth: "3-ply",
+            analysisMode: AnalysisMode.Evaluation,
+            analysisLevel: AnalysisLevel.Ply3,
+            equity: -0.118,
+            onRollNeeds: 4,
+            opponentNeeds: 2,
+            isCrawford: true,
+            isJacoby: null,
+            board: new BoardPosition(board),
+            afterBestBoard: new BoardPosition(after),
+            afterPlayerBoard: new BoardPosition(after));
     }
 
     // A pinned canonical key (ProblemKeyTests' grammar pins own the format;
@@ -288,6 +266,13 @@ public class BgDataTypesJsonContextTests
         => AssertContextMatchesReflection(new DiceRoll(3, 1));
 
     [Fact]
+    public void BoardPosition_ContextMatchesReflection()
+    {
+        AssertContextMatchesReflection(BoardPosition.Standard);
+        AssertContextMatchesReflection(BoardPosition.Empty);
+    }
+
+    [Fact]
     public void Enums_ContextMatchesReflection()
     {
         AssertContextMatchesReflection(AnalysisMode.BookRollout);
@@ -332,6 +317,20 @@ public class BgDataTypesJsonContextTests
     }
 
     [Fact]
+    public void ContextPath_BoardsSerializeAsCountArrays_AndAnAbsentAfterBoardAsNull()
+    {
+        var play = JsonSerializer.Serialize(FullPlayDecision(), ContextOptions);
+        var cube = JsonSerializer.Serialize(FullCubeDecision(), ContextOptions);
+
+        Assert.Contains("\"Mop\":[0,2,0,0,0,0,-5,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,-2,1]", play);
+        Assert.Contains("\"AfterBestBoard\":[0,0,0,0,2,0,-5,0,0,0,0,0,0,0,0,0,0,0,0,0,-2,0,0,0,0,0]", play);
+        Assert.Contains("\"AfterBestBoard\":null,\"AfterPlayerBoard\":null", cube);
+        Assert.Equal(
+            "[0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0]",
+            JsonSerializer.Serialize(BoardPosition.Standard, ContextOptions));
+    }
+
+    [Fact]
     public void ContextPath_ProblemKeyAndDiceRollSerializeAsTokens()
     {
         Assert.Equal(
@@ -345,15 +344,16 @@ public class BgDataTypesJsonContextTests
     {
         // The halheinrich/backgammon#164 strictness must survive the
         // mechanism change: numeric enum tokens stay rejected when the
-        // metadata comes from the context.
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlayCandidate>(
-            "{\"MoveNotation\":\"8/5 6/1\",\"AnalysisMode\":2}", ContextOptions));
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlayCandidate>(
-            "{\"MoveNotation\":\"8/5 6/1\",\"AnalysisLevel\":4}", ContextOptions));
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PositionData>(
-            "{\"CubeOwner\":1}", ContextOptions));
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DecisionData>(
-            "{\"IsCube\":true,\"UserDoublerAction\":1}", ContextOptions));
+        // metadata comes from the context. Rewritten onto full documents:
+        // every other member is required (halheinrich/backgammon#222), so a
+        // partial document would be refused for its absent members and pass
+        // vacuously. Each full document loads unaltered (the control); only
+        // its enum turned numeric is refused.
+        AssertOnlyTheNumericTokenIsRefused(TestRecords.Candidate(), "AnalysisMode", 2);
+        AssertOnlyTheNumericTokenIsRefused(TestRecords.Candidate(), "AnalysisLevel", 4);
+        AssertOnlyTheNumericTokenIsRefused(TestRecords.Position(), "CubeOwner", 1);
+        AssertOnlyTheNumericTokenIsRefused(
+            TestRecords.Decision(isCube: true, userDoublerAction: CubeAction.Double), "UserDoublerAction", 1);
 
         // CubeClaim has no embedding document in this library yet (it is a
         // declared root ahead of its first downstream document — the
@@ -361,6 +361,16 @@ public class BgDataTypesJsonContextTests
         // through the context is pinned on the bare token.
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CubeClaim>(
             "2", ContextOptions));
+    }
+
+    private static void AssertOnlyTheNumericTokenIsRefused<T>(T full, string member, int ordinal)
+    {
+        var document = JsonNode.Parse(JsonSerializer.Serialize(full, ContextOptions))!.AsObject();
+        Assert.NotNull(JsonSerializer.Deserialize<T>(document.ToJsonString(), ContextOptions));
+
+        document[member] = ordinal;
+        Assert.Throws<JsonException>(
+            () => JsonSerializer.Deserialize<T>(document.ToJsonString(), ContextOptions));
     }
 
     // -----------------------------------------------------------------------
@@ -397,7 +407,7 @@ public class BgDataTypesJsonContextTests
         [
             typeof(BgDecisionData), typeof(DecisionRow),
             typeof(Play), typeof(Move), typeof(DecisionId),
-            typeof(ProblemKey), typeof(DiceRoll),
+            typeof(ProblemKey), typeof(DiceRoll), typeof(BoardPosition),
             typeof(AnalysisMode), typeof(AnalysisLevel),
             typeof(CubeAction), typeof(CubeClaim), typeof(CubeOwner)
         ];

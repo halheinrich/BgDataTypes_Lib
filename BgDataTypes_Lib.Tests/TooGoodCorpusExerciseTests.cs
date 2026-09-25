@@ -125,12 +125,10 @@ public class TooGoodCorpusExerciseTests
                     || !TryGetDouble(decision, "doubleTakeEquity", out var doubleTakeEquity))
                     continue;
 
-                yield return new DecisionData
-                {
-                    IsCube = true,
-                    NoDoubleEquity = noDoubleEquity,
-                    DoubleTakeEquity = doubleTakeEquity
-                };
+                yield return TestRecords.Decision(
+                    isCube: true,
+                    noDoubleEquity: noDoubleEquity,
+                    doubleTakeEquity: doubleTakeEquity);
             }
         }
     }

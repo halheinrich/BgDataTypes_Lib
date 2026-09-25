@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
@@ -9,7 +9,10 @@ namespace BgDataTypes_Lib;
 /// and the <c>UserPlay*</c> fields are live) or a cube decision
 /// (<see cref="IsCube"/> true — the <c>Cube*</c> depth fields, the equity /
 /// probability fields and the <c>UserDouble*</c> / <c>UserTake*</c> fields
-/// are live). Fields of the inactive half hold their defaults.
+/// are live). Fields of the inactive half hold their defaults, stated by the
+/// producer: every member but the nullable ones is <c>required</c>, per the
+/// wire rule stated on <see cref="BgDataTypesJsonContext"/>, and each
+/// nullable member's documentation says what <see langword="null"/> means.
 ///
 /// <para>
 /// All equities are in normalised cube-equity units from the on-roll
@@ -23,7 +26,7 @@ namespace BgDataTypes_Lib;
 public class DecisionData
 {
     /// <summary>Always length 2. Ignored when IsCube is true.</summary>
-    public IReadOnlyList<int> Dice { get; init; } = new int[2];
+    public required IReadOnlyList<int> Dice { get; init; }
 
     /// <summary>
     /// The analysed candidate plays of a checker-play decision, in
@@ -31,9 +34,9 @@ public class DecisionData
     /// <see cref="BestPlayIndex"/> and <see cref="UserPlayIndex"/> index into
     /// this list. Empty when <see cref="IsCube"/> is true.
     /// </summary>
-    public IReadOnlyList<PlayCandidate> Plays { get; init; } = [];
+    public required IReadOnlyList<PlayCandidate> Plays { get; init; }
     /// <summary>Index into Plays identifying the best play. </summary>
-    public int BestPlayIndex { get; init; }
+    public required int BestPlayIndex { get; init; }
     /// <summary>
     /// Equity loss from the user's checker play vs. the best play (≥ 0).
     /// Null when no user play is recorded or IsCube is true.
@@ -45,35 +48,35 @@ public class DecisionData
     /// The single source of "which candidate did the user play"; there is
     /// deliberately no per-candidate flag to keep consistent with it.
     /// </summary>
-    public int UserPlayIndex { get; init; } = -1;
+    public required int UserPlayIndex { get; init; }
 
     /// <summary>
     /// Decision-kind discriminator: true for a cube decision, false for a
     /// checker play. Selects which half of this record is live — see the
     /// class summary.
     /// </summary>
-    public bool IsCube { get; init; }
+    public required bool IsCube { get; init; }
 
     // -----------------------------------------------------------------------
     //  Cube decision equity fields
     // -----------------------------------------------------------------------
     /// <summary>Analysis depth label for a cube decision, e.g. "3-ply",
     /// "Rollout: 1296 trials. 3-ply". Empty when IsCube is false.</summary>
-    public string CubeDepth { get; init; } = string.Empty;
+    public required string CubeDepth { get; init; }
 
     /// <summary>Compact display form of CubeDepth. Empty when IsCube is false.</summary>
-    public string CubeDepthAbbreviation { get; init; } = string.Empty;
+    public required string CubeDepthAbbreviation { get; init; }
 
     /// <summary>Ordinal ranking of CubeDepth; see PlayCandidate.DepthRank
-    /// for semantics. Defaults to 0.</summary>
-    public int CubeDepthRank { get; init; }
+    /// for semantics. 0 when IsCube is false.</summary>
+    public required int CubeDepthRank { get; init; }
 
     /// <summary>How the cube analysis's numbers were produced — the mode axis
     /// of the two-axis depth taxonomy; see
     /// <see cref="PlayCandidate.AnalysisMode"/> for semantics.
-    /// <see cref="AnalysisMode.Unknown"/> when IsCube is false or when not
-    /// stamped (including JSON written before the two-axis pair existed).</summary>
-    public AnalysisMode CubeAnalysisMode { get; init; }
+    /// <see cref="AnalysisMode.Unknown"/> when IsCube is false or when the
+    /// producer did not record it.</summary>
+    public required AnalysisMode CubeAnalysisMode { get; init; }
 
     /// <summary>Evaluation level of the cube analysis — the level axis paired
     /// with <see cref="CubeAnalysisMode"/>. For a rollout this is the inner
@@ -81,15 +84,15 @@ public class DecisionData
     /// the shipped opening-book database contains cube rollout levels of
     /// XG Roller. See <see cref="PlayCandidate.AnalysisLevel"/> for the
     /// checker-row counterpart. <see cref="AnalysisLevel.Unknown"/> when
-    /// IsCube is false or when not stamped.</summary>
-    public AnalysisLevel CubeAnalysisLevel { get; init; }
+    /// IsCube is false or when the producer did not record it.</summary>
+    public required AnalysisLevel CubeAnalysisLevel { get; init; }
 
     /// <summary>
     /// Cubeful equity of not doubling (doubler's perspective, normalised
     /// cube-equity units — see the class summary). One of the two inputs the
     /// cube-scoring helpers derive from.
     /// </summary>
-    public double NoDoubleEquity { get; init; }
+    public required double NoDoubleEquity { get; init; }
 
     /// <summary>
     /// Cubeful equity of double/take (doubler's perspective, normalised
@@ -97,13 +100,13 @@ public class DecisionData
     /// 1 means the opponent should pass. The other input of the cube-scoring
     /// helpers.
     /// </summary>
-    public double DoubleTakeEquity { get; init; }
+    public required double DoubleTakeEquity { get; init; }
 
-    /// <summary>Cubeless equity of the no-double evaluation. Defaults to 0.0.</summary>
-    public double CubelessNoDoubleEquity { get; init; }
+    /// <summary>Cubeless equity of the no-double evaluation.</summary>
+    public required double CubelessNoDoubleEquity { get; init; }
 
-    /// <summary>Cubeless equity of the double/take evaluation. Defaults to 0.0.</summary>
-    public double CubelessDoubleTakeEquity { get; init; }
+    /// <summary>Cubeless equity of the double/take evaluation.</summary>
+    public required double CubelessDoubleTakeEquity { get; init; }
 
     // Outcome-probability breakdown of the two cube evaluations, on-roll
     // (doubler's) POV, fractions in [0, 1] surfaced verbatim from XG. Win/Lose
@@ -111,30 +114,30 @@ public class DecisionData
     // XG's G/B breakdown figures for the same evaluation.
 
     /// <summary>Probability the on-roll player wins, from the no-double evaluation. Fraction in [0, 1].</summary>
-    public double WinPctAfterNoDouble { get; init; }
+    public required double WinPctAfterNoDouble { get; init; }
     /// <summary>XG's gammon-win figure (the "G" of its W/G/B breakdown) from the no-double evaluation. Fraction in [0, 1].</summary>
-    public double GammonPctAfterNoDouble { get; init; }
+    public required double GammonPctAfterNoDouble { get; init; }
     /// <summary>XG's backgammon-win figure (the "B" of its W/G/B breakdown) from the no-double evaluation. Fraction in [0, 1].</summary>
-    public double BgPctAfterNoDouble { get; init; }
+    public required double BgPctAfterNoDouble { get; init; }
     /// <summary>Probability the on-roll player loses, from the no-double evaluation. Fraction in [0, 1].</summary>
-    public double LosePctAfterNoDouble { get; init; }
+    public required double LosePctAfterNoDouble { get; init; }
     /// <summary>XG's gammon-loss figure from the no-double evaluation. Fraction in [0, 1].</summary>
-    public double LoseGammonPctAfterNoDouble { get; init; }
+    public required double LoseGammonPctAfterNoDouble { get; init; }
     /// <summary>XG's backgammon-loss figure from the no-double evaluation. Fraction in [0, 1].</summary>
-    public double LoseBgPctAfterNoDouble { get; init; }
+    public required double LoseBgPctAfterNoDouble { get; init; }
 
     /// <summary>Probability the on-roll player wins, from the double/take evaluation. Fraction in [0, 1].</summary>
-    public double WinPctAfterDoubleTake { get; init; }
+    public required double WinPctAfterDoubleTake { get; init; }
     /// <summary>XG's gammon-win figure from the double/take evaluation. Fraction in [0, 1].</summary>
-    public double GammonPctAfterDoubleTake { get; init; }
+    public required double GammonPctAfterDoubleTake { get; init; }
     /// <summary>XG's backgammon-win figure from the double/take evaluation. Fraction in [0, 1].</summary>
-    public double BgPctAfterDoubleTake { get; init; }
+    public required double BgPctAfterDoubleTake { get; init; }
     /// <summary>Probability the on-roll player loses, from the double/take evaluation. Fraction in [0, 1].</summary>
-    public double LosePctAfterDoubleTake { get; init; }
+    public required double LosePctAfterDoubleTake { get; init; }
     /// <summary>XG's gammon-loss figure from the double/take evaluation. Fraction in [0, 1].</summary>
-    public double LoseGammonPctAfterDoubleTake { get; init; }
+    public required double LoseGammonPctAfterDoubleTake { get; init; }
     /// <summary>XG's backgammon-loss figure from the double/take evaluation. Fraction in [0, 1].</summary>
-    public double LoseBgPctAfterDoubleTake { get; init; }
+    public required double LoseBgPctAfterDoubleTake { get; init; }
 
     /// <summary>
     /// XG-producer-specific cube statistic, surfaced verbatim: XG's reported
@@ -142,7 +145,7 @@ public class DecisionData
     /// its cube-analysis pane). Fraction in [0, 1]. This library assigns it
     /// no further semantics.
     /// </summary>
-    public double ProbOfOpponentErrorJustifyingDouble { get; init; }
+    public required double ProbOfOpponentErrorJustifyingDouble { get; init; }
     /// <summary>
     /// Equity loss from the user's doubling decision vs. the correct cube action (≥ 0).
     /// Null when no cube decision is recorded or IsCube is false.

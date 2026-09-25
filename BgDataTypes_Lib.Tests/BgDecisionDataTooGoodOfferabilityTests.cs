@@ -26,24 +26,17 @@ public class BgDecisionDataTooGoodOfferabilityTests
     private static BgDecisionData Make(
         int matchLength, bool? isJacoby, CubeOwner cubeOwner, bool isCube = true,
         double noDoubleEquity = 0.50, double doubleTakeEquity = 0.70)
-        => new()
-        {
-            Id = AnyId,
-            Position = new PositionData
-            {
-                Mop = new int[26],
-                IsJacoby = isJacoby,
-                CubeSize = cubeOwner == CubeOwner.Centered ? 1 : 2,
-                CubeOwner = cubeOwner
-            },
-            Descriptive = new DescriptiveData { MatchLength = matchLength },
-            Decision = new DecisionData
-            {
-                IsCube = isCube,
-                NoDoubleEquity = noDoubleEquity,
-                DoubleTakeEquity = doubleTakeEquity
-            }
-        };
+        => TestRecords.Record(
+            id: AnyId,
+            position: TestRecords.Position(
+                isJacoby: isJacoby,
+                cubeSize: cubeOwner == CubeOwner.Centered ? 1 : 2,
+                cubeOwner: cubeOwner),
+            descriptive: TestRecords.Descriptive(matchLength: matchLength),
+            decision: TestRecords.Decision(
+                isCube: isCube,
+                noDoubleEquity: noDoubleEquity,
+                doubleTakeEquity: doubleTakeEquity));
 
     // ---------------------------------------------------------------------
     //  The one false cell, and its turned-cube twin

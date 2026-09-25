@@ -19,12 +19,10 @@ namespace BgDataTypes_Lib.Tests;
 public class DecisionDataClaimDerivationTests
 {
     private static DecisionData MakeCube(double noDoubleEquity, double doubleTakeEquity)
-        => new()
-        {
-            IsCube = true,
-            NoDoubleEquity = noDoubleEquity,
-            DoubleTakeEquity = doubleTakeEquity
-        };
+        => TestRecords.Decision(
+            isCube: true,
+            noDoubleEquity: noDoubleEquity,
+            doubleTakeEquity: doubleTakeEquity);
 
     // ---------------------------------------------------------------------
     //  BestDoublerClaim — every claim value, from equities alone
@@ -187,25 +185,21 @@ public class DecisionDataClaimDerivationTests
     [Fact]
     public void Derivation_IsContextFree_JacobyRedoubleDerivesTooGood()
     {
-        var record = new BgDecisionData
-        {
-            Id = new XgpDecisionId("jacoby-redouble.xgp"),
-            Position = new PositionData
-            {
-                Mop = new int[26],
-                OnRollNeeds = 0,            // money session
-                OpponentNeeds = 0,
-                IsJacoby = true,
-                CubeSize = 2,               // cube already turned:
-                CubeOwner = CubeOwner.OnRoll // a redouble decision
-            },
-            Decision = new DecisionData
-            {
-                IsCube = true,
-                NoDoubleEquity = 1.15,      // playing on (gammons re-armed)
-                DoubleTakeEquity = 1.30     // beats cashing; opponent passes
-            }
-        };
+        var record = TestRecords.Record(
+            id: new XgpDecisionId("jacoby-redouble.xgp"),
+            position: TestRecords.Position(
+                mop: BoardPosition.Empty,
+                onRollNeeds: 0,            // money session
+                opponentNeeds: 0,
+                isJacoby: true,
+                cubeSize: 2,               // cube already turned:
+                cubeOwner: CubeOwner.OnRoll // a redouble decision
+            ),
+            decision: TestRecords.Decision(
+                isCube: true,
+                noDoubleEquity: 1.15,      // playing on (gammons re-armed)
+                doubleTakeEquity: 1.30     // beats cashing; opponent passes
+            ));
 
         Assert.Equal(CubeClaim.TooGood, record.Decision.BestDoublerClaim);
         Assert.Equal(CubeClaimPair.TooGoodPass, record.Decision.BestClaimPair);
@@ -218,7 +212,7 @@ public class DecisionDataClaimDerivationTests
     [Fact]
     public void ClaimDerivation_Throws_WhenNotCube()
     {
-        var play = new DecisionData();   // IsCube defaults to false
+        var play = TestRecords.Decision();   // IsCube defaults to false
 
         Assert.Throws<InvalidOperationException>(() => _ = play.BestDoublerClaim);
         Assert.Throws<InvalidOperationException>(() => _ = play.BestClaimPair);

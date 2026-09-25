@@ -22,16 +22,12 @@ public class BgDecisionDataFilterErrorTests
     [Fact]
     public void FilterError_Cube_UsesDoubleError()
     {
-        var d = new BgDecisionData
-        {
-            Id = AnyId,
-            Decision = new DecisionData
-            {
-                IsCube = true,
-                UserDoubleError = 0.042,
-                UserTakeError = 0.017,
-            },
-        };
+        var d = TestRecords.Record(
+            id: AnyId,
+            decision: TestRecords.Decision(
+                isCube: true,
+                userDoubleError: 0.042,
+                userTakeError: 0.017));
 
         // Doubling error present → it wins over the take error.
         Assert.Equal(0.042, d.FilterError);
@@ -40,16 +36,12 @@ public class BgDecisionDataFilterErrorTests
     [Fact]
     public void FilterError_Cube_FallsBackToTakeError()
     {
-        var d = new BgDecisionData
-        {
-            Id = AnyId,
-            Decision = new DecisionData
-            {
-                IsCube = true,
-                UserDoubleError = null,
-                UserTakeError = 0.017,
-            },
-        };
+        var d = TestRecords.Record(
+            id: AnyId,
+            decision: TestRecords.Decision(
+                isCube: true,
+                userDoubleError: null,
+                userTakeError: 0.017));
 
         // No doubling error → fall back to the take/drop error.
         Assert.Equal(0.017, d.FilterError);
@@ -58,15 +50,11 @@ public class BgDecisionDataFilterErrorTests
     [Fact]
     public void FilterError_Checker_UsesPlayError()
     {
-        var d = new BgDecisionData
-        {
-            Id = AnyId,
-            Decision = new DecisionData
-            {
-                IsCube = false,
-                UserPlayError = 0.031,
-            },
-        };
+        var d = TestRecords.Record(
+            id: AnyId,
+            decision: TestRecords.Decision(
+                isCube: false,
+                userPlayError: 0.031));
 
         // Checker decision → the cube-error fields are irrelevant; read the play error.
         Assert.Equal(0.031, d.FilterError);

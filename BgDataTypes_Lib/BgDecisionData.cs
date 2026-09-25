@@ -13,7 +13,8 @@ namespace BgDataTypes_Lib;
 /// Implements <see cref="IDecisionFilterData"/> by forwarding into the
 /// category members; that view is a read-side derivation and is excluded
 /// from JSON — the category members are the wire form
-/// (halheinrich/backgammon#14).
+/// (halheinrich/backgammon#14). Every stored member is <c>required</c>, per
+/// the wire rule stated on <see cref="BgDataTypesJsonContext"/>.
 ///
 /// <para>
 /// <b>The Crawford rule binds the record</b> (halheinrich/backgammon#201).
@@ -25,8 +26,9 @@ namespace BgDataTypes_Lib;
 /// whichever is set second throws <see cref="ArgumentException"/> naming
 /// itself — from an object initializer in either member order and from a
 /// JSON document in either property order alike, since
-/// <c>System.Text.Json</c> populates init setters. A half-set record never
-/// throws: both defaults are "not cube, not Crawford".
+/// <c>System.Text.Json</c> populates init setters. The half set first never
+/// throws: until it is set, the other half counts as neither cube nor
+/// Crawford.
 /// <see cref="ProblemKey"/>'s grammar still accepts a Crawford cube key,
 /// because stats documents written before this guard hold such keys and
 /// must keep loading; those keys are inert rather than orphaned — stats are
@@ -37,8 +39,10 @@ namespace BgDataTypes_Lib;
 /// </summary>
 public class BgDecisionData : IDecisionFilterData
 {
-    private readonly PositionData _position = new();
-    private readonly DecisionData _decision = new();
+    // Null only until the half is set; `required` guarantees neither is null
+    // once construction ends (see the comment above Position).
+    private readonly PositionData? _position;
+    private readonly DecisionData? _decision;
 
     /// <summary>
     /// Stable, persistent identifier for this decision within its source file.
@@ -57,13 +61,19 @@ public class BgDecisionData : IDecisionFilterData
     /// property of the minimal derived <see cref="PositionData"/>. Mirrors
     /// <see cref="DecisionRow.Xgid"/>.
     /// </summary>
-    public string Xgid { get; init; } = string.Empty;
+    public required string Xgid { get; init; }
 
-    // Both halves keep their non-nullable declaration honest: an explicit
-    // null — an initializer's, or a JSON document's `"Position":null` — is
-    // rejected at init (halheinrich/backgammon#221), while an absent half
-    // stays at its `new()` default. So the Crawford guard below reads the
-    // other half directly; it is never null.
+    // Both halves keep their non-nullable declaration honest on every path.
+    // They are required, so an absent half is a compile error in an object
+    // initializer and a JsonException on the wire, through the reflection
+    // path and the source-generated context alike
+    // (halheinrich/backgammon#222); and an explicit null — an
+    // initializer's, or a JSON document's `"Position":null` — is rejected
+    // at init with ArgumentNullException (halheinrich/backgammon#221). The
+    // backing fields are therefore null only while construction is still
+    // setting them: the Crawford guard below reads an unset other half as
+    // "not cube, not Crawford", and `required` guarantees both are set by
+    // the time construction ends.
 
     /// <summary>
     /// Board, score context and cube state at the moment of the decision.
@@ -80,13 +90,13 @@ public class BgDecisionData : IDecisionFilterData
     /// rule, see the class summary (<see cref="CrawfordRule"/> is the one
     /// spelling of the rule).
     /// </exception>
-    public PositionData Position
+    public required PositionData Position
     {
-        get => _position;
+        get => _position!;
         init
         {
             ArgumentNullException.ThrowIfNull(value, nameof(Position));
-            CrawfordRule.ThrowIfCrawfordCube(value.IsCrawford, _decision.IsCube, nameof(Position));
+            CrawfordRule.ThrowIfCrawfordCube(value.IsCrawford, _decision?.IsCube == true, nameof(Position));
             _position = value;
         }
     }
@@ -107,26 +117,27 @@ public class BgDecisionData : IDecisionFilterData
     /// see the class summary (<see cref="CrawfordRule"/> is the one spelling
     /// of the rule).
     /// </exception>
-    public DecisionData Decision
+    public required DecisionData Decision
     {
-        get => _decision;
+        get => _decision!;
         init
         {
             ArgumentNullException.ThrowIfNull(value, nameof(Decision));
-            CrawfordRule.ThrowIfCrawfordCube(_position.IsCrawford, value.IsCube, nameof(Decision));
+            CrawfordRule.ThrowIfCrawfordCube(_position?.IsCrawford == true, value.IsCube, nameof(Decision));
             _decision = value;
         }
     }
 
     /// <summary>Provenance and metadata: players, source file, position within the match.</summary>
-    public DescriptiveData Descriptive { get; init; } = new();
+    public required DescriptiveData Descriptive { get; init; }
 
     /// <summary>
-    /// After-boards derived from the play choices. Producer contract: left at
-    /// its default (empty boards) for cube decisions — the emptiness is not
-    /// guarded here, so consumers check <see cref="IsCube"/> first.
+    /// After-boards derived from the play choices. Producer contract: both
+    /// boards <see langword="null"/> for cube decisions — not guarded here;
+    /// consumers test each board for <see langword="null"/> (see
+    /// <see cref="PlayOutcomeData"/>).
     /// </summary>
-    public PlayOutcomeData Outcome     { get; init; } = new();
+    public required PlayOutcomeData Outcome { get; init; }
 
     // -----------------------------------------------------------------------
     //  IDecisionFilterData
@@ -232,13 +243,13 @@ public class BgDecisionData : IDecisionFilterData
         : Decision.UserPlayError;
     /// <inheritdoc/>
     [JsonIgnore]
-    public IReadOnlyList<int> Board => Position.Mop;
+    public BoardPosition Board => Position.Mop;
     /// <inheritdoc/>
     [JsonIgnore]
-    public IReadOnlyList<int> AfterBestBoard => Outcome.AfterBestBoard;
+    public BoardPosition? AfterBestBoard => Outcome.AfterBestBoard;
     /// <inheritdoc/>
     [JsonIgnore]
-    public IReadOnlyList<int> AfterPlayerBoard => Outcome.AfterPlayerBoard;
+    public BoardPosition? AfterPlayerBoard => Outcome.AfterPlayerBoard;
 
     // -----------------------------------------------------------------------
     //  Claim-layer facts that need the whole record

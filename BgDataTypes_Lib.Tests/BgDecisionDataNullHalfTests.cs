@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
@@ -9,14 +10,13 @@ namespace BgDataTypes_Lib.Tests;
 /// it (halheinrich/backgammon#221): an explicit null — from an initializer
 /// or from a JSON document — throws <see cref="ArgumentNullException"/>
 /// naming the member at init, through the reflection path and the
-/// source-generated context alike, while an <em>absent</em> half stays at
-/// its default and loads on the reflection path. "Absent" and "null" are
-/// different things there; through the context they are not, because the
-/// generator passes an absent init-only member as <c>default</c> — pinned
-/// below as the generator's property. Before this the halves accepted null and
-/// <see cref="ProblemKey.TryDerive"/> carried a no-key rung for the
-/// resulting record; that rung is gone, since the record can no longer
-/// exist.
+/// source-generated context alike. An <em>absent</em> half is a different
+/// failure: both halves are required (halheinrich/backgammon#222), so a
+/// document without one is a <see cref="JsonException"/> on both paths —
+/// where the reflection path once kept the half's default and the context
+/// once passed it as <c>default</c>, a null. Before #221 the halves accepted
+/// null and <see cref="ProblemKey.TryDerive"/> carried a no-key rung for the
+/// resulting record; that rung is gone, since the record cannot exist.
 /// </summary>
 public class BgDecisionDataNullHalfTests
 {
@@ -35,7 +35,11 @@ public class BgDecisionDataNullHalfTests
         var ex = Assert.Throws<ArgumentNullException>(() => new BgDecisionData
         {
             Id = new XgpDecisionId("test.xgp"),
+            Xgid = "",
             Position = null!,
+            Decision = TestRecords.Decision(),
+            Descriptive = TestRecords.Descriptive(),
+            Outcome = TestRecords.Outcome(),
         });
 
         Assert.Equal("Position", ex.ParamName);
@@ -47,7 +51,11 @@ public class BgDecisionDataNullHalfTests
         var ex = Assert.Throws<ArgumentNullException>(() => new BgDecisionData
         {
             Id = new XgpDecisionId("test.xgp"),
+            Xgid = "",
+            Position = TestRecords.Position(),
             Decision = null!,
+            Descriptive = TestRecords.Descriptive(),
+            Outcome = TestRecords.Outcome(),
         });
 
         Assert.Equal("Decision", ex.ParamName);
@@ -57,62 +65,70 @@ public class BgDecisionDataNullHalfTests
     //  The wire — an explicit null is a malformed document
     // ---------------------------------------------------------------------
 
+    /// <summary>
+    /// A full record document with <paramref name="member"/> set to JSON
+    /// <c>null</c>, or removed when <paramref name="remove"/> is set.
+    /// Rewritten from literal JSON: every other member is required, so the
+    /// rest of a full record travels with the half under test.
+    /// </summary>
+    private static string Document(string member, bool remove = false)
+    {
+        var document = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Record()))!.AsObject();
+        if (remove)
+            document.Remove(member);
+        else
+            document[member] = null;
+        return document.ToJsonString();
+    }
+
     [Theory]
-    [InlineData("{\"Id\":\"test.xgp\",\"Position\":null}", "Position")]
-    [InlineData("{\"Id\":\"test.xgp\",\"Decision\":null}", "Decision")]
-    public void Deserialize_NullHalf_Throws(string json, string member)
+    [InlineData("Position")]
+    [InlineData("Decision")]
+    public void Deserialize_NullHalf_Throws(string member)
     {
         var ex = Assert.Throws<ArgumentNullException>(
-            () => JsonSerializer.Deserialize<BgDecisionData>(json));
+            () => JsonSerializer.Deserialize<BgDecisionData>(Document(member)));
 
         Assert.Equal(member, ex.ParamName);
     }
 
     [Theory]
-    // The other half is present here because, through the context, an
-    // absent half arrives as null too (below) and would be named first.
-    [InlineData("{\"Id\":\"test.xgp\",\"Position\":null,\"Decision\":{}}", "Position")]
-    [InlineData("{\"Id\":\"test.xgp\",\"Position\":{},\"Decision\":null}", "Decision")]
-    public void Deserialize_NullHalf_ThroughContext_Throws(string json, string member)
+    [InlineData("Position")]
+    [InlineData("Decision")]
+    public void Deserialize_NullHalf_ThroughContext_Throws(string member)
     {
         var ex = Assert.Throws<ArgumentNullException>(
-            () => JsonSerializer.Deserialize<BgDecisionData>(json, ContextOptions));
+            () => JsonSerializer.Deserialize<BgDecisionData>(Document(member), ContextOptions));
 
         Assert.Equal(member, ex.ParamName);
     }
 
     // ---------------------------------------------------------------------
-    //  The wire — an absent half is not a null half on the reflection path.
-    //  Through the source-generated context it is: the generated creator is
-    //  one object initializer over an argument array, and an absent
-    //  init-only member arrives there as default(T) — a property of the
-    //  generator for every init-only reference member in this library's
-    //  wire graph, not of this guard (measured 2026-09-14; before the guard
-    //  the same document loaded with a silently null half). Both are
-    //  pinned so a change on either path is noticed.
+    //  The wire — an absent half is not a null half: it is refused as
+    //  absent, on both paths alike (halheinrich/backgammon#222)
     // ---------------------------------------------------------------------
 
-    [Fact]
-    public void Deserialize_AbsentHalves_StayAtDefaults_Reflection()
+    [Theory]
+    [InlineData("Position")]
+    [InlineData("Decision")]
+    public void Deserialize_AbsentHalf_IsRefused_Reflection(string member)
     {
-        var restored = JsonSerializer.Deserialize<BgDecisionData>("{\"Id\":\"test.xgp\"}")!;
-
-        Assert.NotNull(restored.Position);
-        Assert.NotNull(restored.Decision);
-        Assert.False(restored.IsCrawford);
-        Assert.False(restored.IsCube);
+        // Rewritten from Deserialize_AbsentHalves_StayAtDefaults_Reflection:
+        // the reflection path used to keep the half's `new()` default.
+        Assert.Throws<JsonException>(
+            () => JsonSerializer.Deserialize<BgDecisionData>(Document(member, remove: true)));
     }
 
     [Theory]
-    // Position is the first half in the generated initializer, so with both
-    // absent it is the one named; with Position present, Decision is.
-    [InlineData("{\"Id\":\"test.xgp\"}", "Position")]
-    [InlineData("{\"Id\":\"test.xgp\",\"Position\":{}}", "Decision")]
-    public void Deserialize_AbsentHalf_ThroughContext_ArrivesAsNull_AndThrows(string json, string member)
+    [InlineData("Position")]
+    [InlineData("Decision")]
+    public void Deserialize_AbsentHalf_IsRefused_ThroughContext(string member)
     {
-        var ex = Assert.Throws<ArgumentNullException>(
-            () => JsonSerializer.Deserialize<BgDecisionData>(json, ContextOptions));
-
-        Assert.Equal(member, ex.ParamName);
+        // Rewritten from Deserialize_AbsentHalf_ThroughContext_ArrivesAsNull_AndThrows:
+        // the generated creator used to pass the absent half as default —
+        // null — which the null guard then caught. The required check now
+        // refuses the document before the creator runs, as absent, not null.
+        Assert.Throws<JsonException>(
+            () => JsonSerializer.Deserialize<BgDecisionData>(Document(member, remove: true), ContextOptions));
     }
 }

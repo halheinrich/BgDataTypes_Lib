@@ -20,6 +20,12 @@ namespace BgDataTypes_Lib;
 /// record is <see cref="BgDecisionData"/>; <see cref="CrawfordRule"/> is
 /// the one spelling of both.
 /// </para>
+///
+/// <para>
+/// Every member but the nullable ones is <c>required</c>, per the wire rule
+/// stated on <see cref="BgDataTypesJsonContext"/>; each nullable member's
+/// documentation says what <see langword="null"/> means.
+/// </para>
 /// </summary>
 public sealed class DecisionRow : IDecisionFilterData
 {
@@ -39,13 +45,13 @@ public sealed class DecisionRow : IDecisionFilterData
     public required DecisionId Id { get; init; }
 
     /// <summary>XGID position string.</summary>
-    public string Xgid { get; init; } = string.Empty;
+    public required string Xgid { get; init; }
 
     /// <summary>Absolute error (positive = worse than best).</summary>
-    public double Error { get; init; }
+    public required double Error { get; init; }
 
     /// <summary>Match length (0 = unlimited/money).</summary>
-    public int MatchLength { get; init; }
+    public required int MatchLength { get; init; }
 
     /// <summary>
     /// True for an unlimited (money) session
@@ -61,19 +67,20 @@ public sealed class DecisionRow : IDecisionFilterData
     public bool IsMoneyGame => MatchLength == 0;
 
     /// <summary>Name of the player who made the decision.</summary>
-    public string Player { get; init; } = string.Empty;
+    public required string Player { get; init; }
 
-    /// <summary>Originating file name including extension (e.g. "match.xg", "session.xgp"). No directory.</summary>
+    /// <summary>Originating file name including extension (e.g. "match.xg", "session.xgp"). No directory.
+    /// Null when none was recorded.</summary>
     public string? SourceFile { get; init; }
 
     /// <summary>Game number within the match (1-based).</summary>
-    public int Game { get; init; }
+    public required int Game { get; init; }
 
     /// <summary>Move number within the game (1-based).</summary>
-    public int MoveNumber { get; init; }
+    public required int MoveNumber { get; init; }
 
     /// <summary>True if the game started from the canonical opening position.</summary>
-    public bool IsStandardStart { get; init; }
+    public required bool IsStandardStart { get; init; }
 
     /// <summary>
     /// Dice roll as a two-digit integer, e.g. 63, 11. 0 for cube decisions.
@@ -129,7 +136,7 @@ public sealed class DecisionRow : IDecisionFilterData
     public DiceRoll? Dice => Roll == 0 ? null : new DiceRoll(Roll / 10, Roll % 10);
 
     /// <summary>Human-readable analysis depth label, e.g. "3-ply", "Rollout: 1296 trials. 3-ply".</summary>
-    public string AnalysisDepth { get; init; } = string.Empty;
+    public required string AnalysisDepth { get; init; }
 
     /// <summary>How the analysis behind this decision was produced — the mode
     /// axis of the two-axis depth taxonomy
@@ -137,31 +144,32 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <see cref="AnalysisLevel"/> it is the taxonomy form of
     /// <see cref="AnalysisDepth"/>, used for depth filtering.
     /// Producer-stamped; <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/>
-    /// when not set (including JSON written before the two-axis pair
-    /// existed). Serializes to JSON; excluded from CSV output
-    /// (<see cref="AnalysisDepth"/> remains the CSV depth column).</summary>
-    public AnalysisMode AnalysisMode { get; init; }
+    /// when the producer did not record it. Serializes to JSON; excluded
+    /// from CSV output (<see cref="AnalysisDepth"/> remains the CSV depth
+    /// column).</summary>
+    public required AnalysisMode AnalysisMode { get; init; }
 
     /// <summary>Evaluation level of the analysis behind this decision — the
     /// level axis paired with <see cref="AnalysisMode"/>
     /// (<see cref="IDecisionFilterData.AnalysisLevel"/>); for rollout-family
     /// modes, the inner level of the row's decision kind. Producer-stamped;
-    /// <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when not set.
-    /// Serializes to JSON; excluded from CSV output.</summary>
-    public AnalysisLevel AnalysisLevel { get; init; }
+    /// <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when the producer
+    /// did not record it. Serializes to JSON; excluded from CSV
+    /// output.</summary>
+    public required AnalysisLevel AnalysisLevel { get; init; }
 
     /// <summary>Best equity value from the analysis.</summary>
-    public double Equity { get; init; }
+    public required double Equity { get; init; }
 
     /// <summary>True if this is a cube decision (Roll == 0); false if a checker play.</summary>
     [JsonIgnore]
     public bool IsCube => Roll == 0;
 
     /// <summary>Away score for the player on roll. 0 for money games.</summary>
-    public int OnRollNeeds { get; init; }
+    public required int OnRollNeeds { get; init; }
 
     /// <summary>Away score for the opponent. 0 for money games.</summary>
-    public int OpponentNeeds { get; init; }
+    public required int OpponentNeeds { get; init; }
 
     /// <summary>True if this is the Crawford game.</summary>
     /// <exception cref="ArgumentException">
@@ -171,7 +179,7 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <see cref="Roll"/> setter, which <c>required</c> guarantees will run,
     /// carries the guard for that order.
     /// </exception>
-    public bool IsCrawford
+    public required bool IsCrawford
     {
         get => _isCrawford;
         init
@@ -222,29 +230,35 @@ public sealed class DecisionRow : IDecisionFilterData
             : $"{OnRollNeeds}a{OpponentNeeds}a";
 
     /// <summary>
-    /// Checker counts normalized to the player on roll.
-    /// board[0]    = opponent's bar (never positive)
-    /// board[1-24] = points 1-24 from player on roll's perspective
-    /// board[25]   = player on roll's bar (never negative)
-    /// Positive values = player on roll's checkers; negative = opponent's.
+    /// The board at the moment of the decision. <b>Frame: the player on
+    /// roll's</b>, the decision-maker's: slot 0 is the opponent's bar, 1–24
+    /// the points, 25 the on-roll player's bar; positive counts are the
+    /// on-roll player's checkers, negative the opponent's (the
+    /// <see cref="BoardPosition"/> layout, as <see cref="PositionData.Mop"/>).
     /// Not included in CSV output.
     /// </summary>
-    public IReadOnlyList<int> Board { get; init; } = [];
+    public required BoardPosition Board { get; init; }
 
     /// <summary>
-    /// Board after the best play, with POV flipped — opponent is now on roll.
-    /// Same 26-element layout as <see cref="Board"/>; decision-maker's checkers
-    /// are negative here, opponent's are positive. Empty for cube decisions.
-    /// Not included in CSV output.
+    /// The board after the best play. <b>Frame: the next mover's</b>, as
+    /// <see cref="PlayOutcomeData.AfterBestBoard"/>: the position the play
+    /// reaches, flipped as <see cref="BoardState.ApplyPlay"/> leaves it, so
+    /// the decision-maker's checkers are negative and the opponent's
+    /// positive. <see langword="null"/> when absent — always for a cube
+    /// decision, and on a checker play whose boards the producer could not
+    /// compute. Not included in CSV output.
     /// </summary>
-    public IReadOnlyList<int> AfterBestBoard { get; init; } = [];
+    [JsonConverter(typeof(NullableBoardPositionJsonConverter))]
+    public BoardPosition? AfterBestBoard { get; init; }
 
     /// <summary>
-    /// Board after the player's actual play, same layout and sign convention
-    /// as <see cref="AfterBestBoard"/>. Empty for cube decisions.
+    /// The board after the player's actual play, in the same frame as
+    /// <see cref="AfterBestBoard"/> — the next mover's.
+    /// <see langword="null"/> when absent, as for <see cref="AfterBestBoard"/>.
     /// Not included in CSV output.
     /// </summary>
-    public IReadOnlyList<int> AfterPlayerBoard { get; init; } = [];
+    [JsonConverter(typeof(NullableBoardPositionJsonConverter))]
+    public BoardPosition? AfterPlayerBoard { get; init; }
 
     // -----------------------------------------------------------------------
     //  IDecisionFilterData

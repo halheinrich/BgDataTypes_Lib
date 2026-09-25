@@ -100,9 +100,11 @@ namespace BgDataTypes_Lib;
 ///
 /// <para>
 /// <b>Real-board posture.</b> Fact validation requires a physically possible
-/// position: at most 15 checkers per side, per-point counts within ±15, each
-/// bar holding only its own side's checkers, and at least one checker on the
-/// board. <see cref="ProblemKey"/> identifies real analysed decisions, whose
+/// position — <see cref="BoardPosition"/>'s invariant, which a record's board
+/// holds by its type and the parse door checks through
+/// <see cref="BoardPosition.TryCreate(ReadOnlySpan{int}, out BoardPosition)"/>
+/// — and, beyond it, at least one checker on the board.
+/// <see cref="ProblemKey"/> identifies real analysed decisions, whose
 /// producer-stamped boards always satisfy these bounds, so a violation is
 /// corruption and corruption gets no key.
 /// </para>
@@ -169,10 +171,10 @@ public sealed class ProblemKey :
     /// </param>
     /// <returns>
     /// <see langword="false"/> — no key, per the ratified no-key rung —
-    /// when the facts are malformed, degenerate, or inconsistent: a missing
-    /// or non-26-element board; an empty board; a per-point count outside
-    /// ±15; more than 15 checkers on either side; a checker on the wrong
-    /// bar; a negative away score; exactly one away score zero (money is
+    /// when the facts are malformed, degenerate, or inconsistent: an empty
+    /// board (the board is otherwise well-formed by its type,
+    /// <see cref="BoardPosition"/>); a negative away score; exactly one away
+    /// score zero (money is
     /// <c>0</c>/<c>0</c> only — a single 0-away side means the match is
     /// over); a Crawford flag in a money game or with neither side 1-away;
     /// a money record whose <see cref="PositionData.IsJacoby"/> is
@@ -238,28 +240,15 @@ public sealed class ProblemKey :
     /// <see cref="TryDerive"/> for the full rejection list.
     /// </summary>
     private static bool AreValidFacts(
-        IReadOnlyList<int>? board,
+        BoardPosition board,
         int onRollAway, int opponentAway, bool isCrawford,
         int cubeSize, CubeOwner cubeOwner, bool? isJacoby)
     {
-        // Board: real-board posture (see the type remarks).
-        if (board is null || board.Count != 26)
-            return false;
-        int onRollTotal = 0, opponentTotal = 0;
-        for (int i = 0; i < 26; i++)
-        {
-            int v = board[i];
-            if (v is < -15 or > 15)
-                return false;
-            if (v > 0) onRollTotal += v;
-            else opponentTotal -= v;
-        }
-        if (onRollTotal == 0 && opponentTotal == 0)
+        // Board: real-board posture (see the type remarks). Well-formedness
+        // is the board's own invariant; the key adds only that a real
+        // decision has a checker on the board.
+        if (board == BoardPosition.Empty)
             return false;                              // empty board
-        if (onRollTotal > 15 || opponentTotal > 15)
-            return false;                              // per-side totals
-        if (board[0] > 0 || board[25] < 0)
-            return false;                              // wrong-bar checkers
 
         // Away scores: money is 0a0 only; one 0-away side = match over.
         if (onRollAway < 0 || opponentAway < 0)
@@ -321,7 +310,7 @@ public sealed class ProblemKey :
     /// All numeric formatting is explicitly invariant.
     /// </summary>
     private static string FormatCanonical(
-        IReadOnlyList<int> board,
+        BoardPosition board,
         int onRollAway, int opponentAway, bool isCrawford,
         int cubeSize, CubeOwner cubeOwner, bool? isJacoby, DiceRoll? dice)
     {
@@ -471,22 +460,23 @@ public sealed class ProblemKey :
         }
         bool hasDice = thirdSlash >= 0;
 
-        // ---- Board: exactly 26 comma-separated signed integers ----
-        var board = new int[26];
+        // ---- Board: exactly 26 comma-separated signed integers forming a
+        // position (BoardPosition's invariant, checked by its own door) ----
+        Span<int> counts = stackalloc int[26];
         int index = 0;
         var remaining = boardSpan;
         while (true)
         {
             int comma = remaining.IndexOf(',');
             var token = comma < 0 ? remaining : remaining[..comma];
-            if (index >= 26 || !TryParseInvariantInt(token, allowSign: true, out board[index]))
+            if (index >= 26 || !TryParseInvariantInt(token, allowSign: true, out counts[index]))
                 return false;
             index++;
             if (comma < 0)
                 break;
             remaining = remaining[(comma + 1)..];
         }
-        if (index != 26)
+        if (index != 26 || !BoardPosition.TryCreate(counts, out var board))
             return false;
 
         // ---- Score: onRollAway 'a' opponentAway [ 'cr' | 'j' | 'nj' ] ----

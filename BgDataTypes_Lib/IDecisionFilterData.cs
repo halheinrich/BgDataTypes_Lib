@@ -1,4 +1,4 @@
-﻿namespace BgDataTypes_Lib;
+namespace BgDataTypes_Lib;
 
 /// <summary>
 /// Common filtering contract shared by <see cref="DecisionRow"/> and <see cref="BgDecisionData"/>.
@@ -97,32 +97,35 @@ public interface IDecisionFilterData
     double? FilterError { get; }
 
     /// <summary>
-    /// Board as a 26-element array from the on-roll player's perspective.
-    /// [0] = opponent bar, [1–24] = points, [25] = player bar.
-    /// Positive = on-roll player's checkers; negative = opponent's.
+    /// The board at the moment of the decision. <b>Frame: the player on
+    /// roll's</b>, the decision-maker's: slot 0 is the opponent's bar, 1–24
+    /// the points, 25 the on-roll player's bar; positive counts are the
+    /// on-roll player's checkers, negative the opponent's
+    /// (<see cref="PositionData.Mop"/>).
     /// </summary>
-    IReadOnlyList<int> Board { get; }
+    BoardPosition Board { get; }
 
     /// <summary>
-    /// Board after the best play, with POV flipped — opponent is now on roll.
-    /// Same 26-element layout as <see cref="Board"/>: [0] = on-roll (opponent) bar,
-    /// [1–24] = points, [25] = opponent's (decision-maker's) bar. In this POV the
-    /// decision-maker's checkers are negative and the opponent's are positive.
+    /// The board after the best play. <b>Frame: the next mover's</b> — the
+    /// position the play reaches, flipped as <see cref="BoardState.ApplyPlay"/>
+    /// leaves it: the opponent is on roll, so slot 25 is the opponent's bar
+    /// and their checkers are positive, while the decision-maker's checkers
+    /// are negative and slot 0 is the decision-maker's bar.
     /// <para>
-    /// Empty list for cube decisions (<see cref="IsCube"/> == true); after-boards
-    /// are only meaningful for checker decisions. Consumers must check
-    /// <see cref="IsCube"/> before using.
+    /// <see langword="null"/> when absent: always for a cube decision
+    /// (<see cref="IsCube"/> == true), and on a checker play whose boards the
+    /// producer could not compute (<see cref="PlayOutcomeData"/>). Consumers
+    /// test for <see langword="null"/>.
     /// </para>
     /// </summary>
-    IReadOnlyList<int> AfterBestBoard { get; }
+    BoardPosition? AfterBestBoard { get; }
 
     /// <summary>
-    /// Board after the player's actual play, with POV flipped — opponent is now on
-    /// roll. Same layout and sign convention as <see cref="AfterBestBoard"/>.
+    /// The board after the player's actual play, in the same frame as
+    /// <see cref="AfterBestBoard"/> — the next mover's.
     /// <para>
-    /// Empty list for cube decisions (<see cref="IsCube"/> == true). Consumers
-    /// must check <see cref="IsCube"/> before using.
+    /// <see langword="null"/> when absent, as for <see cref="AfterBestBoard"/>.
     /// </para>
     /// </summary>
-    IReadOnlyList<int> AfterPlayerBoard { get; }
+    BoardPosition? AfterPlayerBoard { get; }
 }

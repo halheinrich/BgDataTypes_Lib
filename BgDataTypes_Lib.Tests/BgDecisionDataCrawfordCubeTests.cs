@@ -22,14 +22,14 @@ public class BgDecisionDataCrawfordCubeTests
     };
 
     private static PositionData Crawford() =>
-        new() { OnRollNeeds = 1, OpponentNeeds = 3, IsCrawford = true };
+        TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
 
     private static PositionData NotCrawford() =>
-        new() { OnRollNeeds = 1, OpponentNeeds = 3 };
+        TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3);
 
-    private static DecisionData Cube() => new() { IsCube = true };
+    private static DecisionData Cube() => TestRecords.Decision(isCube: true);
 
-    private static DecisionData Play() => new() { IsCube = false, Dice = [3, 1] };
+    private static DecisionData Play() => TestRecords.Decision(isCube: false, dice: [3, 1]);
 
     // ---------------------------------------------------------------------
     //  Object initializers — whichever half completes the Crawford cube
@@ -42,8 +42,11 @@ public class BgDecisionDataCrawfordCubeTests
         var ex = Assert.Throws<ArgumentException>(() => new BgDecisionData
         {
             Id = new XgpDecisionId("test.xgp"),
+            Xgid = "",
             Position = Crawford(),
             Decision = Cube(),
+            Descriptive = TestRecords.Descriptive(),
+            Outcome = TestRecords.Outcome(),
         });
 
         Assert.Equal("Decision", ex.ParamName);
@@ -56,8 +59,11 @@ public class BgDecisionDataCrawfordCubeTests
         var ex = Assert.Throws<ArgumentException>(() => new BgDecisionData
         {
             Id = new XgpDecisionId("test.xgp"),
+            Xgid = "",
             Decision = Cube(),
             Position = Crawford(),
+            Descriptive = TestRecords.Descriptive(),
+            Outcome = TestRecords.Outcome(),
         });
 
         Assert.Equal("Position", ex.ParamName);
@@ -70,14 +76,20 @@ public class BgDecisionDataCrawfordCubeTests
         var positionFirst = new BgDecisionData
         {
             Id = new XgpDecisionId("test.xgp"),
+            Xgid = "",
             Position = Crawford(),
             Decision = Play(),
+            Descriptive = TestRecords.Descriptive(),
+            Outcome = TestRecords.Outcome(),
         };
         var decisionFirst = new BgDecisionData
         {
             Id = new XgpDecisionId("test.xgp"),
+            Xgid = "",
             Decision = Play(),
             Position = Crawford(),
+            Descriptive = TestRecords.Descriptive(),
+            Outcome = TestRecords.Outcome(),
         };
 
         Assert.True(positionFirst.IsCrawford);
@@ -92,14 +104,20 @@ public class BgDecisionDataCrawfordCubeTests
         var positionFirst = new BgDecisionData
         {
             Id = new XgpDecisionId("test.xgp"),
+            Xgid = "",
             Position = NotCrawford(),
             Decision = Cube(),
+            Descriptive = TestRecords.Descriptive(),
+            Outcome = TestRecords.Outcome(),
         };
         var decisionFirst = new BgDecisionData
         {
             Id = new XgpDecisionId("test.xgp"),
+            Xgid = "",
             Decision = Cube(),
             Position = NotCrawford(),
+            Descriptive = TestRecords.Descriptive(),
+            Outcome = TestRecords.Outcome(),
         };
 
         Assert.False(positionFirst.IsCrawford);
@@ -109,25 +127,22 @@ public class BgDecisionDataCrawfordCubeTests
     }
 
     [Fact]
-    public void HalfSetRecord_NeverThrows()
+    public void HalfSetRecord_IsRefused_OnBothPaths()
     {
-        // Both defaults are "not cube, not Crawford", so setting only one
-        // half — either half — cannot complete the forbidden pair.
-        var crawfordOnly = new BgDecisionData
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Position = Crawford(),
-        };
-        var cubeOnly = new BgDecisionData
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Decision = Cube(),
-        };
+        // Rewritten from HalfSetRecord_NeverThrows. A record with one half
+        // set used to load with the other at its default ("not cube, not
+        // Crawford"), so it could never complete the forbidden pair. Both
+        // halves are required now (halheinrich/backgammon#222): an
+        // initializer omitting one does not compile, and a document omitting
+        // one is refused as absent, not read as a default half.
+        string crawfordOnly = Document(("Position", Json(Crawford())));
+        string cubeOnly = Document(("Decision", Json(Cube())));
 
-        Assert.True(crawfordOnly.IsCrawford);
-        Assert.False(crawfordOnly.IsCube);
-        Assert.False(cubeOnly.IsCrawford);
-        Assert.True(cubeOnly.IsCube);
+        foreach (var json in new[] { crawfordOnly, cubeOnly })
+        {
+            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<BgDecisionData>(json));
+            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<BgDecisionData>(json, ContextOptions));
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -136,28 +151,54 @@ public class BgDecisionDataCrawfordCubeTests
     //  context alike
     // ---------------------------------------------------------------------
 
+    /// <summary>
+    /// A composite document holding <paramref name="halves"/> in the order
+    /// given, then the other stored members. Rewritten from literal JSON:
+    /// every member of the halves is required, so each half is a full
+    /// serialized category.
+    /// </summary>
+    private static string Document(params (string Name, string Json)[] halves)
+    {
+        var members = new List<string> { "\"Id\":\"test.xgp\"", "\"Xgid\":\"\"" };
+        foreach (var (name, json) in halves)
+            members.Add($"\"{name}\":{json}");
+        members.Add($"\"Descriptive\":{Json(TestRecords.Descriptive())}");
+        members.Add($"\"Outcome\":{Json(TestRecords.Outcome())}");
+        return "{" + string.Join(",", members) + "}";
+    }
+
+    private static string Json<T>(T value) => JsonSerializer.Serialize(value);
+
+    public static TheoryData<string> CrawfordCubeDocuments =>
+    [
+        Document(("Position", Json(Crawford())), ("Decision", Json(Cube()))),
+        Document(("Decision", Json(Cube())), ("Position", Json(Crawford()))),
+    ];
+
     [Theory]
-    [InlineData("{\"Id\":\"test.xgp\",\"Position\":{\"IsCrawford\":true},\"Decision\":{\"IsCube\":true}}")]
-    [InlineData("{\"Id\":\"test.xgp\",\"Decision\":{\"IsCube\":true},\"Position\":{\"IsCrawford\":true}}")]
+    [MemberData(nameof(CrawfordCubeDocuments))]
     public void Deserialize_CrawfordCube_Throws(string json)
     {
         Assert.Throws<ArgumentException>(
             () => JsonSerializer.Deserialize<BgDecisionData>(json));
     }
 
-    [Fact]
-    public void Deserialize_CrawfordCube_ThroughContext_Throws()
+    [Theory]
+    [MemberData(nameof(CrawfordCubeDocuments))]
+    public void Deserialize_CrawfordCube_ThroughContext_Throws(string json)
     {
-        const string json =
-            "{\"Id\":\"test.xgp\",\"Position\":{\"IsCrawford\":true},\"Decision\":{\"IsCube\":true}}";
-
         Assert.Throws<ArgumentException>(
             () => JsonSerializer.Deserialize<BgDecisionData>(json, ContextOptions));
     }
 
+    public static TheoryData<string> OneFactDocuments =>
+    [
+        Document(("Position", Json(Crawford())), ("Decision", Json(Play()))),
+        Document(("Position", Json(NotCrawford())), ("Decision", Json(Cube()))),
+    ];
+
     [Theory]
-    [InlineData("{\"Id\":\"test.xgp\",\"Position\":{\"IsCrawford\":true},\"Decision\":{\"IsCube\":false}}")]
-    [InlineData("{\"Id\":\"test.xgp\",\"Position\":{\"IsCrawford\":false},\"Decision\":{\"IsCube\":true}}")]
+    [MemberData(nameof(OneFactDocuments))]
     public void Deserialize_OneFactOnly_Loads(string json)
     {
         var restored = JsonSerializer.Deserialize<BgDecisionData>(json)!;

@@ -17,12 +17,10 @@ public class DecisionDataCubeScoringTests
     // expected action is unambiguous.
 
     private static DecisionData MakeCube(double noDoubleEquity, double doubleTakeEquity)
-        => new()
-        {
-            IsCube = true,
-            NoDoubleEquity = noDoubleEquity,
-            DoubleTakeEquity = doubleTakeEquity
-        };
+        => TestRecords.Decision(
+            isCube: true,
+            noDoubleEquity: noDoubleEquity,
+            doubleTakeEquity: doubleTakeEquity);
 
     // ---------------------------------------------------------------------
     //  Doubler decision: BestDoublerAction
@@ -110,7 +108,7 @@ public class DecisionDataCubeScoringTests
     [Fact]
     public void AtomicHelpers_Throw_WhenNotCube()
     {
-        var play = new DecisionData();   // IsCube defaults to false
+        var play = TestRecords.Decision();   // IsCube defaults to false
 
         Assert.Throws<InvalidOperationException>(() => _ = play.BestDoublerAction);
         Assert.Throws<InvalidOperationException>(() => _ = play.BestTakerAction);
@@ -154,12 +152,10 @@ public class DecisionDataCubeScoringTests
     [Fact]
     public void ComputedCubeProperties_AreNotSerialised()
     {
-        var d = new DecisionData
-        {
-            IsCube = true,
-            NoDoubleEquity = 0.30,
-            DoubleTakeEquity = 0.60
-        };
+        var d = TestRecords.Decision(
+            isCube: true,
+            noDoubleEquity: 0.30,
+            doubleTakeEquity: 0.60);
 
         string json = JsonSerializer.Serialize(d);
 
