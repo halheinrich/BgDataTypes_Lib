@@ -531,8 +531,8 @@ public sealed class ProblemKey :
 
         // Jacoby suffix (money grammar). "nj" is tested first: it ends in the
         // same letter as "j", so the longer token has to win. A suffix on a
-        // match key tokenizes here but cannot survive — the production check
-        // below refuses a match spelling a Jacoby rule.
+        // match key tokenizes here but cannot survive — the re-format identity
+        // check below rejects it, since match keys never emit one.
         bool? isJacoby = null;
         if (opponentSpan.EndsWith(JacobyOffToken))
         {
@@ -566,19 +566,19 @@ public sealed class ProblemKey :
             dice = roll;
         }
 
-        // ---- The production: 0a0 is money, with its rule spelled and never
-        // Crawford; anything else is a match, which spells no Jacoby rule ----
+        // ---- The production: 0a0 is money, with its rule spelled; anything
+        // else is a match. A Crawford suffix on money, like a Jacoby suffix on
+        // a match, is not a fact of the score: neither re-formats, so the
+        // identity check below rejects both ----
         Score score;
         if (onRollAway == 0 && opponentAway == 0)
         {
-            if (isJacoby is not bool jacoby || isCrawford)
+            if (isJacoby is not bool jacoby)
                 return false;
             score = Score.Money(jacoby);
         }
         else
         {
-            if (isJacoby is not null)
-                return false;
             score = Score.Match(onRollAway, opponentAway, isCrawford);
         }
 

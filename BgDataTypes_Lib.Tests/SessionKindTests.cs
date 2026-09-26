@@ -175,6 +175,21 @@ public class SessionKindTests
         }
 
         AssertRefusedAloneAndInARecord(session, edit);
+
+        if (name == "missing")
+        {
+            // Refused by the dispatch, which says what a session states — not
+            // by whichever kind's contract a guessed kind would reach, whose
+            // complaint (a member it does not map) would not name the kind.
+            var (alone, inRecord) = Edited(session, edit);
+            foreach (var (_, options) in WirePaths.Both)
+            {
+                Assert.Contains("A session states its Kind — Money or Match.",
+                    Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Session>(alone, options)).Message);
+                Assert.Contains("A session states its Kind — Money or Match.",
+                    Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<BgDecisionData>(inRecord, options)).Message);
+            }
+        }
     }
 
     [Fact]
