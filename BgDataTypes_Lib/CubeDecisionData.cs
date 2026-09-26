@@ -12,8 +12,9 @@ namespace BgDataTypes_Lib;
 /// <c>required</c>, per the wire rule stated on
 /// <see cref="BgDataTypesJsonContext"/>, and each nullable member's
 /// documentation says what <see langword="null"/> means. What the stored
-/// members determine — the depth rank, the error of each stated action, the
-/// best actions and claims — is derived and never stored.
+/// members determine — the depth label, abbreviation and rank, the loss
+/// probabilities, the error of each stated action, the best actions and
+/// claims — is derived and never stored.
 ///
 /// <para>
 /// All equities are in normalised cube-equity units from the on-roll
@@ -41,71 +42,46 @@ public sealed class CubeDecisionData
     /// marks the category as read before any member is set, so every rule
     /// refuses a breach as a <see cref="System.Text.Json.JsonException"/> (the
     /// wire rule on <see cref="BgDataTypesJsonContext"/>). It takes
-    /// <paramref name="depth"/> only because a serializer constructor must
-    /// bind a member.
+    /// <paramref name="analysisMode"/> only because a serializer constructor
+    /// must bind a member.
     /// </summary>
     [JsonConstructor]
-    internal CubeDecisionData(string? depth)
+    internal CubeDecisionData(AnalysisMode analysisMode)
     {
         _read = true;
-        Depth = depth;
+        AnalysisMode = analysisMode;
     }
 
     // -----------------------------------------------------------------------
-    //  The cube analysis
+    //  The cube analysis: its depth, as typed facts, and what they determine
     // -----------------------------------------------------------------------
 
-    private readonly string? _depth;
-    private readonly string? _depthAbbreviation;
-
-    /// <summary>Analysis depth label of the cube analysis, e.g. "3-ply",
-    /// "Rollout: 1296 trials. 3-ply"; see <see cref="PlayCandidate.Depth"/>
-    /// for a candidate's. <see langword="null"/> when the producer recorded
-    /// no label; never empty.</summary>
-    /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
-    public string? Depth
-    {
-        get => _depth;
-        init => _depth = Stated(value, nameof(Depth));
-    }
-
-    /// <summary>Compact display form of <see cref="Depth"/>.
-    /// <see langword="null"/> when the producer recorded none; never
-    /// empty.</summary>
-    /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
-    public string? DepthAbbreviation
-    {
-        get => _depthAbbreviation;
-        init => _depthAbbreviation = Stated(value, nameof(DepthAbbreviation));
-    }
-
-    /// <summary>Ordinal ranking of the cube analysis's depth, derived from
-    /// <see cref="AnalysisMode"/> and <see cref="AnalysisLevel"/> and never
-    /// stored; <see langword="null"/> when the depth is not recorded. See
-    /// <see cref="PlayCandidate.DepthRank"/> for semantics.</summary>
-    [JsonIgnore]
-    public int? DepthRank => AnalysisDepthRank.Of(AnalysisMode, AnalysisLevel);
-
-    /// <summary><paramref name="value"/>, once it keeps the text rule (<see cref="StatedText"/>).</summary>
-    private string? Stated(string? value, string member)
-    {
-        try
-        {
-            StatedText.Check(value, member);
-        }
-        catch (ArgumentException fault) when (_read)
-        {
-            throw DocumentRefusal.Of(fault);
-        }
-        return value;
-    }
+    // Null only while construction is still stating them (`required`
+    // guarantees the mode and level by the end), so each setter holds the
+    // facts stated so far to the taxonomy's rules.
+    private readonly AnalysisMode? _mode;
+    private readonly AnalysisLevel? _level;
+    private readonly int? _rolloutTrials;
+    private readonly BookEdition? _bookEdition;
+    private readonly int? _unrecognizedLevelCode;
 
     /// <summary>How the cube analysis's numbers were produced — the mode axis
     /// of the two-axis depth taxonomy; see
     /// <see cref="PlayCandidate.AnalysisMode"/> for semantics.
     /// <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/> when the producer
     /// did not record it.</summary>
-    public required AnalysisMode AnalysisMode { get; init; }
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when a depth fact already stated does not belong to the mode.
+    /// </exception>
+    public required AnalysisMode AnalysisMode
+    {
+        get => _mode.GetValueOrDefault();
+        init
+        {
+            DepthStated(value, _level, _rolloutTrials, _bookEdition, _unrecognizedLevelCode, nameof(AnalysisMode));
+            _mode = value;
+        }
+    }
 
     /// <summary>Evaluation level of the cube analysis — the level axis paired
     /// with <see cref="AnalysisMode"/>. For a rollout this is the inner cube
@@ -114,7 +90,102 @@ public sealed class CubeDecisionData
     /// Roller. See <see cref="PlayCandidate.AnalysisLevel"/> for a
     /// candidate's. <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when
     /// the producer did not record it.</summary>
-    public required AnalysisLevel AnalysisLevel { get; init; }
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when <see cref="UnrecognizedLevelCode"/> is already
+    /// stated and the value is a level this library recognizes.
+    /// </exception>
+    public required AnalysisLevel AnalysisLevel
+    {
+        get => _level.GetValueOrDefault();
+        init
+        {
+            DepthStated(_mode, value, _rolloutTrials, _bookEdition, _unrecognizedLevelCode, nameof(AnalysisLevel));
+            _level = value;
+        }
+    }
+
+    /// <summary>
+    /// The number of games the rollout behind the cube analysis played; see
+    /// <see cref="PlayCandidate.RolloutTrials"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when the value is less than 1, or belongs to no rollout.
+    /// </exception>
+    public int? RolloutTrials
+    {
+        get => _rolloutTrials;
+        init
+        {
+            DepthStated(_mode, _level, value, _bookEdition, _unrecognizedLevelCode, nameof(RolloutTrials));
+            _rolloutTrials = value;
+        }
+    }
+
+    /// <summary>The opening-book edition of a book hit; see <see cref="PlayCandidate.BookEdition"/>.</summary>
+    /// <exception cref="ArgumentException">Thrown on init when the value belongs to no book hit.</exception>
+    public BookEdition? BookEdition
+    {
+        get => _bookEdition;
+        init
+        {
+            DepthStated(_mode, _level, _rolloutTrials, value, _unrecognizedLevelCode, nameof(BookEdition));
+            _bookEdition = value;
+        }
+    }
+
+    /// <summary>
+    /// The raw code of a level this library does not recognize; see
+    /// <see cref="PlayCandidate.UnrecognizedLevelCode"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown on init when the value is stated for a recognized level.</exception>
+    public int? UnrecognizedLevelCode
+    {
+        get => _unrecognizedLevelCode;
+        init
+        {
+            DepthStated(_mode, _level, _rolloutTrials, _bookEdition, value, nameof(UnrecognizedLevelCode));
+            _unrecognizedLevelCode = value;
+        }
+    }
+
+    /// <summary>
+    /// Analysis depth label of the cube analysis, e.g. "3-ply",
+    /// "Rollout: 1296 trials. 3-ply"; derived from the typed depth facts and
+    /// never stored — see <see cref="PlayCandidate.Depth"/>.
+    /// </summary>
+    [JsonIgnore]
+    public string? Depth => DepthTaxonomy.Label(
+        AnalysisMode, AnalysisLevel, RolloutTrials, BookEdition, UnrecognizedLevelCode);
+
+    /// <summary>Compact display form of <see cref="Depth"/>, derived as it is.</summary>
+    [JsonIgnore]
+    public string? DepthAbbreviation => DepthTaxonomy.Abbreviation(
+        AnalysisMode, AnalysisLevel, RolloutTrials, UnrecognizedLevelCode);
+
+    /// <summary>Ordinal ranking of the cube analysis's depth, derived from
+    /// <see cref="AnalysisMode"/> and <see cref="AnalysisLevel"/> and never
+    /// stored; <see langword="null"/> when the depth is not recorded. See
+    /// <see cref="PlayCandidate.DepthRank"/> for semantics.</summary>
+    [JsonIgnore]
+    public int? DepthRank => DepthTaxonomy.Rank(AnalysisMode, AnalysisLevel);
+
+    /// <summary>
+    /// Holds the depth facts stated so far, <paramref name="member"/>'s value
+    /// among them, to the taxonomy's rules (<see cref="DepthTaxonomy.Fault"/>).
+    /// </summary>
+    private void DepthStated(
+        AnalysisMode? mode, AnalysisLevel? level, int? trials, BookEdition? edition, int? code, string member)
+    {
+        try
+        {
+            if (DepthTaxonomy.Fault(mode, level, trials, edition, code) is { } fault)
+                throw new ArgumentException(fault, member);
+        }
+        catch (ArgumentException fault) when (_read)
+        {
+            throw DocumentRefusal.Of(fault);
+        }
+    }
 
     /// <summary>
     /// Cubeful equity of not doubling (doubler's perspective, normalised

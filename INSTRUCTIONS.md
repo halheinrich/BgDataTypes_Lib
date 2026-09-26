@@ -64,7 +64,7 @@ and `Directory.Packages.props` (Central Package Management — no inline
 - **Enums and the depth taxonomy** — `CubeOwner`, `CubeAction`, `CubeClaim`
   (the three-valued doubler claim of SPEC-scoring §3, with
   `CubeClaimExtensions` for the claim→action collapse), and
-  `AnalysisMode` × `AnalysisLevel` (the two-axis depth taxonomy), alongside
+  `AnalysisMode` × `AnalysisLevel` (the two-axis depth taxonomy) with `BookEdition`, and the internal `DepthTaxonomy` (the depth's rank, label and abbreviation, derived from its typed facts), alongside
   the small validated value types `CubeDecisionPair` (a `CubeAction` pair
   with per-half guards), `CubeClaimPair` (its claim-layer counterpart — the
   two-part cube answer), and `DiceRoll` (a canonical unordered roll).
@@ -153,7 +153,7 @@ the reflection path (pinned by `BgDataTypesJsonContextTests`), every
 bundled converter honored. Its `[JsonSerializable]` roots are the wire
 units — the document roots (`BgDecisionData`, `DecisionRow`) and the
 converter-bearing token types (`Play`, `Move`, `DecisionId`, `ProblemKey`,
-`DiceRoll`, `BoardPosition`, the six enums — `CubeClaim` declared ahead of its first
+`DiceRoll`, `BoardPosition`, the seven enums — `CubeClaim` declared ahead of its first
 embedding document so the claim vocabulary is born source-genned and
 downstream contexts chain rather than re-cover it); composite parts ride
 the generator's graph walk. Two converters stop that walk, so what lies
@@ -230,15 +230,16 @@ Design points:
   something): `PositionData.IsJacoby`; `CheckerPlayDecisionData.UserPlayIndex`
   and `UnlistedPlayError`; `CubeDecisionData.UserDoublerAction`,
   `UserTakerAction`, `UnstatedDoublerActionError`,
-  `UnstatedTakerActionError`, `Depth`, `DepthAbbreviation`;
+  `UnstatedTakerActionError`, `RolloutTrials`, `BookEdition`,
+  `UnrecognizedLevelCode`;
   `DescriptiveData.OnRollName`, `OpponentName`, `Title`, `Date`, `Event`,
-  `IsStandardStart`, `Comment`; `PlayCandidate.Depth`, `DepthAbbreviation`
-  and its six probabilities; `DecisionRow.Error`, `Player`,
+  `IsStandardStart`, `Comment`; `PlayCandidate.RolloutTrials`,
+  `BookEdition`, `UnrecognizedLevelCode` and its five stored probabilities; `DecisionRow.Error`, `Player`,
   `IsStandardStart`, `Roll`, `AnalysisDepth`, `IsJacoby` and both
   after-boards. Every other serialized member is required, each record's
   `Kind` included — through `[JsonRequired]`, since the type states it and
   code never does. `WireAbsenceTests` walks the graph from the context's
-  own metadata, from each kind's contract (122 members across four
+  own metadata, from each kind's contract (124 members across four
   documents — each record kind and each row kind — and nine types; 137
   before the stored copies of derivable values left the wire) and pins
   both halves of the rule on both paths, plus that every member is exactly
@@ -300,7 +301,7 @@ Every decision holds the two shared categories; each kind holds its own
 | `PositionData` | both kinds | `Mop`, `OnRollNeeds`, `OpponentNeeds`, `CubeSize`, `CubeOwner`, `IsCrawford`, `IsJacoby?`; derived `OnRollPipCount`, `OpponentPipCount` (the board's, by `BoardState`'s one pip rule) |
 | `DescriptiveData` | both kinds | `MatchLength`, `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it) |
 | `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `BestPlayIndex` (the first candidate of the highest equity), `BestPlay`, `UserPlay?`, `EquityLoss(i)`, `UserPlayError?` |
-| `CubeDecisionData` | `CubeDecision` | `Depth?`, `DepthAbbreviation?`, `AnalysisMode`, `AnalysisLevel`, the cube equity and probability fields, `ProbOfOpponentErrorJustifyingDouble`, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `UserDoubleError?`, `UserTakeError?` and the scoring policy |
+| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `ProbOfOpponentErrorJustifyingDouble`, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?` and the scoring policy |
 
 **No stored copy of a derivable value** (the umbrella's verdict on the
 records leg of `halheinrich/backgammon#273`). Every member the others
@@ -321,7 +322,8 @@ an `ArgumentException` naming the member and by a document with a
 `JsonException` (the one statement of the rule is the internal
 `StatedText`). The names, the title, the event and the comment on
 `DescriptiveData`, a candidate's and the cube analysis's depth label and
-abbreviation, and the row's `Player` and `AnalysisDepth` are nullable; a
+abbreviation (derived now, `null` where no depth is recorded), and the
+row's `Player` and `AnalysisDepth` are nullable; a
 member that is never none — the XGID, the id's file name — is refused
 empty the same way. `DepthRank` is `int?`: `null` where the depth is not
 recorded (the mode, or an evaluation's level, `Unknown`), where the
@@ -338,7 +340,8 @@ asked for it exhaustively). Derived, never stored:
 |---|---|
 | `PositionData.OnRollPipCount`, `OpponentPipCount` | `Mop`, by `BoardState`'s one pip rule |
 | `BgDecisionData.SourceFile`, `DecisionRow.SourceFile` | `Id.Filename` |
-| `PlayCandidate.DepthRank`, `CubeDecisionData.DepthRank` | `AnalysisMode` × `AnalysisLevel`, by the grid the producer used (internal `AnalysisDepthRank`, moved here unchanged) |
+| `PlayCandidate.DepthRank`, `CubeDecisionData.DepthRank` | `AnalysisMode` × `AnalysisLevel`, by the grid the producer used (internal `DepthTaxonomy`, moved here unchanged) |
+| `PlayCandidate.Depth`, `DepthAbbreviation`, and the cube analysis's | the typed depth facts — `AnalysisMode`, `AnalysisLevel`, `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — by the producer's grammar, moved here unchanged (`DepthTaxonomy`; see "The depth as typed facts") |
 | `CheckerPlayDecisionData.BestPlayIndex` | the candidates' equities: the first of the highest |
 | `CheckerPlayDecisionData.EquityLoss(i)` | `BestPlay.Equity − Plays[i].Equity` |
 | `CheckerPlayDecisionData.UserPlayError` | `EquityLoss(UserPlayIndex)` for a listed play; otherwise the stored `UnlistedPlayError` |
@@ -354,17 +357,9 @@ Stored, as source data:
   record's needs are 0). Its other fields — position, cube, turn, dice,
   match score, Crawford, Jacoby, match length — repeat record members and
   are not checked against them: an unchecked partial copy, left open.
-- **`DepthAbbreviation`** (a candidate's, the cube's). The mode and level
-  determine it only for an evaluation, a bare book hit and a rollout with
-  no recorded context. A rollout's and an enriched book hit's
-  abbreviation carries the trial count, and an unrecognised level's the
-  raw code, which the record holds only inside `Depth`'s prose; deriving
-  it would parse the producer's label grammar. Left open: a structured
-  trial count would let both display forms be derived.
-- **`Depth`** — the producer's label, carrying the trial count, the book
-  edition (V1 / V2) and an unrecognised level's raw code, which no member
-  states. **`AnalysisMode` / `AnalysisLevel`** are the structured facts
-  behind it.
+- **The typed depth facts** — `AnalysisMode`, `AnalysisLevel`,
+  `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — from which the
+  label, the abbreviation and the rank are derived.
 - **`Id`, with its `IsCube`** — the identity used apart from the record
   (stats keys, file navigation), so it carries its own kind; the record
   holds the two to agreement (`DecisionRules.IdAgrees`).
@@ -396,6 +391,42 @@ all (XG's `MoveError` against `EquityLoss` of the played candidate, XG's
 cube errors against the scoring policy's). Until then the converter does
 not build against this library.
 
+### The depth as typed facts
+
+A candidate's and the cube analysis's depth is stored as typed facts, and
+its label, abbreviation and rank are derived from them (the umbrella's
+second verdict on the records leg). The facts:
+
+- `AnalysisMode` × `AnalysisLevel`, the taxonomy (below);
+- `RolloutTrials` (`int?`) — the games a rollout played: an explicit
+  rollout's, or a book hit's whose rollout parameters were recovered;
+- `BookEdition` (`BookEdition?`: `V1`, `V2`) — a book hit's edition;
+- `UnrecognizedLevelCode` (`int?`) — the analyser's raw code for a level
+  this library does not recognize, so it still reads as itself.
+
+Each keeps a rule, checked order-independently like every guard here: a
+trial count is at least 1 and belongs to a rollout or a book hit; an
+edition belongs to a book hit; a raw code is stated only with the level
+`Unknown`. The internal `DepthTaxonomy` is the one home of the derivations
+and the rules; its rank grid, label wording and abbreviation grammar moved
+here unchanged from the converter (`LevelInfo`, `ResolveDepthInfo`,
+`InnerLevelToken`, `DepthAbbreviationFormat`):
+
+| Facts | `Depth` | `DepthAbbreviation` |
+|---|---|---|
+| Evaluation, 3-ply | `3-ply` | `3-ply` |
+| Evaluation, XG Roller+ | `XG Roller+` | `R+` |
+| Rollout, 3-ply, 1296 trials | `Rollout: 1296 trials. 3-ply` | `3p1296` |
+| Rollout, no trials recorded | `Rollout` | `Ro` |
+| Book hit, V2 | `Book V2` | `Book` |
+| Book hit, V2, 4-ply, 12960 trials | `Book V2: 12960 trials. 4-ply` | `B4_12960` |
+| Unknown, raw code 7 | `level-7` | `level-7` |
+| Unknown, no code | `null` | `null` |
+
+A level's label is its `[Description]`, which a test holds the table to.
+The label and abbreviation are `[JsonIgnore]`d; a document still stating
+them reads with them ignored and the derivation stands.
+
 ### Shared types
 
 | Type | Notes |
@@ -403,7 +434,7 @@ not build against this library.
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
 | `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the doubler half of a cube answer at the claim layer (SPEC-scoring §1/§3, `halheinrich/backgammon#86`), serializes as string. A claim about the position, not a board action: `NoDouble` and `TooGood` share the identical board action (`CubeAction.NoDouble`), and `CubeClaimExtensions.ToCubeAction` is the single spelling of that collapse. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, ruled claim-layer only. Declaration order is the ruled claim axis {No Double, Double, Too Good}, what a UI offering the claims renders. No reverse action→claim mapping exists: the claim is underdetermined by the action alone; the only equities→claim door is `CubeDecisionData.BestDoublerClaim`. |
-| `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — "not recorded", which a producer states; the members carrying the pair are required on the wire (see "Absence on the wire"), so JSON lacking them is refused rather than read as `Unknown`, while the retired flat class's property beside them is still ignored on read. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). Trial counts stay label-only. |
+| `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — "not recorded", which a producer states; the members carrying the pair are required on the wire (see "Absence on the wire"), so JSON lacking them is refused rather than read as `Unknown`, while the retired flat class's property beside them is still ignored on read. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). The rollout trial count, the book edition and an unrecognized level's raw code are typed facts beside the pair (see "The depth as typed facts"). |
 | `AnalysisLevel` | enum: `Unknown`, `Ply1`, `Ply2`, `Ply3Red`, `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`, `Ply6`, `Ply7`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — "not recorded", a value the producer states, never an absent member (see `AnalysisMode`). **Declaration order is contractual** (ruled 2026-08-28 on the authority of XG's own analysis-level menu, amended the same day): every member after `Unknown` ascends in rigor, and the ply and Roller families *interleave* rather than forming two blocks — `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`. Reordering, or inserting out of rigor order, is a breaking change; live consumers read the order (the diagram's level floor, the filter-panel and quiz level dropdowns). `Unknown` sits *outside* the rigor scale — not "least rigorous" but "not recorded": never excluded by a floor, never offered as a threshold; head-of-list is the zero-value requirement, not a rank. `DepthRank` (a candidate's and the cube analysis's) remains the ordering surface across the mode × level *pair*. Every member carries a `[Description]` display label. `Ply3Red` is XG's "3-ply Red" — its own member between `Ply2` and `Ply3` as of the same ruling, superseding the earlier collapse into `Ply3` as a label variant. |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `CubeClaimPair` | `readonly record struct (CubeClaim Claim, CubeAction Taker)` — the two-part cube answer of SPEC-scoring §3 (`halheinrich/backgammon#86`): the claim-layer counterpart of `CubeDecisionPair`, pairing the three-valued claim with the taker response if doubled. Same construction-guard idiom (`Claim` any defined member, `Taker` ∈ {`Take`, `Pass`}). A closed 3×2 of six named canonical instances: five verdict cells (`NoDoubleTake`, `DoubleTake`, `DoublePass`, `TooGoodTake`, `TooGoodPass`) plus `NoDoublePass`, the incoherent cell — representable *by ruling* (a selectable user answer; cross-disabling the axes was rejected), named by `IsIncoherent` for review surfaces. One type serves both scored roles — a user's submitted answer and the derived truth (`CubeDecisionData.BestClaimPair`). Scoring semantics stay with the consuming legs. No parse/format story: display strings are consumer copy per SPEC-scoring §3, and no wire token is ruled — its wire debut (and wire shape) belongs to the first document that embeds it. `default` is non-meaningful — see Pitfalls. |
@@ -414,7 +445,7 @@ not build against this library.
 | `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
 | `PlayChain` | **internal** `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a route from a source to a landing point, which the notation writes as one `from/to`, joining consecutive moves and eliding the touch-down points between. It stops where its moves stop or at a hit point whose mark it carries, so it is not a checker's whole trajectory: an intermediate hit splits one trajectory into two chains (`13/10*/8` is written `13/10* 10/8`). Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | **internal** `readonly struct` (`halheinrich/backgammon#273`: consumers spell plays with `Play.ToNotation()` and compare them by position, so the chain form can change without breaking one), fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by the internal `Play.ToCanonical()` — no other constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `Play`, `Depth?`, `DepthAbbreviation?`, `AnalysisMode`, `AnalysisLevel`, `Equity` (finite), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's loss against the best is the decision's (`CheckerPlayDecisionData.EquityLoss(i)`): it needs the other candidates. `EquityLoss(i) == 0` is the test for "is this a best play"; `BestPlayIndex` names the canonical single best, the first of the highest equity. |
+| `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's loss against the best is the decision's (`CheckerPlayDecisionData.EquityLoss(i)`): it needs the other candidates. `EquityLoss(i) == 0` is the test for "is this a best play"; `BestPlayIndex` names the canonical single best, the first of the highest equity. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 | `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `TryDerive` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. Both doors run the same fact validation, and facts that would force a guess get **no key** rather than a wrong one (see "ProblemKey" below and Pitfalls). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
@@ -1459,9 +1490,14 @@ public sealed class CheckerPlayDecisionData    // unmapped members refused
 
 public sealed class CubeDecisionData           // unmapped members refused
 {
-    // Required: Depth, DepthAbbreviation, AnalysisMode, AnalysisLevel,
-    // NoDoubleEquity, DoubleTakeEquity, the cubeless equities, the ten stored
-    // probabilities (each half's total loss is derived), ProbOfOpponentErrorJustifyingDouble.
+    // Required: AnalysisMode, AnalysisLevel, NoDoubleEquity, DoubleTakeEquity,
+    // the cubeless equities, the ten stored probabilities (each half's total
+    // loss is derived), ProbOfOpponentErrorJustifyingDouble.
+    public int? RolloutTrials { get; init; }             // the typed depth facts, each with its rule
+    public BookEdition? BookEdition { get; init; }
+    public int? UnrecognizedLevelCode { get; init; }
+    [JsonIgnore] public string? Depth { get; }           // derived from the facts: "Book V2: 12960 trials. 4-ply"
+    [JsonIgnore] public string? DepthAbbreviation { get; } //   "B4_12960"
     [JsonIgnore] public int? DepthRank { get; }          // derived from the mode and level; null = not recorded
 
     // Played cube actions — game facts, guarded per half on init (see
@@ -1524,9 +1560,11 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 public class PositionData    { /* required init-only properties per the categories table; Mop is a BoardPosition; IsJacoby? */
                                [JsonIgnore] public int OnRollPipCount { get; }    /* Mop's, by BoardState's pip rule */
                                [JsonIgnore] public int OpponentPipCount { get; } }
-public class DescriptiveData { /* required init-only properties per the categories table; Title?, Date?, Event?, IsStandardStart? */ }
-public class PlayCandidate   { /* required init-only properties per Architecture table; Equity finite; the six probabilities nullable */
+public class DescriptiveData { /* init-only properties per the categories table; OnRollName?, OpponentName?, Title?, Date?, Event?, IsStandardStart?, Comment? */ }
+public class PlayCandidate   { /* required init-only properties per Architecture table; Equity finite; the depth facts and five stored probabilities nullable */
                                [JsonIgnore] public string Notation { get; }  /* Play.ToNotation(); never stored */
+                               [JsonIgnore] public string? Depth { get; }            /* from the typed depth facts; see "The depth as typed facts" */
+                               [JsonIgnore] public string? DepthAbbreviation { get; }
                                [JsonIgnore] public int? DepthRank { get; }   /* from AnalysisMode × AnalysisLevel; null = not recorded */ }
 
 public readonly record struct Move(               // both required on the wire: an absent

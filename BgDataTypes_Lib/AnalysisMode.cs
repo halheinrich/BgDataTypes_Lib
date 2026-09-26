@@ -6,8 +6,9 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// How the numbers behind an XG analysis were produced — the mode axis of the
 /// two-axis depth taxonomy, always paired with <see cref="AnalysisLevel"/>
-/// (the evaluation level). The pair is the machine-usable taxonomy behind the
-/// display forms (<see cref="PlayCandidate.Depth"/> /
+/// (the evaluation level). The pair, with the other typed depth facts (the
+/// rollout trial count, the book edition, an unrecognized level's raw code),
+/// is what the display forms are derived from (<see cref="PlayCandidate.Depth"/> /
 /// <see cref="PlayCandidate.DepthAbbreviation"/> /
 /// <see cref="PlayCandidate.DepthRank"/> and their cube counterparts on
 /// <see cref="CubeDecisionData"/>), and replaces the retired flat
@@ -64,10 +65,10 @@ public enum AnalysisMode
     Evaluation,
 
     /// <summary>Full rollout recorded in the source file; the paired
-    /// <see cref="AnalysisLevel"/> is the inner evaluation level. Trial count
-    /// stays in the display label (<see cref="PlayCandidate.Depth"/> /
-    /// <see cref="CubeDecisionData.Depth"/>) — it is not a taxonomy
-    /// axis.</summary>
+    /// <see cref="AnalysisLevel"/> is the inner evaluation level. The trial
+    /// count is a typed fact beside the pair
+    /// (<see cref="PlayCandidate.RolloutTrials"/>), not a taxonomy axis; the
+    /// display label spells it.</summary>
     [Description("Rollout")]
     Rollout,
 

@@ -90,7 +90,9 @@ public class PlayCandidateNotationTests
         // derived notation is not written, and neither is the retired name.
         // Rewritten: the depth rank and the equity loss are derived now (from
         // the mode and level, and on the decision), so they left the list; so
-        // did the loss probability, 1 − the win probability.
+        // did the loss probability, 1 − the win probability, and the depth
+        // label and abbreviation, derived from the typed depth facts that
+        // joined the list.
         var candidate = TestRecords.Candidate(
             play: [new(24, -18), new(13, 9)], winPct: 0.5, winGammonPct: 0.1, winBgPct: 0.01,
             loseGammonPct: 0.1, loseBgPct: 0.01);
@@ -103,7 +105,8 @@ public class PlayCandidateNotationTests
             Assert.True(
                 names.SequenceEqual(
                 [
-                    "Play", "Depth", "DepthAbbreviation", "AnalysisMode", "AnalysisLevel",
+                    "Play", "AnalysisMode", "AnalysisLevel",
+                    "RolloutTrials", "BookEdition", "UnrecognizedLevelCode",
                     "Equity", "WinPct", "WinGammonPct", "WinBgPct",
                     "LoseGammonPct", "LoseBgPct",
                 ]),
@@ -120,7 +123,7 @@ public class PlayCandidateNotationTests
         // notation is the play's, even where the stored text disagreed with
         // the play, as it did in the converted match of
         // halheinrich/backgammon#273. Written back, the member is gone.
-        var candidate = TestRecords.Candidate(play: [new(7, -3), new(8, 3)], depth: "3-ply");
+        var candidate = TestRecords.Candidate(play: [new(7, -3), new(8, 3)]);
 
         foreach (var (path, options) in BothPaths)
         {

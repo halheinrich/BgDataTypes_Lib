@@ -43,9 +43,9 @@ public class DecisionRowSerializationTests
         string? player = "Alice",
         bool? isStandardStart = null,
         int[]? dice = null,
-        string? analysisDepth = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
+        int? rolloutTrials = null,
         double equity = 0.1604,
         int onRollNeeds = 7,
         int opponentNeeds = 7,
@@ -66,8 +66,8 @@ public class DecisionRowSerializationTests
             decision: TestRecords.CheckerPlayData(
                 dice: dice ?? [3, 1],
                 plays: [TestRecords.Candidate(
-                    play: play, depth: analysisDepth, analysisMode: analysisMode,
-                    analysisLevel: analysisLevel, equity: equity)],
+                    play: play, analysisMode: analysisMode,
+                    analysisLevel: analysisLevel, rolloutTrials: rolloutTrials, equity: equity)],
                 userPlayIndex: error is null ? userPlayIndex : null,
                 unlistedPlayError: error),
             descriptive: TestRecords.Descriptive(
@@ -89,9 +89,9 @@ public class DecisionRowSerializationTests
         int matchLength = 7,
         string? player = "Alice",
         bool? isStandardStart = null,
-        string? analysisDepth = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
+        int? rolloutTrials = null,
         double equity = 0.512,
         int onRollNeeds = 7,
         int opponentNeeds = 7,
@@ -104,10 +104,10 @@ public class DecisionRowSerializationTests
             position: TestRecords.Position(onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isJacoby: isJacoby),
             decision: error is null
                 ? TestRecords.CubeData(
-                    depth: analysisDepth, analysisMode: analysisMode, analysisLevel: analysisLevel,
+                    analysisMode: analysisMode, analysisLevel: analysisLevel, rolloutTrials: rolloutTrials,
                     noDoubleEquity: equity)
                 : TestRecords.CubeData(
-                    depth: analysisDepth, analysisMode: analysisMode, analysisLevel: analysisLevel,
+                    analysisMode: analysisMode, analysisLevel: analysisLevel, rolloutTrials: rolloutTrials,
                     noDoubleEquity: equity, userDoublerAction: null, userTakerAction: null,
                     unstatedDoublerActionError: error),
             descriptive: TestRecords.Descriptive(
@@ -168,7 +168,6 @@ public class DecisionRowSerializationTests
             isJacoby: null,
             player: "Mochy",
             dice: [6, 3],
-            analysisDepth: "3-ply",
             equity: -0.142,
             board: new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]));
 
@@ -201,7 +200,9 @@ public class DecisionRowSerializationTests
         var original = CubeRow(
             equity: 0.312,
             player: "Falafel",
-            analysisDepth: "Rollout: 1296 trials. 3-ply",
+            analysisMode: AnalysisMode.Rollout,
+            analysisLevel: AnalysisLevel.Ply3,
+            rolloutTrials: 1296,
             matchLength: 9,
             onRollNeeds: 1,
             opponentNeeds: 1);
@@ -238,14 +239,13 @@ public class DecisionRowSerializationTests
         // "none recorded" — null does, its one spelling — so a player and a
         // depth label that were not recorded round-trip as null, and an empty
         // one cannot be stated. The XGID and the source file are never none.
-        var restored = RoundTrip(PlayRow(player: null, analysisDepth: null));
+        var restored = RoundTrip(PlayRow(player: null, analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown));
 
         Assert.Null(restored.Player);
         Assert.Null(restored.AnalysisDepth);
         Assert.Equal("XGID=x", restored.Xgid);
         Assert.Equal("match.xg", restored.SourceFile);
         Assert.Throws<ArgumentException>(() => PlayRow(player: ""));
-        Assert.Throws<ArgumentException>(() => PlayRow(analysisDepth: " "));
         Assert.Throws<ArgumentException>(() => PlayRow(xgid: ""));
     }
 
@@ -444,7 +444,6 @@ public class DecisionRowSerializationTests
     public void DecisionRow_AnalysisModeAndLevel_RoundTrip()
     {
         var original = PlayRow(
-            analysisDepth: "XG Roller++",
             analysisMode: AnalysisMode.Evaluation,
             analysisLevel: AnalysisLevel.XgRollerPlusPlus);
 
@@ -477,7 +476,7 @@ public class DecisionRowSerializationTests
         var legacy = "{\"Id\":\"test.xgp\",\"AnalysisDepth\":\"3-ply\",\"AnalysisDepthClass\":\"Ply3\",\"Roll\":63}";
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DecisionRow>(legacy, Options));
 
-        var row = PlayRow(analysisDepth: "3-ply");
+        var row = PlayRow();
         var full = JsonNode.Parse(JsonSerializer.Serialize(row, Options))!.AsObject();
         full["AnalysisDepthClass"] = "Ply3";
         var restored = JsonSerializer.Deserialize<DecisionRow>(full.ToJsonString(), Options)!;
@@ -490,7 +489,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_AnalysisModeAndLevel_NotInCsvOutput()
     {
-        var row = PlayRow(analysisDepth: "3-ply", analysisMode: AnalysisMode.Evaluation, analysisLevel: AnalysisLevel.Ply3);
+        var row = PlayRow(analysisMode: AnalysisMode.Evaluation, analysisLevel: AnalysisLevel.Ply3);
 
         Assert.DoesNotContain("AnalysisMode", DecisionRow.CsvHeader);
         Assert.DoesNotContain("AnalysisLevel", DecisionRow.CsvHeader);

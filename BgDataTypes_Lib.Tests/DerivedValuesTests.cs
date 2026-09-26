@@ -209,7 +209,6 @@ public class DerivedValuesTests
         Assert.Throws<ArgumentException>(() => TestRecords.CubeData(unstatedTakerActionError: 0.06));
         var doublerSecond = Assert.Throws<ArgumentException>(() => new CubeDecisionData
         {
-            Depth = "3-ply", DepthAbbreviation = "3-ply",
             AnalysisMode = AnalysisMode.Evaluation, AnalysisLevel = AnalysisLevel.Ply3,
             NoDoubleEquity = 0.5, DoubleTakeEquity = 0.6, CubelessNoDoubleEquity = 0.4, CubelessDoubleTakeEquity = 0.4,
             WinPctAfterNoDouble = 0.7, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
@@ -233,7 +232,6 @@ public class DerivedValuesTests
         // in a document (the reflection path sets members in document order).
         var takerSecond = Assert.Throws<ArgumentException>(() => new CubeDecisionData
         {
-            Depth = "3-ply", DepthAbbreviation = "3-ply",
             AnalysisMode = AnalysisMode.Evaluation, AnalysisLevel = AnalysisLevel.Ply3,
             NoDoubleEquity = 0.5, DoubleTakeEquity = 0.6, CubelessNoDoubleEquity = 0.4, CubelessDoubleTakeEquity = 0.4,
             WinPctAfterNoDouble = 0.7, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,

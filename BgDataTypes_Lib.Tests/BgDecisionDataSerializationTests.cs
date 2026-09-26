@@ -171,49 +171,64 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void PlayCandidate_RoundTripWithDepth()
     {
+        // Rewritten: the label is derived from the typed depth facts, which
+        // are what round-trip; the label itself is not on the wire.
         var original = TestRecords.Candidate(
             play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
-            depth: "Rollout: 1296 trials. 3-ply",
+            analysisMode: AnalysisMode.Rollout, analysisLevel: AnalysisLevel.Ply3, rolloutTrials: 1296,
             equity: -0.142);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
-        Assert.Equal(original.Depth, restored.Depth);
+        Assert.Contains("\"RolloutTrials\":1296", json);
+        Assert.DoesNotContain("\"Depth\"", json);
+        Assert.Equal("Rollout: 1296 trials. 3-ply", restored.Depth);
         Assert.Equal("8/5(2) 6/3(2)", restored.Notation);
         Assert.Equal(original.Equity, restored.Equity);
     }
 
     [Fact]
-    public void PlayCandidate_Depth_AbsentReadsAsNoneRecorded()
+    public void PlayCandidate_Depth_NoneRecorded_IsNull()
     {
-        // Rewritten from PlayCandidate_Depth_AbsentIsRefused (itself from
-        // PlayCandidate_Depth_DefaultsToEmpty): "no label recorded" is null
-        // now, its one spelling, so the member is nullable and its absence
-        // reads as that null — never as empty text.
-        Assert.Null(ReadWithout(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "Depth").Depth);
+        // Rewritten from PlayCandidate_Depth_AbsentReadsAsNoneRecorded (itself
+        // from ..._AbsentIsRefused and ..._DefaultsToEmpty): the label is no
+        // member to be absent. "No depth recorded" is the facts' — the mode
+        // and the level unknown, no raw code — and the label it derives is
+        // null, never empty text.
+        var candidate = TestRecords.Candidate(
+            play: [new(8, 5), new(6, 1)], analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown);
+
+        Assert.Null(candidate.Depth);
+        Assert.Null(JsonSerializer.Deserialize<PlayCandidate>(JsonSerializer.Serialize(candidate, Options), Options)!.Depth);
     }
 
     [Fact]
     public void PlayCandidate_DepthAbbreviation_RoundTrip()
     {
+        // Rewritten: the abbreviation is derived from the typed facts — here a
+        // book hit whose rollout parameters were recovered.
         var original = TestRecords.Candidate(
             play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
-            depthAbbreviation: "3p1296",
+            analysisMode: AnalysisMode.BookRollout, analysisLevel: AnalysisLevel.Ply4,
+            rolloutTrials: 12960, bookEdition: BookEdition.V2,
             equity: -0.142);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
-        Assert.Equal(original.DepthAbbreviation, restored.DepthAbbreviation);
+        Assert.DoesNotContain("DepthAbbreviation", json);
+        Assert.Equal("B4_12960", restored.DepthAbbreviation);
         Assert.Equal("8/5(2) 6/3(2)", restored.Notation);
         Assert.Equal(original.Equity, restored.Equity);
     }
 
     [Fact]
-    public void PlayCandidate_DepthAbbreviation_AbsentReadsAsNoneRecorded()
+    public void PlayCandidate_DepthAbbreviation_NoneRecorded_IsNull()
     {
-        // Rewritten from PlayCandidate_DepthAbbreviation_AbsentIsRefused, as
-        // the label's test above.
-        Assert.Null(ReadWithout(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "DepthAbbreviation").DepthAbbreviation);
+        // Rewritten from PlayCandidate_DepthAbbreviation_AbsentReadsAsNoneRecorded,
+        // as the label's test above.
+        Assert.Null(TestRecords.Candidate(
+            play: [new(8, 5), new(6, 1)], analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown)
+            .DepthAbbreviation);
     }
 
     [Fact]
@@ -296,7 +311,7 @@ public class BgDecisionDataSerializationTests
         var legacy = "{\"MoveNotation\":\"8/5 6/1\",\"Depth\":\"3-ply\",\"DepthClass\":\"Ply3\",\"Equity\":-0.12}";
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlayCandidate>(legacy, Options));
 
-        var candidate = TestRecords.Candidate(play: [new(8, 5), new(6, 1)], depth: "3-ply");
+        var candidate = TestRecords.Candidate(play: [new(8, 5), new(6, 1)]);
         var full = JsonNode.Parse(JsonSerializer.Serialize(candidate, Options))!.AsObject();
         full["DepthClass"] = "Ply3";
         var restored = JsonSerializer.Deserialize<PlayCandidate>(full.ToJsonString(), Options)!;
@@ -393,40 +408,46 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void CubeDecisionData_Depth_RoundTrip()
     {
-        // Rewritten from DecisionData_CubeDepth_RoundTrip.
-        var original = TestRecords.CubeData(depth: "Rollout: 1296 trials. 3-ply");
+        // Rewritten from DecisionData_CubeDepth_RoundTrip: the facts round-trip,
+        // and the label is derived from them.
+        var original = TestRecords.CubeData(
+            analysisMode: AnalysisMode.Rollout, analysisLevel: AnalysisLevel.Ply3, rolloutTrials: 1296);
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<CubeDecisionData>(json, Options)!;
 
+        Assert.DoesNotContain("\"Depth\"", json);
         Assert.Equal("Rollout: 1296 trials. 3-ply", restored.Depth);
     }
 
     [Fact]
-    public void CubeDecisionData_Depth_AbsentReadsAsNoneRecorded()
+    public void CubeDecisionData_Depth_NoneRecorded_IsNull()
     {
-        // Rewritten from CubeDecisionData_Depth_AbsentIsRefused (itself from
-        // DecisionData_CubeDepth_AbsentIsRefused): "no label recorded" is null.
-        Assert.Null(ReadWithout(TestRecords.CubeData(), "Depth").Depth);
+        // Rewritten from CubeDecisionData_Depth_AbsentReadsAsNoneRecorded
+        // (itself from ..._AbsentIsRefused): no depth recorded, no label.
+        Assert.Null(TestRecords.CubeData(analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown).Depth);
     }
 
     [Fact]
     public void CubeDecisionData_DepthAbbreviation_RoundTrip()
     {
         // Rewritten from DecisionData_CubeDepthAbbreviation_RoundTrip.
-        var original = TestRecords.CubeData(depthAbbreviation: "3p1296");
+        var original = TestRecords.CubeData(
+            analysisMode: AnalysisMode.Rollout, analysisLevel: AnalysisLevel.Ply3, rolloutTrials: 1296);
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<CubeDecisionData>(json, Options)!;
 
+        Assert.DoesNotContain("DepthAbbreviation", json);
         Assert.Equal("3p1296", restored.DepthAbbreviation);
     }
 
     [Fact]
-    public void CubeDecisionData_DepthAbbreviation_AbsentReadsAsNoneRecorded()
+    public void CubeDecisionData_DepthAbbreviation_NoneRecorded_IsNull()
     {
-        // Rewritten from CubeDecisionData_DepthAbbreviation_AbsentIsRefused.
-        Assert.Null(ReadWithout(TestRecords.CubeData(), "DepthAbbreviation").DepthAbbreviation);
+        // Rewritten from CubeDecisionData_DepthAbbreviation_AbsentReadsAsNoneRecorded.
+        Assert.Null(TestRecords.CubeData(analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown)
+            .DepthAbbreviation);
     }
 
     [Fact]
@@ -598,8 +619,8 @@ public class BgDecisionDataSerializationTests
         var original = TestRecords.CheckerPlayData(
             dice: [3, 5],
             plays: [
-                TestRecords.Candidate(play: [new(8, 5), new(6, 1)], depth: "3-ply", equity: -0.120),
-                TestRecords.Candidate(play: [new(8, 3), new(6, 1)], depth: "3-ply", equity: -0.165)
+                TestRecords.Candidate(play: [new(8, 5), new(6, 1)], equity: -0.120),
+                TestRecords.Candidate(play: [new(8, 3), new(6, 1)], equity: -0.165)
             ]);
 
         var json = JsonSerializer.Serialize(original, Options);
@@ -743,8 +764,8 @@ public class BgDecisionDataSerializationTests
             decision: TestRecords.CheckerPlayData(
                 dice: [6, 4],
                 plays: [
-                    TestRecords.Candidate(play: [new(24, 18), new(24, 20)], depth: "3-ply", equity: 0.211),
-                    TestRecords.Candidate(play: [new(24, 18), new(13, 9)],  depth: "3-ply", equity: 0.198)
+                    TestRecords.Candidate(play: [new(24, 18), new(24, 20)], equity: 0.211),
+                    TestRecords.Candidate(play: [new(24, 18), new(13, 9)],  equity: 0.198)
                 ]),
             descriptive: TestRecords.Descriptive(
                 matchLength: 5,

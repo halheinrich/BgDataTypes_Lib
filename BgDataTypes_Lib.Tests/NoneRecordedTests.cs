@@ -29,10 +29,6 @@ public class NoneRecordedTests
         yield return ("Title", text => TestRecords.Descriptive(title: text));
         yield return ("Event", text => TestRecords.Descriptive(@event: text));
         yield return ("Comment", text => TestRecords.Descriptive(comment: text));
-        yield return ("Depth", text => TestRecords.Candidate(depth: text));
-        yield return ("DepthAbbreviation", text => TestRecords.Candidate(depthAbbreviation: text));
-        yield return ("Depth", text => TestRecords.CubeData(depth: text));
-        yield return ("DepthAbbreviation", text => TestRecords.CubeData(depthAbbreviation: text));
         yield return ("Xgid", text => TestRecords.CheckerPlay(xgid: text));
         yield return ("filename", text => new XgpDecisionId(text));
         yield return ("filename", text => new XgDecisionId(text, 1, 1, IsCube: false));
@@ -53,8 +49,10 @@ public class NoneRecordedTests
     public void Null_IsNoneRecorded_ForEveryNullableTextMember()
     {
         var descriptive = TestRecords.Descriptive(onRollName: null, opponentName: null, title: null, @event: null, comment: null);
-        var candidate = TestRecords.Candidate(depth: null, depthAbbreviation: null);
-        var cube = TestRecords.CubeData(depth: null, depthAbbreviation: null);
+        // The depth label and abbreviation are derived now, from typed facts:
+        // no depth recorded (the mode and level unknown) derives no text.
+        var candidate = TestRecords.Candidate(analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown);
+        var cube = TestRecords.CubeData(analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown);
 
         Assert.Null(descriptive.OnRollName);
         Assert.Null(descriptive.OpponentName);
@@ -82,10 +80,6 @@ public class NoneRecordedTests
         var play = TestRecords.CheckerPlay(descriptive: TestRecords.Descriptive(title: "t", @event: "e", comment: "c"));
         foreach (var member in new[] { "OnRollName", "OpponentName", "Title", "Event", "Comment" })
             yield return (play, ["Descriptive", member]);
-        yield return (play, ["Decision", "Plays", "0", "Depth"]);
-        yield return (play, ["Decision", "Plays", "0", "DepthAbbreviation"]);
-        yield return (TestRecords.Cube(), ["Decision", "Depth"]);
-        yield return (TestRecords.Cube(), ["Decision", "DepthAbbreviation"]);
         yield return (play, ["Xgid"]);
         yield return (play, ["Id"]);
     }
@@ -154,7 +148,7 @@ public class NoneRecordedTests
         var record = TestRecords.CheckerPlay(
             descriptive: TestRecords.Descriptive(onRollName: null),
             decision: TestRecords.CheckerPlayData(plays: [
-                TestRecords.Candidate(depth: null, depthAbbreviation: null),
+                TestRecords.Candidate(analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown),
                 TestRecords.Candidate(play: [new(13, 10), new(6, 5)], equity: -0.1)]));
         var row = DecisionRow.From(record);
 

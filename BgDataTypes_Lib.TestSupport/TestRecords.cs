@@ -170,13 +170,15 @@ public static class TestRecords
     /// A cube decision's category; each argument is the member of the same
     /// name. By default a 3-ply double/take (no double +0.512, double/take
     /// +0.634), played as double and take — at no cost, which the category
-    /// derives from the equities, as it does the depth rank.
+    /// derives from the equities, as it does the depth's label, abbreviation
+    /// and rank from its typed facts.
     /// </summary>
     public static CubeDecisionData CubeData(
-        string? depth = "3-ply",
-        string? depthAbbreviation = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
+        int? rolloutTrials = null,
+        BookEdition? bookEdition = null,
+        int? unrecognizedLevelCode = null,
         double noDoubleEquity = 0.512,
         double doubleTakeEquity = 0.634,
         double cubelessNoDoubleEquity = 0.418,
@@ -197,10 +199,11 @@ public static class TestRecords
         double? unstatedDoublerActionError = null,
         double? unstatedTakerActionError = null) => new()
     {
-        Depth = depth,
-        DepthAbbreviation = depthAbbreviation,
         AnalysisMode = analysisMode,
         AnalysisLevel = analysisLevel,
+        RolloutTrials = rolloutTrials,
+        BookEdition = bookEdition,
+        UnrecognizedLevelCode = unrecognizedLevelCode,
         NoDoubleEquity = noDoubleEquity,
         DoubleTakeEquity = doubleTakeEquity,
         CubelessNoDoubleEquity = cubelessNoDoubleEquity,
@@ -253,17 +256,20 @@ public static class TestRecords
     /// <summary>
     /// A candidate; each argument is the member of the same name. By default
     /// the opening 3-1's best play, 8/5 6/5, at 3-ply. Its notation, depth
-    /// rank and equity loss are not members (halheinrich/backgammon#273): the
-    /// notation is derived from <paramref name="play"/>, the rank from the
-    /// mode and level, and the loss on the decision from every candidate's
-    /// equity, so a test states the facts those come from.
+    /// label, abbreviation and rank, loss probability and equity loss are not
+    /// members (halheinrich/backgammon#273): the notation is derived from
+    /// <paramref name="play"/>, the depth text and rank from the typed depth
+    /// facts, the loss probability from <paramref name="winPct"/>, and the
+    /// loss on the decision from every candidate's equity, so a test states
+    /// the facts those come from.
     /// </summary>
     public static PlayCandidate Candidate(
         Play? play = null,
-        string? depth = "3-ply",
-        string? depthAbbreviation = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
+        int? rolloutTrials = null,
+        BookEdition? bookEdition = null,
+        int? unrecognizedLevelCode = null,
         double equity = 0.1604,
         double? winPct = 0.5358,
         double? winGammonPct = 0.1598,
@@ -272,10 +278,11 @@ public static class TestRecords
         double? loseBgPct = 0.0055) => new()
     {
         Play = play ?? [new(8, 5), new(6, 5)],
-        Depth = depth,
-        DepthAbbreviation = depthAbbreviation,
         AnalysisMode = analysisMode,
         AnalysisLevel = analysisLevel,
+        RolloutTrials = rolloutTrials,
+        BookEdition = bookEdition,
+        UnrecognizedLevelCode = unrecognizedLevelCode,
         Equity = equity,
         WinPct = winPct,
         WinGammonPct = winGammonPct,

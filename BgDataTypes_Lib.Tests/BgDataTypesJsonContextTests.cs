@@ -57,10 +57,9 @@ public class BgDataTypesJsonContextTests
                 plays: [
                     TestRecords.Candidate(
                         play: [new(25, 19), new(13, 9)],
-                        depth: "Rollout: 1296 trials. 3-ply",
-                        depthAbbreviation: "3p1296",
                         analysisMode: AnalysisMode.Rollout,
                         analysisLevel: AnalysisLevel.Ply3,
+                        rolloutTrials: 1296,
                         equity: 0.211,
                         winPct: 0.481,
                         winGammonPct: 0.112,
@@ -69,8 +68,6 @@ public class BgDataTypesJsonContextTests
                         loseBgPct: 0.006),
                     TestRecords.Candidate(
                         play: [new(25, 21), new(13, 7)],
-                        depth: "3-ply",
-                        depthAbbreviation: "3-ply",
                         analysisMode: AnalysisMode.Evaluation,
                         analysisLevel: AnalysisLevel.Ply3Red,
                         equity: 0.198,
@@ -101,10 +98,10 @@ public class BgDataTypesJsonContextTests
             cubeOwner: CubeOwner.Centered,
             isJacoby: true),
         decision: TestRecords.CubeData(
-            depth: "Rollout: 1296 trials. 3-ply",
-            depthAbbreviation: "3p1296",
             analysisMode: AnalysisMode.BookRollout,
             analysisLevel: AnalysisLevel.XgRoller,
+            rolloutTrials: 1296,
+            bookEdition: BookEdition.V2,
             noDoubleEquity: 0.312,
             doubleTakeEquity: 0.287,
             cubelessNoDoubleEquity: 0.205,
@@ -381,7 +378,7 @@ public class BgDataTypesJsonContextTests
             typeof(DecisionRow), typeof(DecisionKind),
             typeof(Play), typeof(Move), typeof(DecisionId),
             typeof(ProblemKey), typeof(DiceRoll), typeof(BoardPosition),
-            typeof(AnalysisMode), typeof(AnalysisLevel),
+            typeof(AnalysisMode), typeof(AnalysisLevel), typeof(BookEdition),
             typeof(CubeAction), typeof(CubeClaim), typeof(CubeOwner)
         ];
 
