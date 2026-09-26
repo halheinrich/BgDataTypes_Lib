@@ -113,9 +113,14 @@ public static class TestRecords
         };
     }
 
-    /// <summary>The row of <paramref name="record"/> (<see cref="DecisionRow.From"/>); by default, of <see cref="CheckerPlay"/>'s default.</summary>
-    public static DecisionRow Row(BgDecisionData? record = null) =>
-        DecisionRow.From(record ?? CheckerPlay());
+    /// <summary>
+    /// The row of <paramref name="record"/> built for <paramref name="ranking"/>
+    /// (<see cref="DecisionRow.From"/>); by default, of <see cref="CheckerPlay"/>'s
+    /// default, under <see cref="PlayRanking.Equity"/>, the ranking an app
+    /// without the setting uses.
+    /// </summary>
+    public static DecisionRow Row(BgDecisionData? record = null, PlayRanking ranking = PlayRanking.Equity) =>
+        DecisionRow.From(record ?? CheckerPlay(), ranking);
 
     // -----------------------------------------------------------------------
     //  The categories

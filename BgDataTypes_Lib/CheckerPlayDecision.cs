@@ -24,13 +24,15 @@ namespace BgDataTypes_Lib;
 /// </para>
 /// <para>
 /// <b>The after-boards are derived, never stored</b> (the arc's rule: no
-/// stored copy of a derivable value). <see cref="AfterBestBoard"/> and
-/// <see cref="AfterPlayerBoard"/> are the boards the best and the user's
-/// candidate leave, through the one play rule
-/// (<see cref="BoardState.ApplyPlay"/>'s), computed once while the record is
-/// built — the same pass that checks the candidates — and read thereafter at
-/// no cost. They are not on the wire, and a derivation can never fail on a
-/// record that exists.
+/// stored copy of a derivable value). Every candidate's board — the board its
+/// play leaves, through the one play rule (<see cref="BoardState.ApplyPlay"/>'s)
+/// — is computed once while the record is built, in the same pass that
+/// checks the candidates, and read thereafter at no cost:
+/// <see cref="AfterBoardOf"/> for any candidate, <see cref="AfterPlayerBoard"/>
+/// for the user's, and <see cref="AfterBestBoard"/> for the best play under a
+/// ranking — which play is best is a ranking's (<see cref="PlayRanking"/>).
+/// They are not on the wire, and a derivation can never fail on a record
+/// that exists.
 /// </para>
 /// </remarks>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -40,9 +42,9 @@ public sealed class CheckerPlayDecision : BgDecisionData
     private readonly CheckerPlayDecisionData? _decision;
 
     // Derived while the record is built — by whichever of Position and
-    // Decision is set second — and never written after construction ends.
-    private BoardPosition _afterBestBoard;
-    private BoardPosition? _afterPlayerBoard;
+    // Decision is set second — and never written after construction ends:
+    // the board each candidate leaves, in Plays order.
+    private BoardPosition[] _afterBoards = [];
 
     /// <summary>Creates a checker-play decision; its members are set by the initializer.</summary>
     public CheckerPlayDecision() : base(DecisionKind.CheckerPlay)
@@ -61,8 +63,8 @@ public sealed class CheckerPlayDecision : BgDecisionData
     }
 
     /// <summary>
-    /// The roll, the analysed candidates, and which of them are best and
-    /// played — see <see cref="CheckerPlayDecisionData"/>.
+    /// The roll, the analysed candidates, and which of them was played — see
+    /// <see cref="CheckerPlayDecisionData"/>.
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">
@@ -97,22 +99,40 @@ public sealed class CheckerPlayDecision : BgDecisionData
     public DiceRoll Dice => new(Decision.Dice[0], Decision.Dice[1]);
 
     /// <summary>
-    /// The board the best play leaves (<see cref="CheckerPlayDecisionData.BestPlay"/>).
+    /// The board the candidate at <paramref name="index"/> leaves.
     /// <b>Frame: the next mover's</b> — the position the play reaches, flipped
     /// as <see cref="BoardState.ApplyPlay"/> leaves it: the opponent is on
     /// roll, so slot 25 is the opponent's bar and their checkers are positive,
-    /// while the decision-maker's checkers are negative. Always exists.
+    /// while the decision-maker's checkers are negative. Derived once, read at
+    /// no cost.
     /// </summary>
-    [JsonIgnore]
-    public BoardPosition AfterBestBoard => _afterBestBoard;
+    /// <param name="index">A candidate's index into <see cref="CheckerPlayDecisionData.Plays"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> identifies no candidate.</exception>
+    public BoardPosition AfterBoardOf(int index)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _afterBoards.Length);
+        return _afterBoards[index];
+    }
+
+    /// <summary>
+    /// The board the best play under <paramref name="ranking"/> leaves
+    /// (<see cref="RankedPlays.Best"/>), in the frame of <see cref="AfterBoardOf"/>.
+    /// Always exists. No allocation once the ranking has been asked for.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ranking"/> is not a defined ranking.</exception>
+    public BoardPosition AfterBestBoard(PlayRanking ranking) =>
+        _afterBoards[Decision.RankedBy(ranking).Best.Index];
 
     /// <summary>
     /// The board the user's play leaves (<see cref="CheckerPlayDecisionData.UserPlay"/>),
-    /// in the same frame as <see cref="AfterBestBoard"/>; <see langword="null"/>
-    /// exactly when the user's play is not among the candidates.
+    /// in the frame of <see cref="AfterBoardOf"/>; <see langword="null"/>
+    /// exactly when the user's play is not among the candidates. No ranking
+    /// decides which play the user made.
     /// </summary>
     [JsonIgnore]
-    public BoardPosition? AfterPlayerBoard => _afterPlayerBoard;
+    public BoardPosition? AfterPlayerBoard =>
+        Decision.UserPlayIndex is int index ? _afterBoards[index] : null;
 
     /// <inheritdoc/>
     public override TResult Match<TResult>(
@@ -140,25 +160,16 @@ public sealed class CheckerPlayDecision : BgDecisionData
 
     /// <summary>
     /// Holds every candidate to the play rule from <paramref name="position"/>
-    /// and derives the two after-boards from the ones that are best and
-    /// played — one pass, through <see cref="BoardState.PositionAfter"/>,
-    /// which refuses an invalid candidate naming <paramref name="paramName"/>.
+    /// and derives the board each leaves — one pass, through
+    /// <see cref="BoardState.PositionAfter"/>, which refuses an invalid
+    /// candidate naming <paramref name="paramName"/>.
     /// </summary>
     private void Derive(PositionData position, CheckerPlayDecisionData decision, string paramName)
     {
         var plays = decision.Plays;
-        BoardPosition best = default;
-        BoardPosition? user = null;
+        var boards = new BoardPosition[plays.Count];
         for (int i = 0; i < plays.Count; i++)
-        {
-            var after = BoardState.PositionAfter(
-                position.Mop, plays[i].Play, $"Candidate {i}'s play", paramName);
-            if (i == decision.BestPlayIndex)
-                best = after;
-            if (i == decision.UserPlayIndex)
-                user = after;
-        }
-        _afterBestBoard = best;
-        _afterPlayerBoard = user;
+            boards[i] = BoardState.PositionAfter(position.Mop, plays[i].Play, $"Candidate {i}'s play", paramName);
+        _afterBoards = boards;
     }
 }

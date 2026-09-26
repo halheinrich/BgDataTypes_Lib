@@ -272,7 +272,7 @@ public class DecisionKindTests
         var play = PublicMembers(typeof(CheckerPlayDecision)).Except(shared).ToHashSet();
         var cube = PublicMembers(typeof(CubeDecision)).Except(shared).ToHashSet();
 
-        Assert.Equal(new[] { "AfterBestBoard", "AfterPlayerBoard", "Decision", "Dice" }, play.Order().ToArray());
+        Assert.Equal(new[] { "AfterBestBoard", "AfterBoardOf", "AfterPlayerBoard", "Decision", "Dice" }, play.Order().ToArray());
         Assert.Equal(new[] { "CanBeTooGood", "Decision" }, cube.Order().ToArray());
         Assert.NotEqual(
             typeof(CheckerPlayDecision).GetProperty("Decision")!.PropertyType,

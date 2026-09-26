@@ -4,8 +4,9 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// The decision category of a <see cref="CheckerPlayDecision"/>: the roll,
-/// the analysed candidate plays, which of them is best, and which the user
-/// played and at what cost. It carries a checker play's fields and nothing
+/// the analysed candidate plays, and which the user played — and, for a
+/// ranking, which is best and what each costs (<see cref="RankedBy"/>). It
+/// carries a checker play's fields and nothing
 /// else — the cube's are on <see cref="CubeDecisionData"/>, and no member of
 /// either kind stands for "not applicable" (halheinrich/backgammon#273).
 /// Every stored member but the nullable ones is <c>required</c>, per the wire
@@ -14,17 +15,25 @@ namespace BgDataTypes_Lib;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>No stored copy of a derivable value.</b> What the candidates determine
-/// is derived from them and never stored: which is best
-/// (<see cref="BestPlayIndex"/>), what each gives up against it
-/// (<see cref="EquityLoss"/>), and the user's error when the user's play is
-/// among them (<see cref="UserPlayError"/>). The one error stored is the one
-/// the candidates cannot determine — that of a user play not among them
-/// (<see cref="UnlistedPlayError"/>). A document still stating a derived
-/// member (<c>BestPlayIndex</c>, <c>UserPlayError</c>) reads with it ignored,
-/// and the derivation stands: the serializer knows a derived member and
-/// skips its JSON, even here, where a member this category does not have at
-/// all is refused (measured on .NET 10, both paths).
+/// <b>Best and error belong to a ranking</b> (SPEC-scoring §2a,
+/// halheinrich/backgammon#282). Which candidate is best, the order and the
+/// rank numbers, each candidate's error and whether it is scored, and the
+/// player's error are all derived for a given <see cref="PlayRanking"/>
+/// (<see cref="RankedBy"/>) and never stored; no member answers "best" or
+/// "error" without a ranking. The one error stored is the one the candidates
+/// cannot determine — that of a user play not among them
+/// (<see cref="UnlistedPlayError"/>), which no ranking changes.
+/// </para>
+/// <para>
+/// <b>Retired members read ignored.</b> A document still stating a member
+/// this category retired — <c>BestPlayIndex</c>, <c>UserPlayError</c> —
+/// reads with it ignored, while a member it never had is refused. The
+/// serializer skips a name it knows and refuses one it does not, so each
+/// retired name stays known: an internal property carrying
+/// <see cref="JsonIncludeAttribute"/>, which puts it in the contract, and
+/// <see cref="JsonIgnoreAttribute"/>, which keeps it from ever being read or
+/// written (measured on .NET 10, both paths). Neither is API; what they held
+/// is a ranking's now.
 /// </para>
 /// <para>
 /// <b>Well-formed by construction.</b> The roll is two faces 1–6; there is
@@ -55,8 +64,11 @@ public sealed class CheckerPlayDecisionData
     private readonly int? _userPlayIndex;
     private readonly double? _unlistedPlayError;
 
-    // Derived from the candidates when Plays is set, never stated.
-    private readonly int _bestPlayIndex;
+    // Each ranking's derivations, built on first request and cached: the
+    // category is immutable, so a ranking's result never changes, and a
+    // racing second build is equal to the first (the first published wins).
+    private RankedPlays? _byEquity;
+    private RankedPlays? _depthFirst;
 
     // True while the category is read from a document (see the serializer's
     // constructor below): each rule then refuses as a JsonException.
@@ -115,9 +127,10 @@ public sealed class CheckerPlayDecisionData
     }
 
     /// <summary>
-    /// The analysed candidate plays, in producer-supplied order (not
-    /// guaranteed equity-sorted); never empty. <see cref="BestPlayIndex"/>
-    /// and <see cref="UserPlayIndex"/> index into this list.
+    /// The analysed candidate plays, in the producer's order — the stored
+    /// order, which every ranking keeps where its keys tie; never empty.
+    /// <see cref="UserPlayIndex"/> and each <see cref="RankedPlay.Index"/>
+    /// index into this list.
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">
@@ -149,19 +162,8 @@ public sealed class CheckerPlayDecisionData
                 throw DocumentRefusal.Of(fault);
             }
             _plays = Array.AsReadOnly(plays);
-            _bestPlayIndex = IndexOfBest(plays);
         }
     }
-
-    /// <summary>
-    /// Index into <see cref="Plays"/> of the best play: the first candidate,
-    /// in <see cref="Plays"/> order, of the highest <see cref="PlayCandidate.Equity"/>
-    /// — the canonical single best when several tie. Derived from the
-    /// candidates, never stored, so it cannot name a candidate another one
-    /// beats; <see cref="BestPlay"/> is that candidate, and it always exists.
-    /// </summary>
-    [JsonIgnore]
-    public int BestPlayIndex => _bestPlayIndex;
 
     /// <summary>
     /// Index into <see cref="Plays"/> of the play the user made, or
@@ -208,11 +210,12 @@ public sealed class CheckerPlayDecisionData
     /// <summary>
     /// The equity loss the producing analyser recorded for the user's play
     /// when that play is not among <see cref="Plays"/> — the one error the
-    /// candidates cannot determine, since the play itself is not recorded.
-    /// <see langword="null"/> when none was recorded, and always when
-    /// <see cref="UserPlayIndex"/> identifies a candidate: that play's error
-    /// is derived (<see cref="UserPlayError"/>), so stating it here too would
-    /// store a copy.
+    /// candidates cannot determine, since the play itself is not recorded,
+    /// and so the player's error under every ranking
+    /// (<see cref="RankedPlays.UserPlayError"/>). <see langword="null"/> when
+    /// none was recorded, and always when <see cref="UserPlayIndex"/>
+    /// identifies a candidate: that play's error is derived for a ranking, so
+    /// stating it here too would store a copy.
     /// </summary>
     /// <exception cref="ArgumentException">
     /// Thrown on init when the value is stated and <see cref="UserPlayIndex"/>
@@ -236,10 +239,6 @@ public sealed class CheckerPlayDecisionData
         }
     }
 
-    /// <summary>The candidate <see cref="BestPlayIndex"/> identifies.</summary>
-    [JsonIgnore]
-    public PlayCandidate BestPlay => Plays[BestPlayIndex];
-
     /// <summary>
     /// The candidate <see cref="UserPlayIndex"/> identifies, or
     /// <see langword="null"/> when the user's play is not among the
@@ -249,45 +248,42 @@ public sealed class CheckerPlayDecisionData
     public PlayCandidate? UserPlay => UserPlayIndex is int index ? Plays[index] : null;
 
     /// <summary>
-    /// The equity the candidate at <paramref name="index"/> gives up against
-    /// the best play, in the candidates' equity units:
-    /// <c>BestPlay.Equity − Plays[index].Equity</c>, so never negative, and
-    /// <c>0</c> exactly for a candidate that ties the best —
-    /// <c>EquityLoss(i) == 0</c> is the test for "is a best play", where
-    /// several may be. Derived on each read, never stored.
+    /// The candidates under <paramref name="ranking"/>: their order and rank
+    /// numbers, the best play (the ranking's first), each candidate's error
+    /// (the best's equity minus its own) and whether it is scored, and the
+    /// player's error — every derivation SPEC-scoring §2a makes a ranking's.
+    /// Built on the first request for a ranking and cached, so asking again
+    /// allocates nothing.
     /// </summary>
-    /// <param name="index">A candidate's index into <see cref="Plays"/>.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> identifies no candidate.</exception>
-    public double EquityLoss(int index)
+    /// <param name="ranking">The ranking; <see cref="PlayRanking.Equity"/> is the default an app without the setting uses.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ranking"/> is not a defined ranking.</exception>
+    public RankedPlays RankedBy(PlayRanking ranking) => ranking switch
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, Plays.Count);
-        return BestPlay.Equity - Plays[index].Equity;
+        PlayRanking.Equity => _byEquity ?? Publish(ref _byEquity, ranking),
+        PlayRanking.DepthFirst => _depthFirst ?? Publish(ref _depthFirst, ranking),
+        _ => throw new ArgumentOutOfRangeException(nameof(ranking), ranking, "Not a defined play ranking."),
+    };
+
+    /// <summary>Builds <paramref name="ranking"/>'s derivations and publishes the first built to <paramref name="slot"/>.</summary>
+    private RankedPlays Publish(ref RankedPlays? slot, PlayRanking ranking)
+    {
+        var ranked = new RankedPlays(Plays, ranking, UserPlayIndex, UnlistedPlayError);
+        return Interlocked.CompareExchange(ref slot, ranked, null) ?? ranked;
     }
 
-    /// <summary>
-    /// Equity loss of the user's checker play against the best play (≥ 0):
-    /// the <see cref="EquityLoss"/> of the candidate the user played when it
-    /// is among <see cref="Plays"/>, otherwise the analyser's
-    /// <see cref="UnlistedPlayError"/>. <see langword="null"/> when neither
-    /// exists — no user play recorded, or one outside the candidates with no
-    /// error recorded. Derived, never stored.
-    /// </summary>
-    [JsonIgnore]
-    public double? UserPlayError => UserPlayIndex is int index ? EquityLoss(index) : UnlistedPlayError;
+    // -----------------------------------------------------------------------
+    //  Retired members — names a document may still state, known to the
+    //  serializer only so that it skips them (see the class remarks).
+    // -----------------------------------------------------------------------
+
+    /// <summary>Retired: the best play is a ranking's (<see cref="RankedPlays.Best"/>). Never read or written.</summary>
+    [JsonInclude, JsonIgnore]
+    internal int? BestPlayIndex => null;
+
+    /// <summary>Retired: the player's error is a ranking's (<see cref="RankedPlays.UserPlayError"/>). Never read or written.</summary>
+    [JsonInclude, JsonIgnore]
+    internal double? UserPlayError => null;
 
     private const string UnlistedMessage =
         "UnlistedPlayError is the error of a user play not among the candidates; when UserPlayIndex identifies the user's play, its error is derived from the candidates and is not stated.";
-
-    /// <summary>The first index of the highest equity; the candidates' equities are finite by their guard.</summary>
-    private static int IndexOfBest(PlayCandidate[] plays)
-    {
-        int best = 0;
-        for (int i = 1; i < plays.Length; i++)
-        {
-            if (plays[i].Equity > plays[best].Equity)
-                best = i;
-        }
-        return best;
-    }
 }

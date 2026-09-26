@@ -33,7 +33,8 @@ public class DecisionRowSerializationTests
     /// 8/5 6/5; on any other <paramref name="board"/> it passes, which is valid
     /// from every position. <paramref name="isStandardStart"/> left
     /// <see langword="null"/> follows the id: stated for a game, none for a
-    /// standalone position.
+    /// standalone position. With one candidate, every ranking reads alike;
+    /// <paramref name="ranking"/> is the one the row states.
     /// </summary>
     private static DecisionRow PlayRow(
         DecisionId? id = null,
@@ -52,7 +53,8 @@ public class DecisionRowSerializationTests
         bool isCrawford = false,
         bool? isJacoby = null,
         BoardPosition? board = null,
-        int? userPlayIndex = 0)
+        int? userPlayIndex = 0,
+        PlayRanking ranking = PlayRanking.Equity)
     {
         id ??= new XgDecisionId("match.xg", 1, 1, IsCube: false);
         var mop = board ?? BoardPosition.Standard;
@@ -72,7 +74,7 @@ public class DecisionRowSerializationTests
                 unlistedPlayError: error),
             descriptive: TestRecords.Descriptive(
                 matchLength: matchLength, onRollName: player,
-                isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))));
+                isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))), ranking);
     }
 
     /// <summary>
@@ -80,7 +82,8 @@ public class DecisionRowSerializationTests
     /// level and equity (the no-double equity) are the cube analysis's. Left
     /// null, <paramref name="error"/> leaves the builder's double and take
     /// stated, whose derived errors are 0; stated, it is the doubling error
-    /// of an unstated action — the one cube error a record stores.
+    /// of an unstated action — the one cube error a record stores. No column
+    /// depends on <paramref name="ranking"/>; the row states it.
     /// </summary>
     private static DecisionRow CubeRow(
         DecisionId? id = null,
@@ -95,7 +98,8 @@ public class DecisionRowSerializationTests
         double equity = 0.512,
         int onRollNeeds = 7,
         int opponentNeeds = 7,
-        bool? isJacoby = null)
+        bool? isJacoby = null,
+        PlayRanking ranking = PlayRanking.Equity)
     {
         id ??= new XgDecisionId("match.xg", 1, 2, IsCube: true);
         return DecisionRow.From(TestRecords.Cube(
@@ -112,7 +116,7 @@ public class DecisionRowSerializationTests
                     unstatedDoublerActionError: error),
             descriptive: TestRecords.Descriptive(
                 matchLength: matchLength, onRollName: player,
-                isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))));
+                isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))), ranking);
     }
 
     // -----------------------------------------------------------------------
@@ -190,6 +194,7 @@ public class DecisionRowSerializationTests
         Assert.Equal(original.Equity, restored.Equity);
         Assert.Equal(original.Board, restored.Board);
         Assert.Equal(original.AfterBestBoard, restored.AfterBestBoard);
+        Assert.Equal(original.Ranking, restored.Ranking);
     }
 
     [Fact]
@@ -280,31 +285,39 @@ public class DecisionRowSerializationTests
     public void DecisionRow_From_TakesEveryColumnFromTheRecord_CheckerPlay()
     {
         // Added: the row is the record's, column by column — the shared view
-        // through IDecisionFilterData, the kind's own from the kind.
+        // through IDecisionFilterData, the kind's own from the kind, and what
+        // says best or error from the ranking the row is built for. Where the
+        // rankings differ is pinned in PlayRankingTests.
         var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 2));
-        var row = DecisionRow.From(record);
 
-        Assert.Equal(record.Kind, row.Kind);
-        Assert.Equal(record.Id, row.Id);
-        Assert.Equal(record.Xgid, row.Xgid);
-        Assert.Equal(record.Decision.EquityLoss(2), row.Error);
-        Assert.Equal(0.1813, row.Error!.Value, 12);
-        Assert.Equal(record.MatchLength, row.MatchLength);
-        Assert.Equal(record.Player, row.Player);
-        Assert.Equal(record.SourceFile, row.SourceFile);
-        Assert.Equal(record.IsStandardStart, row.IsStandardStart);
-        Assert.Equal(31, row.Roll);
-        Assert.Equal(record.Decision.BestPlay.Depth, row.AnalysisDepth);
-        Assert.Equal(record.AnalysisMode, row.AnalysisMode);
-        Assert.Equal(record.AnalysisLevel, row.AnalysisLevel);
-        Assert.Equal(record.Decision.BestPlay.Equity, row.Equity);
-        Assert.Equal(record.OnRollNeeds, row.OnRollNeeds);
-        Assert.Equal(record.OpponentNeeds, row.OpponentNeeds);
-        Assert.Equal(record.IsCrawford, row.IsCrawford);
-        Assert.Equal(record.IsJacoby, row.IsJacoby);
-        Assert.Equal(record.Board, row.Board);
-        Assert.Equal(record.AfterBestBoard, row.AfterBestBoard);
-        Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            var row = DecisionRow.From(record, ranking);
+            var ranked = record.Decision.RankedBy(ranking);
+
+            Assert.Equal(ranking, row.Ranking);
+            Assert.Equal(record.Kind, row.Kind);
+            Assert.Equal(record.Id, row.Id);
+            Assert.Equal(record.Xgid, row.Xgid);
+            Assert.Equal(ranked.UserPlayError, row.Error);
+            Assert.Equal(0.1813, row.Error!.Value, 12);
+            Assert.Equal(record.MatchLength, row.MatchLength);
+            Assert.Equal(record.Player, row.Player);
+            Assert.Equal(record.SourceFile, row.SourceFile);
+            Assert.Equal(record.IsStandardStart, row.IsStandardStart);
+            Assert.Equal(31, row.Roll);
+            Assert.Equal(ranked.Best.Candidate.Depth, row.AnalysisDepth);
+            Assert.Equal(ranked.Best.Candidate.AnalysisMode, row.AnalysisMode);
+            Assert.Equal(ranked.Best.Candidate.AnalysisLevel, row.AnalysisLevel);
+            Assert.Equal(ranked.Best.Candidate.Equity, row.Equity);
+            Assert.Equal(record.OnRollNeeds, row.OnRollNeeds);
+            Assert.Equal(record.OpponentNeeds, row.OpponentNeeds);
+            Assert.Equal(record.IsCrawford, row.IsCrawford);
+            Assert.Equal(record.IsJacoby, row.IsJacoby);
+            Assert.Equal(record.Board, row.Board);
+            Assert.Equal(record.AfterBestBoard(ranking), row.AfterBestBoard);
+            Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
+        }
     }
 
     [Fact]
@@ -313,23 +326,31 @@ public class DecisionRowSerializationTests
         // Added: the cube's own columns, and the checker play's empty.
         var record = TestRecords.Cube(decision: TestRecords.CubeData(
             userDoublerAction: null, userTakerAction: null, unstatedTakerActionError: 0.04));
-        var row = DecisionRow.From(record);
 
-        Assert.Equal(DecisionKind.Cube, row.Kind);
-        Assert.Equal(0.04, row.Error);
-        Assert.Equal(record.Decision.Depth, row.AnalysisDepth);
-        Assert.Equal(record.Decision.NoDoubleEquity, row.Equity);
-        Assert.Null(row.Roll);
-        Assert.Null(row.AfterBestBoard);
-        Assert.Null(row.AfterPlayerBoard);
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            var row = DecisionRow.From(record, ranking);
+
+            Assert.Equal(ranking, row.Ranking);
+            Assert.Equal(DecisionKind.Cube, row.Kind);
+            Assert.Equal(0.04, row.Error);
+            Assert.Equal(record.Decision.Depth, row.AnalysisDepth);
+            Assert.Equal(record.Decision.AnalysisMode, row.AnalysisMode);
+            Assert.Equal(record.Decision.AnalysisLevel, row.AnalysisLevel);
+            Assert.Equal(record.Decision.NoDoubleEquity, row.Equity);
+            Assert.Null(row.Roll);
+            Assert.Null(row.AfterBestBoard);
+            Assert.Null(row.AfterPlayerBoard);
+        }
     }
 
     [Fact]
-    public void DecisionRow_From_AgreesWithTheRecord_OnEveryFilterMember_EachKind()
+    public void DecisionRow_From_AgreesWithTheRecord_OnEveryFilterMember_EachKind_EachRanking()
     {
         // Added: the IDecisionFilterData contract, member by member, read off
-        // the record and off its row — the agreement the converter used to
-        // test after building the two separately is structural now.
+        // the record's view and off its row, each built for the same ranking
+        // — the agreement the converter used to test after building the two
+        // separately is structural now.
         foreach (BgDecisionData record in new BgDecisionData[]
                  {
                      TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(dice: [1, 3], userPlayIndex: 1)),
@@ -339,12 +360,16 @@ public class DecisionRowSerializationTests
                          descriptive: TestRecords.Descriptive(matchLength: 0)),
                  })
         {
-            IDecisionFilterData fromRecord = record;
-            IDecisionFilterData fromRow = DecisionRow.From(record);
+            foreach (var ranking in Enum.GetValues<PlayRanking>())
+            {
+                var fromRecord = record.ViewFor(ranking);
+                IDecisionFilterData fromRow = DecisionRow.From(record, ranking);
 
-            foreach (var property in typeof(IDecisionFilterData).GetProperties())
-                Assert.Equal(property.GetValue(fromRecord), property.GetValue(fromRow));
-            Assert.Equal(fromRecord.IsMoneyGame, fromRow.IsMoneyGame);
+                foreach (var property in typeof(IDecisionFilterData).GetProperties())
+                    Assert.Equal(property.GetValue(fromRecord), property.GetValue(fromRow));
+                Assert.Equal(fromRecord.IsMoneyGame, fromRow.IsMoneyGame);
+                Assert.Equal(ranking, fromRow.Ranking);
+            }
         }
     }
 
@@ -493,8 +518,8 @@ public class DecisionRowSerializationTests
 
         Assert.DoesNotContain("AnalysisMode", DecisionRow.CsvHeader);
         Assert.DoesNotContain("AnalysisLevel", DecisionRow.CsvHeader);
-        // Rewritten: 12 columns with the Kind column → 11 commas.
-        Assert.Equal(11, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
+        Assert.Equal(12, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
@@ -560,8 +585,8 @@ public class DecisionRowSerializationTests
         var row = PlayRow(matchLength: 0);
 
         Assert.DoesNotContain("IsMoneyGame", DecisionRow.CsvHeader);
-        // Rewritten: 12 columns with the Kind column → 11 commas.
-        Assert.Equal(11, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
+        Assert.Equal(12, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
@@ -634,10 +659,24 @@ public class DecisionRowSerializationTests
     public void DecisionRow_CsvHeader_ContainsExpectedColumns()
     {
         // Rewritten: the row carries its kind, so the CSV does — a column of
-        // its own beside the roll, never inferred from an empty roll.
+        // its own beside the roll, never inferred from an empty roll — and
+        // the ranking it was built for, last, since the error, depth and
+        // equity before it are that ranking's.
         Assert.Equal(
-            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity",
+            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking",
             DecisionRow.CsvHeader);
+    }
+
+    [Fact]
+    public void DecisionRow_ToCsvLine_EndsWithTheRankingsToken_EachKind()
+    {
+        // Added: the declared name, as on the wire.
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            Assert.EndsWith($",{ranking}", PlayRow(ranking: ranking).ToCsvLine());
+            Assert.EndsWith($",{ranking}", CubeRow(ranking: ranking).ToCsvLine());
+        }
+        Assert.EndsWith(",DepthFirst", PlayRow(ranking: PlayRanking.DepthFirst).ToCsvLine());
     }
 
     [Fact]
@@ -686,7 +725,7 @@ public class DecisionRowSerializationTests
         var row = PlayRow(
             error: 0.12345678, equity: -0.98765432, dice: [6, 3],
             matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
-        const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654";
+        const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity";
 
         var original = CultureInfo.CurrentCulture;
         try
@@ -719,8 +758,8 @@ public class DecisionRowSerializationTests
     {
         var row = PlayRow(board: new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]));
         var line = row.ToCsvLine();
-        // Rewritten: 12 columns with the Kind column → 11 commas.
-        Assert.Equal(11, line.Count(c => c == ','));
+        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
+        Assert.Equal(12, line.Count(c => c == ','));
     }
 
     // -----------------------------------------------------------------------
@@ -916,8 +955,8 @@ public class DecisionRowSerializationTests
         var row = PlayRow(dice: [6, 3]);
 
         Assert.DoesNotContain("Dice", DecisionRow.CsvHeader);
-        // Rewritten: 12 columns with the Kind column → 11 commas.
-        Assert.Equal(11, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
+        Assert.Equal(12, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
@@ -954,13 +993,16 @@ public class DecisionRowSerializationTests
         // Rewritten: the boards are the record's derivation, taken when the
         // row is built, and round-trip as the row's columns.
         var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 1));
-        var original = DecisionRow.From(record);
 
-        foreach (var (_, options) in WirePaths.Both)
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
         {
-            var restored = RoundTrip(original, options);
-            Assert.Equal(record.AfterBestBoard, restored.AfterBestBoard);
-            Assert.Equal(record.AfterPlayerBoard, restored.AfterPlayerBoard);
+            var original = DecisionRow.From(record, ranking);
+            foreach (var (_, options) in WirePaths.Both)
+            {
+                var restored = RoundTrip(original, options);
+                Assert.Equal(record.AfterBestBoard(ranking), restored.AfterBestBoard);
+                Assert.Equal(record.AfterPlayerBoard, restored.AfterPlayerBoard);
+            }
         }
     }
 
@@ -968,8 +1010,8 @@ public class DecisionRowSerializationTests
     public void DecisionRow_ToCsvLine_AfterBoardsNotInCsv()
     {
         var line = PlayRow().ToCsvLine();
-        // Rewritten: 12 columns with the Kind column → 11 commas.
-        Assert.Equal(11, line.Count(c => c == ','));
+        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
+        Assert.Equal(12, line.Count(c => c == ','));
     }
 
     [Fact]
@@ -984,11 +1026,15 @@ public class DecisionRowSerializationTests
     {
         // Rewritten: the row forwards the boards it took from the record.
         var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 2));
-        IDecisionFilterData row = DecisionRow.From(record);
 
-        Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
-        Assert.Equal(record.AfterBestBoard, row.AfterBestBoard);
-        Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            IDecisionFilterData row = DecisionRow.From(record, ranking);
+
+            Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
+            Assert.Equal(record.AfterBestBoard(ranking), row.AfterBestBoard);
+            Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
+        }
     }
 
     [Fact]
@@ -1215,7 +1261,7 @@ public class DecisionRowSerializationTests
         // fact.
         Assert.Equal(expectedToken, line.Split(',')[2]);
         Assert.DoesNotContain("IsJacoby", DecisionRow.CsvHeader);
-        Assert.Equal(11, line.Count(c => c == ','));
+        Assert.Equal(12, line.Count(c => c == ','));
         Assert.DoesNotContain("null", line);
     }
 }

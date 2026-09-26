@@ -40,7 +40,7 @@ public class DecisionRowCrawfordCubeTests
     public void CrawfordPlay_Projects()
     {
         // Rewritten from CrawfordPlay_Constructs_InEitherOrder.
-        var row = DecisionRow.From(TestRecords.CheckerPlay(position: Crawford()));
+        var row = TestRecords.Row(TestRecords.CheckerPlay(position: Crawford()));
 
         Assert.True(row.IsCrawford);
         Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
@@ -50,7 +50,7 @@ public class DecisionRowCrawfordCubeTests
     public void NonCrawfordCube_Projects()
     {
         // Rewritten from NonCrawfordCube_Constructs_InEitherOrder.
-        var row = DecisionRow.From(TestRecords.Cube(
+        var row = TestRecords.Row(TestRecords.Cube(
             position: TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3)));
 
         Assert.False(row.IsCrawford);
@@ -68,7 +68,7 @@ public class DecisionRowCrawfordCubeTests
     /// </summary>
     private static string CrawfordCubeDocument(bool kindFirst)
     {
-        var document = WirePaths.Document(DecisionRow.From(TestRecords.Cube()));
+        var document = WirePaths.Document(TestRecords.Row(TestRecords.Cube()));
         var kind = document["Kind"]!.DeepClone();
         document.Remove("Kind");
         document.Remove("IsCrawford");
@@ -108,7 +108,7 @@ public class DecisionRowCrawfordCubeTests
         // stated column now, required, so a row without it is refused rather
         // than read as either kind. (A checker row without its roll is
         // refused too: DecisionRowSerializationTests.)
-        var document = WirePaths.Document(DecisionRow.From(TestRecords.CheckerPlay(position: Crawford())));
+        var document = WirePaths.Document(TestRecords.Row(TestRecords.CheckerPlay(position: Crawford())));
         document.Remove("Kind");
 
         WirePaths.AssertRefused<DecisionRow>(document.ToJsonString());
@@ -118,7 +118,7 @@ public class DecisionRowCrawfordCubeTests
     public void Deserialize_CrawfordPlay_Loads_BothPaths()
     {
         // Rewritten from Deserialize_CrawfordPlay_Loads.
-        var row = DecisionRow.From(TestRecords.CheckerPlay(position: Crawford()));
+        var row = TestRecords.Row(TestRecords.CheckerPlay(position: Crawford()));
 
         foreach (var (_, options) in WirePaths.Both)
         {
@@ -132,7 +132,7 @@ public class DecisionRowCrawfordCubeTests
     public void Deserialize_NonCrawfordCube_Loads_BothPaths()
     {
         // Rewritten from Deserialize_NonCrawfordCube_Loads.
-        var row = DecisionRow.From(TestRecords.Cube(position: TestRecords.Position(onRollNeeds: 1, opponentNeeds: 1)));
+        var row = TestRecords.Row(TestRecords.Cube(position: TestRecords.Position(onRollNeeds: 1, opponentNeeds: 1)));
 
         foreach (var (_, options) in WirePaths.Both)
         {

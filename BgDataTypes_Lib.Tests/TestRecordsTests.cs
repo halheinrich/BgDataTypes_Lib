@@ -48,10 +48,14 @@ public class TestRecordsTests
         Assert.Equal(BoardPosition.Standard, play.Position.Mop);
         Assert.Equal(new DiceRoll(3, 1), play.Dice);
         Assert.Equal(["8/5 6/5", "13/10 6/5", "24/23 13/10"], play.Decision.Plays.Select(c => c.Notation).ToArray());
-        Assert.Equal(0, play.Decision.BestPlayIndex);
         Assert.Equal(0, play.Decision.UserPlayIndex);
-        Assert.Equal(0.0, play.Decision.EquityLoss(0));
-        Assert.Equal(0.0, play.Decision.UserPlayError);
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            var ranked = play.Decision.RankedBy(ranking);
+            Assert.Equal(0, ranked.Best.Index);
+            Assert.Equal(0.0, ranked.ForCandidate(0).Error);
+            Assert.Equal(0.0, ranked.UserPlayError);
+        }
         Assert.Equal(167, play.Position.OnRollPipCount);
         Assert.Equal(167, play.Position.OpponentPipCount);
         Assert.Equal(new XgDecisionId("match.xg", 1, 1, IsCube: false), play.Id);
@@ -93,7 +97,7 @@ public class TestRecordsTests
 
         var candidate = Assert.Single(play.Decision.Plays);
         Assert.Equal(0, candidate.Play.Count);
-        Assert.Equal(board.Flipped(), play.AfterBestBoard);
+        Assert.Equal(board.Flipped(), play.AfterBestBoard(PlayRanking.Equity));
 
         // A stated decision is taken as stated: the opening's candidates are
         // not valid from this board, so the record cannot be built.
@@ -116,13 +120,14 @@ public class TestRecordsTests
     }
 
     [Fact]
-    public void TheRow_IsTheProjectionOfTheDefaultCheckerPlay()
+    public void TheRow_IsTheProjectionOfTheDefaultCheckerPlay_UnderTheDefaultRanking()
     {
         var row = TestRecords.Row();
-        var expected = DecisionRow.From(TestRecords.CheckerPlay());
+        var expected = DecisionRow.From(TestRecords.CheckerPlay(), PlayRanking.Equity);
 
         Assert.Equal(
             JsonSerializer.Serialize(expected, WirePaths.Context),
             JsonSerializer.Serialize(row, WirePaths.Context));
+        Assert.Equal(PlayRanking.DepthFirst, TestRecords.Row(ranking: PlayRanking.DepthFirst).Ranking);
     }
 }

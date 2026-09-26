@@ -73,16 +73,18 @@ namespace BgDataTypes_Lib;
 /// </para>
 ///
 /// <para>
-/// Implements <see cref="IDecisionFilterData"/>: the members every kind has
-/// are forwarded publicly; the checker play's own (the roll and the
-/// after-boards) are public on <see cref="CheckerPlayDecision"/> and read as
-/// <see langword="null"/> through the interface for a cube decision. The view
-/// is a read-side derivation and is excluded from JSON — the stored members
-/// are the wire form (halheinrich/backgammon#14).
+/// <b>The filter view is built for a ranking.</b> The members every kind
+/// has are forwarded publicly and depend on no ranking. The
+/// <see cref="IDecisionFilterData"/> view also says which play is best and
+/// what the player's error is, which a ranking decides (SPEC-scoring §2a,
+/// halheinrich/backgammon#282), so the record is not itself a view:
+/// <see cref="ViewFor"/> builds one for a <see cref="PlayRanking"/>. Every
+/// derived member is excluded from JSON — the stored members are the wire
+/// form (halheinrich/backgammon#14).
 /// </para>
 /// </summary>
 [JsonConverter(typeof(BgDecisionDataJsonConverter))]
-public abstract class BgDecisionData : IDecisionFilterData
+public abstract class BgDecisionData
 {
     private readonly DecisionKind _kind;
 
@@ -341,86 +343,71 @@ public abstract class BgDecisionData : IDecisionFilterData
     public string SourceFile => Id.Filename;
 
     // -----------------------------------------------------------------------
-    //  IDecisionFilterData
+    //  What every decision has, forwarded — and the filter view, for a ranking
     //
-    //  A derived filter view, not wire data: every member forwards into (or
-    //  derives from) the stored members, which are the JSON wire form. The
-    //  whole block therefore carries [JsonIgnore] (halheinrich/backgammon#14).
-    //  The checker play's own members — Dice and the after-boards — are the
-    //  explicit implementations at the end, so they are not on a cube
-    //  decision's surface at all.
+    //  Derived members, not wire data: each forwards into (or derives from)
+    //  the stored members, which are the JSON wire form, so each carries
+    //  [JsonIgnore] (halheinrich/backgammon#14). None of them depends on a
+    //  ranking. The filter view's members that say best or error do, so the
+    //  record is not itself an IDecisionFilterData: ViewFor builds the view
+    //  for one ranking (SPEC-scoring §2a).
     // -----------------------------------------------------------------------
 
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IDecisionFilterData.Player"/>
     [JsonIgnore]
     public string? Player => Descriptive.OnRollName;
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IDecisionFilterData.OnRollNeeds"/>
     [JsonIgnore]
     public int OnRollNeeds => Position.OnRollNeeds;
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IDecisionFilterData.OpponentNeeds"/>
     [JsonIgnore]
     public int OpponentNeeds => Position.OpponentNeeds;
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IDecisionFilterData.IsCrawford"/>
     [JsonIgnore]
     public bool IsCrawford => Position.IsCrawford;
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IDecisionFilterData.IsJacoby"/>
     [JsonIgnore]
     public bool? IsJacoby => Position.IsJacoby;
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IDecisionFilterData.MatchLength"/>
     [JsonIgnore]
     public int MatchLength => Descriptive.MatchLength;
-    /// <inheritdoc/>
+    /// <summary>
+    /// True for an unlimited (money) session: <see cref="IDecisionFilterData.IsMoneyGame"/>'s
+    /// rule, redeclared concretely as <see cref="DecisionRow.IsMoneyGame"/> is,
+    /// now that the record reaches the filter view through
+    /// <see cref="ViewFor"/> rather than being one.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsMoneyGame => MatchLength == 0;
+    /// <inheritdoc cref="IDecisionFilterData.MoveNumber"/>
     /// <remarks>
     /// Derived from <see cref="Id"/>, as <see cref="Game"/> is
     /// (<see cref="XgDecisionId.MoveNumber"/>).
     /// </remarks>
     [JsonIgnore]
     public int? MoveNumber => Id.MoveInGame;
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IDecisionFilterData.IsStandardStart"/>
     [JsonIgnore]
     public bool? IsStandardStart => Descriptive.IsStandardStart;
-    /// <summary>
-    /// The mode axis of the analysis behind this decision: a checker play's
-    /// best candidate's (<see cref="CheckerPlayDecisionData.BestPlay"/>),
-    /// which always exists; a cube decision's cube analysis
-    /// (<see cref="CubeDecisionData.AnalysisMode"/>). Mirrors the
-    /// <see cref="DecisionRow.AnalysisDepth"/> convention.
-    /// </summary>
-    [JsonIgnore]
-    public AnalysisMode AnalysisMode => Match(
-        static play => play.Decision.BestPlay.AnalysisMode,
-        static cube => cube.Decision.AnalysisMode);
-    /// <summary>
-    /// The level axis of the same analysis <see cref="AnalysisMode"/> reports.
-    /// </summary>
-    [JsonIgnore]
-    public AnalysisLevel AnalysisLevel => Match(
-        static play => play.Decision.BestPlay.AnalysisLevel,
-        static cube => cube.Decision.AnalysisLevel);
-    /// <inheritdoc/>
-    /// <remarks>
-    /// A checker play's <see cref="CheckerPlayDecisionData.UserPlayError"/>; a
-    /// cube decision's <see cref="CubeDecisionData.UserDoubleError"/>, falling
-    /// back to <see cref="CubeDecisionData.UserTakeError"/>.
-    /// </remarks>
-    [JsonIgnore]
-    public double? FilterError => Match(
-        static play => play.Decision.UserPlayError,
-        static cube => cube.Decision.UserDoubleError ?? cube.Decision.UserTakeError);
-    /// <inheritdoc/>
+    /// <inheritdoc cref="IDecisionFilterData.Board"/>
     [JsonIgnore]
     public BoardPosition Board => Position.Mop;
 
-    /// <inheritdoc/>
-    DiceRoll? IDecisionFilterData.Dice => Match<DiceRoll?>(
-        static play => play.Dice,
-        static _ => null);
-    /// <inheritdoc/>
-    BoardPosition? IDecisionFilterData.AfterBestBoard => Match<BoardPosition?>(
-        static play => play.AfterBestBoard,
-        static _ => null);
-    /// <inheritdoc/>
-    BoardPosition? IDecisionFilterData.AfterPlayerBoard => Match(
-        static play => play.AfterPlayerBoard,
-        static _ => null);
+    /// <summary>
+    /// This decision as the filter layer reads it, for
+    /// <paramref name="ranking"/>: the members that say best or error — the
+    /// player's error, the best analysis's mode and level, the board the best
+    /// play leaves — are the ranking's, and every other member is the
+    /// record's. A cube decision's members do not depend on the ranking. Its
+    /// values are derived once, when the view is built; reading them
+    /// allocates nothing.
+    /// </summary>
+    /// <param name="ranking">The ranking; <see cref="PlayRanking.Equity"/> is the default an app without the setting uses.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ranking"/> is not a defined ranking.</exception>
+    public IDecisionFilterData ViewFor(PlayRanking ranking)
+    {
+        if (!Enum.IsDefined(ranking))
+            throw new ArgumentOutOfRangeException(nameof(ranking), ranking, "Not a defined play ranking.");
+        return new DecisionView(this, ranking);
+    }
 }

@@ -110,9 +110,11 @@ public class WireGoldenTests
             date: new DateOnly(2026, 9, 25), @event: "Club",
             isStandardStart: true, comment: "note", flagged: true));
 
-    internal static DecisionRow FullRow() => DecisionRow.From(FullRecord());
+    // The play row under the default ranking, the cube row under the other,
+    // so the goldens pin both of the Ranking column's tokens.
+    internal static DecisionRow FullRow() => DecisionRow.From(FullRecord(), PlayRanking.Equity);
 
-    internal static DecisionRow FullCubeRow() => DecisionRow.From(FullCubeRecord());
+    internal static DecisionRow FullCubeRow() => DecisionRow.From(FullCubeRecord(), PlayRanking.DepthFirst);
 
     // -----------------------------------------------------------------------
     //  The previous shapes — documents the library must refuse
@@ -148,10 +150,10 @@ public class WireGoldenTests
         """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"OnRollNeeds":3,"OpponentNeeds":5,"CubeSize":2,"CubeOwner":"OnRoll","IsCrawford":false,"IsJacoby":false},"Descriptive":{"MatchLength":7,"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","RolloutTrials":12960,"BookEdition":"V2","UnrecognizedLevelCode":null,"NoDoubleEquity":0.75,"DoubleTakeEquity":0.5,"CubelessNoDoubleEquity":0.375,"CubelessDoubleTakeEquity":0.625,"WinPctAfterNoDouble":0.51,"GammonPctAfterNoDouble":0.12,"BgPctAfterNoDouble":0.013,"LoseGammonPctAfterNoDouble":0.14,"LoseBgPctAfterNoDouble":0.015,"WinPctAfterDoubleTake":0.52,"GammonPctAfterDoubleTake":0.16,"BgPctAfterDoubleTake":0.017,"LoseGammonPctAfterDoubleTake":0.18,"LoseBgPctAfterDoubleTake":0.019,"ProbOfOpponentErrorJustifyingDouble":0.2,"UserDoublerAction":"Double","UserTakerAction":null,"UnstatedDoublerActionError":null,"UnstatedTakerActionError":0.04}}""";
 
     private const string CheckerPlayRowGolden =
-        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Error":0.125,"MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
+        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Ranking":"Equity","Error":0.125,"MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
 
     private const string CubeRowGolden =
-        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Error":0.25,"MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":null,"AnalysisDepth":"Book V2: 12960 trials. 4-ply","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.75,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
+        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Ranking":"DepthFirst","Error":0.25,"MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":null,"AnalysisDepth":"Book V2: 12960 trials. 4-ply","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.75,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
 
     public static TheoryData<string> Kinds => ["CheckerPlay", "Cube"];
 
@@ -343,7 +345,8 @@ public class WireGoldenTests
     {
         // Added: the values the previous golden stated are the ones the
         // records now derive — the source file from the id, the best play and
-        // the user's error from the equities — except the pip counts. The
+        // the user's error from the equities, under the equity ranking the
+        // previous shape's stored ones followed — except the pip counts. The
         // previous fixture stated 130 and 145 for a board whose counts are
         // not those: a stored copy disagreeing with what it copies, which the
         // derivation makes impossible.
@@ -357,9 +360,10 @@ public class WireGoldenTests
         Assert.NotEqual(position.GetProperty("OnRollPipCount").GetInt32(), play.Position.OnRollPipCount);
         Assert.NotEqual(position.GetProperty("OpponentPipCount").GetInt32(), play.Position.OpponentPipCount);
         Assert.Equal(previous.RootElement.GetProperty("Descriptive").GetProperty("SourceFile").GetString(), play.SourceFile);
-        Assert.Equal(decision.GetProperty("BestPlayIndex").GetInt32(), play.Decision.BestPlayIndex);
-        Assert.Equal(decision.GetProperty("UserPlayError").GetDouble(), play.Decision.UserPlayError);
-        Assert.Equal(decision.GetProperty("Plays")[1].GetProperty("EquityLoss").GetDouble(), play.Decision.EquityLoss(1));
+        var byEquity = play.Decision.RankedBy(PlayRanking.Equity);
+        Assert.Equal(decision.GetProperty("BestPlayIndex").GetInt32(), byEquity.Best.Index);
+        Assert.Equal(decision.GetProperty("UserPlayError").GetDouble(), byEquity.UserPlayError);
+        Assert.Equal(decision.GetProperty("Plays")[1].GetProperty("EquityLoss").GetDouble(), byEquity.ForCandidate(1).Error);
         Assert.Equal(decision.GetProperty("Plays")[0].GetProperty("LosePct").GetDouble(), play.Decision.Plays[0].LosePct!.Value, 12);
         Assert.Equal(decision.GetProperty("LosePctAfterNoDouble").GetDouble(), FullCubeRecord().Decision.LosePctAfterNoDouble, 12);
         Assert.Equal(decision.GetProperty("LosePctAfterDoubleTake").GetDouble(), FullCubeRecord().Decision.LosePctAfterDoubleTake, 12);

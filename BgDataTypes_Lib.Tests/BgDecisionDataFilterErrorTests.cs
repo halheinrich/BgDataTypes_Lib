@@ -3,12 +3,16 @@ using BgDataTypes_Lib;
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
-/// Pins <see cref="BgDecisionData.FilterError"/> for each kind: a cube
-/// decision's is <c>UserDoubleError ?? UserTakeError</c> — the doubling error
-/// if there is one, otherwise the take/pass error — and a checker play's
-/// is its <c>UserPlayError</c>. Each of those errors is derived where the
-/// record determines it (the error of a stated action, of a candidate the
-/// user played), and stored only where it does not.
+/// Pins the filter view's <see cref="IDecisionFilterData.FilterError"/>
+/// (<see cref="BgDecisionData.ViewFor"/>) for each kind, under each ranking: a
+/// cube decision's is <c>UserDoubleError ?? UserTakeError</c> — the doubling
+/// error if there is one, otherwise the take/pass error — whatever the
+/// ranking; a checker play's is the ranking's
+/// <see cref="RankedPlays.UserPlayError"/>. Each of those errors is derived
+/// where the record determines it (the error of a stated action, of a
+/// candidate the user played), and stored only where it does not. The
+/// records here rank alike under both rankings; where the rankings differ is
+/// pinned in <see cref="PlayRankingTests"/>.
 ///
 /// Reconstructed from two cases dropped when XgFilter_Lib's filter suite
 /// consolidated onto DecisionFilterAsserts; the logic they covered now lives on
@@ -16,6 +20,10 @@ namespace BgDataTypes_Lib.Tests;
 /// </summary>
 public class BgDecisionDataFilterErrorTests
 {
+    /// <summary>The record's filter view under each ranking.</summary>
+    private static IEnumerable<IDecisionFilterData> Views(BgDecisionData record) =>
+        Enum.GetValues<PlayRanking>().Select(record.ViewFor);
+
     /// <summary>
     /// A too-good position the user doubled and the opponent took: no double
     /// +1.042 against a cash of 1 is a doubling error of 0.042, and
@@ -34,8 +42,8 @@ public class BgDecisionDataFilterErrorTests
         var d = TestRecords.Cube(decision: TooGoodDoubledAndTaken());
 
         // Doubling error present → it wins over the take error.
-        Assert.Equal(0.042, d.FilterError!.Value, 12);
-        Assert.Equal(0.017, ((CubeDecision)d).Decision.UserTakeError!.Value, 12);
+        Assert.All(Views(d), view => Assert.Equal(0.042, view.FilterError!.Value, 12));
+        Assert.Equal(0.017, d.Decision.UserTakeError!.Value, 12);
     }
 
     [Fact]
@@ -46,7 +54,7 @@ public class BgDecisionDataFilterErrorTests
         var d = TestRecords.Cube(decision: TooGoodDoubledAndTaken(doubled: null));
 
         // No doubling error → fall back to the take/pass error.
-        Assert.Equal(0.017, d.FilterError!.Value, 12);
+        Assert.All(Views(d), view => Assert.Equal(0.017, view.FilterError!.Value, 12));
     }
 
     [Fact]
@@ -57,7 +65,7 @@ public class BgDecisionDataFilterErrorTests
         var d = TestRecords.Cube(decision: TestRecords.CubeData(
             userDoublerAction: null, userTakerAction: null, unstatedDoublerActionError: 0.042));
 
-        Assert.Equal(0.042, d.FilterError);
+        Assert.All(Views(d), view => Assert.Equal(0.042, view.FilterError));
     }
 
     [Fact]
@@ -67,7 +75,7 @@ public class BgDecisionDataFilterErrorTests
         // 6/5, whose equity loss against the best is 0.1604 − (−0.0127).
         var d = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 1));
 
-        Assert.Equal(0.1731, d.FilterError!.Value, 12);
+        Assert.All(Views(d), view => Assert.Equal(0.1731, view.FilterError!.Value, 12));
     }
 
     [Fact]
@@ -78,7 +86,7 @@ public class BgDecisionDataFilterErrorTests
         var d = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(
             userPlayIndex: null, unlistedPlayError: 0.031));
 
-        Assert.Equal(0.031, d.FilterError);
+        Assert.All(Views(d), view => Assert.Equal(0.031, view.FilterError));
     }
 
     [Fact]
@@ -88,7 +96,7 @@ public class BgDecisionDataFilterErrorTests
         var play = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: null));
         var cube = TestRecords.Cube(decision: TestRecords.CubeData(userDoublerAction: null, userTakerAction: null));
 
-        Assert.Null(play.FilterError);
-        Assert.Null(cube.FilterError);
+        Assert.All(Views(play), view => Assert.Null(view.FilterError));
+        Assert.All(Views(cube), view => Assert.Null(view.FilterError));
     }
 }

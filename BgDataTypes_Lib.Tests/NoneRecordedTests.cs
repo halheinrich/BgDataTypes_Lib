@@ -150,12 +150,13 @@ public class NoneRecordedTests
             decision: TestRecords.CheckerPlayData(plays: [
                 TestRecords.Candidate(analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown),
                 TestRecords.Candidate(play: [new(13, 10), new(6, 5)], equity: -0.1)]));
-        var row = DecisionRow.From(record);
+        // Under equity the best is the candidate whose depth is not recorded.
+        var row = DecisionRow.From(record, PlayRanking.Equity);
 
         Assert.Null(row.Player);
         Assert.Null(row.AnalysisDepth);
         Assert.Null(((IDecisionFilterData)row).Player);
-        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,…,Roll,AnalysisDepth,Equity
+        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,…,Roll,AnalysisDepth,Equity,Ranking
         var cells = row.ToCsvLine().Split(',');
         Assert.Equal(string.Empty, cells[4]);
         Assert.Equal(string.Empty, cells[10]);

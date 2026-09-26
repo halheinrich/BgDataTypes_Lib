@@ -5,9 +5,10 @@ namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
 /// A checker play's after-boards are derived, never stored (the arc's rule:
-/// no stored copy of a derivable value): the boards its best and its user's
-/// candidate leave from its position, through <see cref="BoardState"/>'s one
-/// play rule, in the frame <see cref="BoardState.ApplyPlay"/> leaves. For the
+/// no stored copy of a derivable value): the board each candidate leaves from
+/// its position — the best play's under a ranking, and the user's, among them
+/// — through <see cref="BoardState"/>'s one play rule, in the frame
+/// <see cref="BoardState.ApplyPlay"/> leaves. For the
 /// derivation never to fail on a record that exists, every candidate is valid
 /// from the position — a record invariant, refused at construction and, read
 /// as a <see cref="BgDecisionData"/>, as a <see cref="JsonException"/> on both
@@ -59,10 +60,32 @@ public class AfterBoardDerivationTests
     [InlineData(1, null)]
     public void AfterBoards_AreTheBoardsTheBestAndUsersPlaysLeave(int best, int? user)
     {
+        // The tester's candidates share one depth, so both rankings name the
+        // same best play; where they differ is pinned in PlayRankingTests.
         var record = Tester(best, user);
 
-        Assert.Equal(Applied(TesterMop, TesterPlays[best]), record.AfterBestBoard);
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+            Assert.Equal(Applied(TesterMop, TesterPlays[best]), record.AfterBestBoard(ranking));
         Assert.Equal(user is int u ? Applied(TesterMop, TesterPlays[u]) : null, record.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void AfterBoardOf_IsTheBoardEachCandidateLeaves()
+    {
+        var record = Tester(2, 1);
+
+        for (int i = 0; i < TesterPlays.Length; i++)
+            Assert.Equal(Applied(TesterMop, TesterPlays[i]), record.AfterBoardOf(i));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(4)]
+    public void AfterBoardOf_RefusesAnIndexThatIdentifiesNoCandidate(int index)
+    {
+        var record = Tester(2, 1);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => record.AfterBoardOf(index));
     }
 
     [Fact]
@@ -74,8 +97,8 @@ public class AfterBoardDerivationTests
         // the bar, which is the next mover's own bar, slot 25.
         var record = Tester(0, null);
 
-        Assert.Equal(-2, record.AfterBestBoard[22]);
-        Assert.Equal(2, record.AfterBestBoard[25]);
+        Assert.Equal(-2, record.AfterBestBoard(PlayRanking.Equity)[22]);
+        Assert.Equal(2, record.AfterBestBoard(PlayRanking.Equity)[25]);
     }
 
     [Fact]
@@ -96,9 +119,9 @@ public class AfterBoardDerivationTests
             Decision = decision, Position = position, Descriptive = TestRecords.Descriptive(),
         };
 
-        Assert.Equal(positionFirst.AfterBestBoard, decisionFirst.AfterBestBoard);
+        Assert.Equal(positionFirst.AfterBestBoard(PlayRanking.Equity), decisionFirst.AfterBestBoard(PlayRanking.Equity));
         Assert.Equal(positionFirst.AfterPlayerBoard, decisionFirst.AfterPlayerBoard);
-        Assert.Equal(Applied(TesterMop, TesterPlays[2]), decisionFirst.AfterBestBoard);
+        Assert.Equal(Applied(TesterMop, TesterPlays[2]), decisionFirst.AfterBestBoard(PlayRanking.Equity));
     }
 
     [Fact]
@@ -110,7 +133,8 @@ public class AfterBoardDerivationTests
         {
             var restored = Assert.IsType<CheckerPlayDecision>(JsonSerializer.Deserialize<BgDecisionData>(
                 JsonSerializer.Serialize<BgDecisionData>(record, options), options));
-            Assert.Equal(record.AfterBestBoard, restored.AfterBestBoard);
+            for (int i = 0; i < TesterPlays.Length; i++)
+                Assert.Equal(record.AfterBoardOf(i), restored.AfterBoardOf(i));
             Assert.Equal(record.AfterPlayerBoard, restored.AfterPlayerBoard);
         }
     }
@@ -120,14 +144,18 @@ public class AfterBoardDerivationTests
     {
         // Computed once while the record is built, not per read: the filter
         // reads them over many records.
+        // The rankings are built on the first read of each and kept, so the
+        // warm-up reads every door once.
         var record = Tester(0, 1);
-        IDecisionFilterData view = record;
-        int sink = record.AfterBestBoard[22] + view.AfterBestBoard!.Value[1];   // warm both doors
+        var view = record.ViewFor(PlayRanking.DepthFirst);
+        int sink = record.AfterBestBoard(PlayRanking.Equity)[22] + record.AfterBestBoard(PlayRanking.DepthFirst)[22]
+            + view.AfterBestBoard!.Value[1];
 
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 1000; i++)
         {
-            sink += record.AfterBestBoard[22] + record.AfterPlayerBoard!.Value[3];
+            sink += record.AfterBestBoard(PlayRanking.Equity)[22] + record.AfterPlayerBoard!.Value[3];
+            sink += record.AfterBestBoard(PlayRanking.DepthFirst)[22] + record.AfterBoardOf(2)[4];
             sink += view.AfterBestBoard!.Value[1];
         }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -204,7 +232,7 @@ public class AfterBoardDerivationTests
             position: TestRecords.Position(mop: TesterMop),
             decision: TestRecords.CheckerPlayData(plays: [TestRecords.Candidate(play: [])]));
 
-        Assert.Equal(TesterMop.Flipped(), record.AfterBestBoard);
+        Assert.Equal(TesterMop.Flipped(), record.AfterBestBoard(PlayRanking.Equity));
     }
 
     [Fact]
@@ -212,9 +240,13 @@ public class AfterBoardDerivationTests
     {
         // The flat export projection never computes them a second way.
         var record = Tester(3, 0);
-        var row = DecisionRow.From(record);
 
-        Assert.Equal(record.AfterBestBoard, row.AfterBestBoard);
-        Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            var row = DecisionRow.From(record, ranking);
+
+            Assert.Equal(record.AfterBestBoard(ranking), row.AfterBestBoard);
+            Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
+        }
     }
 }

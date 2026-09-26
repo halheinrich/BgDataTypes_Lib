@@ -19,6 +19,15 @@ namespace BgDataTypes_Lib;
 /// </para>
 ///
 /// <para>
+/// <b>Built for one ranking.</b> Which play is best, and so a checker play's
+/// error, depth, mode, level, equity and best after-board, is a ranking's
+/// (SPEC-scoring §2a, halheinrich/backgammon#282). A row is built for one
+/// <see cref="PlayRanking"/>, takes those columns from it, and states it
+/// (<see cref="Ranking"/>); an export under the other ranking is a second
+/// projection of the same records.
+/// </para>
+///
+/// <para>
 /// <b>It carries the kind</b> (<see cref="Kind"/>), and the other kind's
 /// columns are empty, never zero (halheinrich/backgammon#273): a cube row's
 /// <see cref="Roll"/> and after-boards are <see langword="null"/> — empty
@@ -48,53 +57,54 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     }
 
     /// <summary>
-    /// The row of <paramref name="record"/>: every column taken from it, the
-    /// shared ones through its <see cref="IDecisionFilterData"/> view, so row
-    /// and record agree on all of them by construction.
+    /// The row of <paramref name="record"/> under <paramref name="ranking"/>:
+    /// every column taken from it, the shared ones through its
+    /// <see cref="IDecisionFilterData"/> view for the ranking
+    /// (<see cref="BgDecisionData.ViewFor"/>), so row and record agree on all
+    /// of them by construction.
     /// </summary>
+    /// <param name="record">The decision.</param>
+    /// <param name="ranking">The ranking the row's best and error columns are derived under; <see cref="PlayRanking.Equity"/> is the default an app without the setting uses.</param>
     /// <exception cref="ArgumentNullException"><paramref name="record"/> is <see langword="null"/>.</exception>
-    public static DecisionRow From(BgDecisionData record)
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ranking"/> is not a defined ranking.</exception>
+    public static DecisionRow From(BgDecisionData record, PlayRanking ranking)
     {
         ArgumentNullException.ThrowIfNull(record);
+        var view = record.ViewFor(ranking);
 
-        // The kind's own columns: the checker play's roll, best-play depth and
-        // equity, and after-boards; the cube decision's depth and no-double
-        // equity, with the checker columns empty.
-        var (roll, depth, equity, afterBest, afterPlayer) = record.Match(
-            static play => (
-                (int?)(play.Decision.Dice[0] * 10 + play.Decision.Dice[1]),
-                play.Decision.BestPlay.Depth,
-                play.Decision.BestPlay.Equity,
-                (BoardPosition?)play.AfterBestBoard,
-                play.AfterPlayerBoard),
-            static cube => (
-                (int?)null,
-                cube.Decision.Depth,
-                cube.Decision.NoDoubleEquity,
-                (BoardPosition?)null,
-                (BoardPosition?)null));
+        // The kind's own columns: the checker play's roll, and its best play's
+        // depth and equity under the ranking; the cube decision's depth and
+        // no-double equity, with the checker columns empty.
+        var (roll, depth, equity) = record.Match(
+            play =>
+            {
+                var best = play.Decision.RankedBy(ranking).Best.Candidate;
+                return ((int?)(play.Decision.Dice[0] * 10 + play.Decision.Dice[1]), best.Depth, best.Equity);
+            },
+            static cube => ((int?)null, cube.Decision.Depth, cube.Decision.NoDoubleEquity));
 
         return new DecisionRow
         {
             Kind = record.Kind,
             Id = record.Id,
             Xgid = record.Xgid,
-            Error = record.FilterError,
+            Ranking = ranking,
+            Error = view.FilterError,
             MatchLength = record.MatchLength,
             Player = record.Player,
             IsStandardStart = record.IsStandardStart,
             Roll = roll,
             AnalysisDepth = depth,
-            AnalysisMode = record.AnalysisMode,
-            AnalysisLevel = record.AnalysisLevel,
+            AnalysisMode = view.AnalysisMode,
+            AnalysisLevel = view.AnalysisLevel,
             Equity = equity,
             OnRollNeeds = record.OnRollNeeds,
             OpponentNeeds = record.OpponentNeeds,
             IsCrawford = record.IsCrawford,
             IsJacoby = record.IsJacoby,
             Board = record.Board,
-            AfterBestBoard = afterBest,
-            AfterPlayerBoard = afterPlayer,
+            AfterBestBoard = view.AfterBestBoard,
+            AfterPlayerBoard = view.AfterPlayerBoard,
         };
     }
 
@@ -118,10 +128,22 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     public required string Xgid { get; init; }
 
     /// <summary>
-    /// The user's error (≥ 0) — the record's <see cref="IDecisionFilterData.FilterError"/>:
-    /// a checker play's equity loss against the best play, a cube decision's
-    /// doubling error or, failing that, its take error. <see langword="null"/>
-    /// when no user decision is recorded — an empty CSV cell, never 0.
+    /// The ranking the row was built for (<see cref="PlayRanking"/>): a
+    /// checker play's <see cref="Error"/>, <see cref="Equity"/>,
+    /// <see cref="AnalysisDepth"/>, <see cref="AnalysisMode"/>,
+    /// <see cref="AnalysisLevel"/> and <see cref="AfterBestBoard"/> are that
+    /// ranking's. A cube row's columns do not depend on it; it still states
+    /// the ranking it was exported under. The last CSV column.
+    /// </summary>
+    public required PlayRanking Ranking { get; init; }
+
+    /// <summary>
+    /// The user's error (≥ 0) — the record's <see cref="IDecisionFilterData.FilterError"/>
+    /// under <see cref="Ranking"/>: a checker play's error against the
+    /// ranking's best play, a cube decision's doubling error or, failing that,
+    /// its take error. <see langword="null"/> when no user decision is
+    /// recorded, or the ranking does not score the player's move — an empty
+    /// CSV cell, never 0.
     /// </summary>
     public double? Error { get; init; }
 
@@ -203,8 +225,9 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     /// <summary>
     /// Human-readable analysis depth label, e.g. "3-ply", "Rollout: 1296
-    /// trials. 3-ply": a checker play's best candidate's
-    /// (<see cref="PlayCandidate.Depth"/>), a cube decision's cube analysis's
+    /// trials. 3-ply": a checker play's best candidate's under
+    /// <see cref="Ranking"/> (<see cref="PlayCandidate.Depth"/>), a cube
+    /// decision's cube analysis's
     /// (<see cref="CubeDecisionData.Depth"/>). <see langword="null"/> when
     /// the producer recorded no label — an empty CSV cell — never empty text.
     /// </summary>
@@ -230,8 +253,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     /// <summary>
     /// The equity of the analysis's best line: a checker play's best
-    /// candidate's (<see cref="PlayCandidate.Equity"/>), a cube decision's
-    /// no-double equity (<see cref="CubeDecisionData.NoDoubleEquity"/>).
+    /// candidate's under <see cref="Ranking"/> (<see cref="PlayCandidate.Equity"/>),
+    /// a cube decision's no-double equity (<see cref="CubeDecisionData.NoDoubleEquity"/>).
     /// </summary>
     public required double Equity { get; init; }
 
@@ -300,9 +323,10 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     public required BoardPosition Board { get; init; }
 
     /// <summary>
-    /// The board a checker play's best play leaves, in the next mover's frame
-    /// — the record's <see cref="CheckerPlayDecision.AfterBestBoard"/>, taken
-    /// from it when the row is built. Always present on a checker-play row;
+    /// The board a checker play's best play under <see cref="Ranking"/> leaves,
+    /// in the next mover's frame — the record's
+    /// <see cref="CheckerPlayDecision.AfterBestBoard"/>, taken from it when the
+    /// row is built. Always present on a checker-play row;
     /// <see langword="null"/> on a cube row. Not included in CSV output.
     /// </summary>
     public BoardPosition? AfterBestBoard { get; init; }
@@ -371,7 +395,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     /// <summary>CSV header row matching the column order of <see cref="ToCsvLine"/>.</summary>
     public static string CsvHeader =>
-        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity";
+        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking";
 
     /// <summary>
     /// Formats this row as a CSV line (no trailing newline). A
@@ -396,7 +420,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             Kind,
             Roll?.ToString(invariant),
             CsvEscape(AnalysisDepth),
-            Equity.ToString("G6", invariant));
+            Equity.ToString("G6", invariant),
+            Ranking);
     }
 
     /// <summary><paramref name="value"/> as a CSV cell; <see langword="null"/> (none recorded) is an empty one.</summary>

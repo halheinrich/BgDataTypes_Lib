@@ -68,13 +68,14 @@ public class BgDecisionDataSerializationTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void CheckerPlay_EquityLoss_OfABestPlay_IsZero_AfterARoundTrip()
+    public void CheckerPlay_ErrorOfABestPlay_IsZero_AfterARoundTrip()
     {
         // Rewritten from PlayCandidate_EquityLoss_Zero_RoundTrips: the loss is
-        // no longer a candidate's member but the decision's derivation — the
-        // candidate's equity against the best's — so it round-trips as the
-        // equities do. EquityLoss(i) == 0 is the test for "is this a best
-        // play"; several candidates may tie, and BestPlayIndex names the first.
+        // no longer a candidate's member but a ranking's derivation — the
+        // candidate's equity against the ranking's best — so it round-trips as
+        // the equities do. An error of exactly 0 is the test for "is this a
+        // best play"; several candidates may tie, and the ranking's best is
+        // the first of them in the stored order.
         var original = TestRecords.CheckerPlayData(plays:
         [
             TestRecords.Candidate(play: [new(8, 5), new(6, 5)], equity: -0.142),
@@ -83,13 +84,17 @@ public class BgDecisionDataSerializationTests
         var restored = JsonSerializer.Deserialize<CheckerPlayDecisionData>(
             JsonSerializer.Serialize(original, Options), Options)!;
 
-        Assert.Equal(0, restored.BestPlayIndex);
-        Assert.Equal(0.0, restored.EquityLoss(0));
-        Assert.Equal(0.0, restored.EquityLoss(1));
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            var ranked = restored.RankedBy(ranking);
+            Assert.Equal(0, ranked.Best.Index);
+            Assert.Equal(0.0, ranked.ForCandidate(0).Error);
+            Assert.Equal(0.0, ranked.ForCandidate(1).Error);
+        }
     }
 
     [Fact]
-    public void CheckerPlay_EquityLoss_OfAWorsePlay_IsTheEquityGap_AfterARoundTrip()
+    public void CheckerPlay_ErrorOfAWorsePlay_IsTheEquityGap_AfterARoundTrip()
     {
         // Rewritten from PlayCandidate_RoundTrip_PopulatedEquityLoss: the gap
         // is derived from the two equities, which are what the wire carries.
@@ -101,8 +106,11 @@ public class BgDecisionDataSerializationTests
         var restored = JsonSerializer.Deserialize<CheckerPlayDecisionData>(
             JsonSerializer.Serialize(original, Options), Options)!;
 
-        Assert.Equal(-0.142 - -0.187, restored.EquityLoss(1));
-        Assert.Equal(original.EquityLoss(1), restored.EquityLoss(1));
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            Assert.Equal(-0.142 - -0.187, restored.RankedBy(ranking).ForCandidate(1).Error);
+            Assert.Equal(original.RankedBy(ranking).ForCandidate(1).Error, restored.RankedBy(ranking).ForCandidate(1).Error);
+        }
     }
 
     [Fact]
@@ -631,8 +639,8 @@ public class BgDecisionDataSerializationTests
         Assert.Equal("8/5 6/1", restored.Plays[0].Notation);
         Assert.Equal("3-ply", restored.Plays[0].Depth);
         Assert.Equal("3-ply", restored.Plays[1].Depth);
-        // Rewritten: the loss is the decision's derivation from the equities.
-        Assert.Equal(-0.120 - -0.165, restored.EquityLoss(1));
+        // Rewritten: the loss is a ranking's derivation from the equities.
+        Assert.Equal(-0.120 - -0.165, restored.RankedBy(PlayRanking.Equity).ForCandidate(1).Error);
     }
 
     [Fact]
@@ -781,7 +789,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.Position.CubeOwner, restored.Position.CubeOwner);
         Assert.Equal(original.Decision.Dice, restored.Decision.Dice);
         Assert.Equal(2, restored.Decision.Plays.Count);
-        Assert.Equal(0.211 - 0.198, restored.Decision.EquityLoss(1));
+        Assert.Equal(0.211 - 0.198, restored.Decision.RankedBy(PlayRanking.Equity).ForCandidate(1).Error);
         Assert.Equal(original.Descriptive.OnRollName, restored.Descriptive.OnRollName);
         Assert.Equal(original.Descriptive.Date, restored.Descriptive.Date);
         Assert.Equal(original.Descriptive.Event, restored.Descriptive.Event);
@@ -789,16 +797,16 @@ public class BgDecisionDataSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  UserPlayError / UserDoubleError / UserTakeError — each on its kind
+    //  The user's errors — the play's under a ranking, the cube's on its kind
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void CheckerPlayDecisionData_RoundTrip_WithUserPlayError()
+    public void CheckerPlayDecisionData_RoundTrip_WithTheUsersPlayError()
     {
         // Rewritten: the user's error is no longer stated beside the candidate
-        // the user played — it is that candidate's loss against the best,
-        // derived from the equities the wire carries, so it round-trips as
-        // they do and is not written.
+        // the user played — it is that candidate's loss against a ranking's
+        // best, derived from the equities the wire carries, so it round-trips
+        // as they do and is not written.
         var original = TestRecords.CheckerPlayData(
             dice: [3, 5],
             plays: [
@@ -810,7 +818,8 @@ public class BgDecisionDataSerializationTests
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<CheckerPlayDecisionData>(json, Options)!;
 
-        Assert.Equal(-0.120 - -0.165, restored.UserPlayError);
+        Assert.All(Enum.GetValues<PlayRanking>(), ranking =>
+            Assert.Equal(-0.120 - -0.165, restored.RankedBy(ranking).UserPlayError));
         Assert.Equal(1, restored.UserPlayIndex);
         Assert.DoesNotContain("\"UserPlayError\"", json);
         Assert.DoesNotContain("UserDoubleError", json);
@@ -854,14 +863,14 @@ public class BgDecisionDataSerializationTests
         var cube = JsonSerializer.Deserialize<CubeDecisionData>(
             JsonSerializer.Serialize(TestRecords.CubeData(userDoublerAction: null, userTakerAction: null), Options), Options)!;
 
-        Assert.Null(play.UserPlayError);
+        Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Null(play.RankedBy(ranking).UserPlayError));
         Assert.Null(cube.UserDoubleError);
         Assert.Null(cube.UserTakeError);
 
         var playAbsent = ReadWithout(
             TestRecords.CheckerPlayData(userPlayIndex: null, unlistedPlayError: 0.1), "UnlistedPlayError");
         Assert.Null(playAbsent.UnlistedPlayError);
-        Assert.Null(playAbsent.UserPlayError);
+        Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Null(playAbsent.RankedBy(ranking).UserPlayError));
         var cubeAbsent = ReadWithout(
             TestRecords.CubeData(userDoublerAction: null, userTakerAction: null,
                 unstatedDoublerActionError: 0.2, unstatedTakerActionError: 0.3),
@@ -947,7 +956,9 @@ public class BgDecisionDataSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  IDecisionFilterData — BgDecisionData
+    //  IDecisionFilterData — a record's view, built for a ranking. The
+    //  members here do not depend on it; where the rankings differ is pinned
+    //  in PlayRankingTests.
     // -----------------------------------------------------------------------
 
     [Fact]
@@ -966,7 +977,7 @@ public class BgDecisionDataSerializationTests
                 plays: [TestRecords.Candidate(play: [new(1, 0), new(1, 0)])],
                 userPlayIndex: null,
                 unlistedPlayError: 0.034),
-            descriptive: TestRecords.Descriptive(onRollName: "Hal"));
+            descriptive: TestRecords.Descriptive(onRollName: "Hal")).ViewFor(PlayRanking.Equity);
 
         Assert.Equal("Hal", data.Player);
         Assert.Equal(DecisionKind.CheckerPlay, data.Kind);
@@ -985,7 +996,7 @@ public class BgDecisionDataSerializationTests
         // taking double/take +1.011 loses 0.011.
         IDecisionFilterData data = TestRecords.Cube(decision: TestRecords.CubeData(
             noDoubleEquity: 1.025,
-            doubleTakeEquity: 1.011));
+            doubleTakeEquity: 1.011)).ViewFor(PlayRanking.Equity);
 
         Assert.Equal(DecisionKind.Cube, data.Kind);
         Assert.Equal(0.025, data.FilterError!.Value, 12);  // UserDoubleError takes precedence
@@ -999,7 +1010,7 @@ public class BgDecisionDataSerializationTests
         IDecisionFilterData data = TestRecords.Cube(decision: TestRecords.CubeData(
             noDoubleEquity: 1.025,
             doubleTakeEquity: 1.011,
-            userDoublerAction: null));
+            userDoublerAction: null)).ViewFor(PlayRanking.Equity);
 
         Assert.Equal(0.011, data.FilterError!.Value, 12);  // Falls through to UserTakeError
     }
@@ -1010,7 +1021,7 @@ public class BgDecisionDataSerializationTests
         var mop = new int[26];
         mop[6] = -5; mop[13] = 5;
 
-        IDecisionFilterData data = TestRecords.Cube(position: TestRecords.Position(mop: new BoardPosition(mop)));
+        IDecisionFilterData data = TestRecords.Cube(position: TestRecords.Position(mop: new BoardPosition(mop))).ViewFor(PlayRanking.Equity);
 
         Assert.Equal(new BoardPosition(mop), data.Board);
     }
@@ -1019,7 +1030,7 @@ public class BgDecisionDataSerializationTests
     public void BgDecisionData_IDecisionFilterData_MatchLength()
     {
         IDecisionFilterData data = TestRecords.CheckerPlay(
-            descriptive: TestRecords.Descriptive(matchLength: 11));
+            descriptive: TestRecords.Descriptive(matchLength: 11)).ViewFor(PlayRanking.Equity);
 
         Assert.Equal(11, data.MatchLength);
     }
@@ -1027,12 +1038,14 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void BgDecisionData_IDecisionFilterData_IsMoneyGame_MoneySession()
     {
-        // BgDecisionData declares no IsMoneyGame of its own — the interface
-        // default (MatchLength == 0) is what answers here.
+        // The view declares no IsMoneyGame of its own — the interface default
+        // (MatchLength == 0) is what answers there; the record's own states
+        // the same rule.
         IDecisionFilterData data = TestRecords.CheckerPlay(
-            descriptive: TestRecords.Descriptive(matchLength: 0));
+            descriptive: TestRecords.Descriptive(matchLength: 0)).ViewFor(PlayRanking.Equity);
 
         Assert.True(data.IsMoneyGame);
+        Assert.True(TestRecords.CheckerPlay(descriptive: TestRecords.Descriptive(matchLength: 0)).IsMoneyGame);
     }
 
     [Theory]
@@ -1041,7 +1054,7 @@ public class BgDecisionDataSerializationTests
     public void BgDecisionData_IDecisionFilterData_IsMoneyGame_FalseForAnyMatchLength(int matchLength)
     {
         IDecisionFilterData data = TestRecords.CheckerPlay(
-            descriptive: TestRecords.Descriptive(matchLength: matchLength));
+            descriptive: TestRecords.Descriptive(matchLength: matchLength)).ViewFor(PlayRanking.Equity);
 
         Assert.False(data.IsMoneyGame);
     }
@@ -1057,7 +1070,7 @@ public class BgDecisionDataSerializationTests
     {
         IDecisionFilterData data = TestRecords.CheckerPlay(
             position: TestRecords.Position(onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby),
-            descriptive: TestRecords.Descriptive(matchLength: 0));
+            descriptive: TestRecords.Descriptive(matchLength: 0)).ViewFor(PlayRanking.Equity);
 
         Assert.True(data.IsMoneyGame);
         Assert.Equal(isJacoby, data.IsJacoby);
@@ -1070,7 +1083,7 @@ public class BgDecisionDataSerializationTests
         // the producer stamps the fact onto money records only.
         IDecisionFilterData data = TestRecords.CheckerPlay(
             position: TestRecords.Position(onRollNeeds: 3, opponentNeeds: 5),
-            descriptive: TestRecords.Descriptive(matchLength: 9));
+            descriptive: TestRecords.Descriptive(matchLength: 9)).ViewFor(PlayRanking.Equity);
 
         Assert.False(data.IsMoneyGame);
         Assert.Null(data.IsJacoby);
@@ -1084,7 +1097,7 @@ public class BgDecisionDataSerializationTests
         // is what makes it match neither money score token downstream.
         IDecisionFilterData data = TestRecords.CheckerPlay(
             position: TestRecords.Position(onRollNeeds: 0, opponentNeeds: 0),
-            descriptive: TestRecords.Descriptive(matchLength: 0));
+            descriptive: TestRecords.Descriptive(matchLength: 0)).ViewFor(PlayRanking.Equity);
 
         Assert.True(data.IsMoneyGame);
         Assert.Null(data.IsJacoby);
@@ -1099,7 +1112,7 @@ public class BgDecisionDataSerializationTests
         // the stored fact, not a second place the rule is decided.
         IDecisionFilterData data = TestRecords.CheckerPlay(
             position: TestRecords.Position(onRollNeeds: 3, opponentNeeds: 5, isJacoby: true),
-            descriptive: TestRecords.Descriptive(matchLength: 9));
+            descriptive: TestRecords.Descriptive(matchLength: 9)).ViewFor(PlayRanking.Equity);
 
         Assert.True(data.IsJacoby);
     }
@@ -1116,7 +1129,8 @@ public class BgDecisionDataSerializationTests
         Assert.Contains("\"MatchLength\":0", json);
 
         var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
-        Assert.True(((IDecisionFilterData)restored).IsMoneyGame);
+        Assert.True(restored.IsMoneyGame);
+        Assert.True(restored.ViewFor(PlayRanking.Equity).IsMoneyGame);
     }
 
     // -----------------------------------------------------------------------
@@ -1128,7 +1142,7 @@ public class BgDecisionDataSerializationTests
     {
         IDecisionFilterData data = TestRecords.Cube(decision: TestRecords.CubeData(
             analysisMode: AnalysisMode.Evaluation,
-            analysisLevel: AnalysisLevel.XgRollerPlus));
+            analysisLevel: AnalysisLevel.XgRollerPlus)).ViewFor(PlayRanking.Equity);
 
         Assert.Equal(AnalysisMode.Evaluation, data.AnalysisMode);
         Assert.Equal(AnalysisLevel.XgRollerPlus, data.AnalysisLevel);
@@ -1139,8 +1153,9 @@ public class BgDecisionDataSerializationTests
     {
         // The best deliberately not the first candidate, to pin that the
         // derivation reads the best rather than the first. Rewritten: the best
-        // is the higher equity's, no longer a stated index.
-        IDecisionFilterData data = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(
+        // is a ranking's, no longer a stated index — here the deeper and the
+        // higher equity alike, so both rankings name it.
+        var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(
             plays: [
                 TestRecords.Candidate(
                     play: [new(8, 5), new(6, 5)],
@@ -1154,27 +1169,33 @@ public class BgDecisionDataSerializationTests
                     equity: 0.2)
             ]));
 
-        Assert.Equal(AnalysisMode.Rollout, data.AnalysisMode);
-        Assert.Equal(AnalysisLevel.Ply1, data.AnalysisLevel);
+        foreach (var data in Enum.GetValues<PlayRanking>().Select(record.ViewFor))
+        {
+            Assert.Equal(AnalysisMode.Rollout, data.AnalysisMode);
+            Assert.Equal(AnalysisLevel.Ply1, data.AnalysisLevel);
+        }
     }
 
     [Fact]
     public void BgDecisionData_AnalysisModeAndLevel_CheckerPlay_TheBestCannotBeStated()
     {
         // Rewritten from ..._OutOfRangeBestPlayIndex_CannotBeBuilt (itself
-        // from ..._ReturnUnknown): the best play is derived from the
-        // candidates' equities, so there is no index to state out of range —
-        // no setter for code, and a document still stating one, in or out of
-        // range, reads with it ignored while the derivation stands. The
-        // derivation always reads a real candidate.
-        Assert.False(typeof(CheckerPlayDecisionData).GetProperty(nameof(CheckerPlayDecisionData.BestPlayIndex))!.CanWrite);
+        // from ..._ReturnUnknown): the best play is a ranking's derivation
+        // from the candidates, so there is no index to state out of range —
+        // no public member at all, and a document still stating one, in or
+        // out of range, reads with it ignored while each ranking's derivation
+        // stands. The derivation always reads a real candidate.
+        Assert.Null(typeof(CheckerPlayDecisionData).GetProperty("BestPlayIndex"));
 
         foreach (int stated in new[] { 2, 7 })
         {
             var document = WirePaths.Document(TestRecords.CheckerPlayData());
             document["BestPlayIndex"] = stated;
             foreach (var (_, options) in WirePaths.Both)
-                Assert.Equal(0, JsonSerializer.Deserialize<CheckerPlayDecisionData>(document.ToJsonString(), options)!.BestPlayIndex);
+            {
+                var read = JsonSerializer.Deserialize<CheckerPlayDecisionData>(document.ToJsonString(), options)!;
+                Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Equal(0, read.RankedBy(ranking).Best.Index));
+            }
         }
     }
 
@@ -1211,7 +1232,7 @@ public class BgDecisionDataSerializationTests
             dice: [6, 3], plays: [TestRecords.Candidate(play: [new(24, 18), new(24, 21)])]));
 
         Assert.Equal(new DiceRoll(6, 3), play.Dice);
-        Assert.Equal(new DiceRoll(6, 3), ((IDecisionFilterData)play).Dice);
+        Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Equal(new DiceRoll(6, 3), play.ViewFor(ranking).Dice));
     }
 
     [Fact]
@@ -1231,7 +1252,7 @@ public class BgDecisionDataSerializationTests
     {
         // Rewritten: a cube decision has no dice to be [0, 0] — it has no Dice
         // member at all, and reads null through the filter interface.
-        IDecisionFilterData data = TestRecords.Cube();
+        IDecisionFilterData data = TestRecords.Cube().ViewFor(PlayRanking.Equity);
 
         Assert.Null(data.Dice);
         Assert.Null(typeof(CubeDecision).GetProperty("Dice"));
@@ -1263,7 +1284,7 @@ public class BgDecisionDataSerializationTests
         Assert.DoesNotContain("\"Dice\":\"63\"", json);
 
         var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
-        Assert.Equal(new DiceRoll(6, 3), ((IDecisionFilterData)restored).Dice);
+        Assert.Equal(new DiceRoll(6, 3), restored.ViewFor(PlayRanking.Equity).Dice);
     }
 
     // -----------------------------------------------------------------------
@@ -1282,7 +1303,8 @@ public class BgDecisionDataSerializationTests
         foreach (var (_, options) in WirePaths.Both)
         {
             var restored = Assert.IsType<CheckerPlayDecision>(RoundTrip(original, options));
-            Assert.Equal(original.AfterBestBoard, restored.AfterBestBoard);
+            foreach (var ranking in Enum.GetValues<PlayRanking>())
+                Assert.Equal(original.AfterBestBoard(ranking), restored.AfterBestBoard(ranking));
             Assert.Equal(original.AfterPlayerBoard, restored.AfterPlayerBoard);
         }
     }
@@ -1296,7 +1318,7 @@ public class BgDecisionDataSerializationTests
         var play = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: null));
 
         Assert.Null(play.AfterPlayerBoard);
-        Assert.NotEqual(BoardPosition.Empty, play.AfterBestBoard);
+        Assert.NotEqual(BoardPosition.Empty, play.AfterBestBoard(PlayRanking.Equity));
     }
 
     [Fact]
@@ -1316,11 +1338,14 @@ public class BgDecisionDataSerializationTests
     {
         // Rewritten from ..._AfterBoards_ForwardFromOutcome.
         var play = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 1));
-        IDecisionFilterData data = play;
 
-        Assert.Equal(play.AfterBestBoard, data.AfterBestBoard);
-        Assert.Equal(play.AfterPlayerBoard, data.AfterPlayerBoard);
-        Assert.NotNull(data.AfterPlayerBoard);
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            var data = play.ViewFor(ranking);
+            Assert.Equal(play.AfterBestBoard(ranking), data.AfterBestBoard);
+            Assert.Equal(play.AfterPlayerBoard, data.AfterPlayerBoard);
+            Assert.NotNull(data.AfterPlayerBoard);
+        }
     }
 
     [Fact]
@@ -1328,12 +1353,12 @@ public class BgDecisionDataSerializationTests
     {
         // Rewritten: a cube decision has no after-board members at all, and
         // reads null through the filter interface.
-        IDecisionFilterData data = TestRecords.Cube();
+        IDecisionFilterData data = TestRecords.Cube().ViewFor(PlayRanking.Equity);
 
         Assert.Equal(DecisionKind.Cube, data.Kind);
         Assert.Null(data.AfterBestBoard);
         Assert.Null(data.AfterPlayerBoard);
-        Assert.Null(typeof(CubeDecision).GetProperty("AfterBestBoard"));
+        Assert.Null(typeof(CubeDecision).GetMember("AfterBestBoard").SingleOrDefault());
     }
 
     // -----------------------------------------------------------------------
@@ -1417,7 +1442,7 @@ public class BgDecisionDataSerializationTests
             id: new XgDecisionId("match.xg", Game: 1, MoveNumber: 12, IsCube: false),
             descriptive: TestRecords.Descriptive(
                 onRollName: "Hal",
-                isStandardStart: true));
+                isStandardStart: true)).ViewFor(PlayRanking.Equity);
 
         Assert.Equal(12, data.MoveNumber);
         Assert.True(data.IsStandardStart);
@@ -1429,7 +1454,7 @@ public class BgDecisionDataSerializationTests
         // Rewritten from ..._MoveNumberAndIsStandardStart_ForwardZeroAndFalse:
         // a standalone position has no move number and no start for the view
         // to forward (halheinrich/backgammon#124).
-        IDecisionFilterData data = TestRecords.CheckerPlay(id: new XgpDecisionId("test.xgp"));
+        IDecisionFilterData data = TestRecords.CheckerPlay(id: new XgpDecisionId("test.xgp")).ViewFor(PlayRanking.Equity);
 
         Assert.Null(data.MoveNumber);
         Assert.Null(data.IsStandardStart);

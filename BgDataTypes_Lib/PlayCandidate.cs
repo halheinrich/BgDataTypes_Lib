@@ -5,11 +5,12 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// One analysed candidate play of a checker-play decision — one row of the
 /// producing analyser's move list, carried in <see cref="CheckerPlayDecisionData.Plays"/>.
-/// Which candidate is the best or the user's play is recorded on the parent
-/// (<see cref="CheckerPlayDecisionData.BestPlayIndex"/> / <see cref="CheckerPlayDecisionData.UserPlayIndex"/>),
-/// not flagged per-candidate, and so is what a candidate gives up against the
-/// best (<see cref="CheckerPlayDecisionData.EquityLoss"/>), which needs the
-/// other candidates. The nullable probabilities' <see langword="null"/> means
+/// Which candidate is the user's play is recorded on the parent
+/// (<see cref="CheckerPlayDecisionData.UserPlayIndex"/>), not flagged
+/// per-candidate. Which is the best, and what each gives up against it, a
+/// ranking decides over all the candidates
+/// (<see cref="CheckerPlayDecisionData.RankedBy"/>), so neither is a
+/// candidate's own fact. The nullable probabilities' <see langword="null"/> means
 /// the candidate was not evaluated, and each nullable depth fact's that none
 /// was recorded; every other stored member is <c>required</c>, per the wire
 /// rule stated on <see cref="BgDataTypesJsonContext"/>.
@@ -223,9 +224,9 @@ public class PlayCandidate
 
     /// <summary>
     /// Primary equity value, displayed top-right in the analysis panel. A
-    /// finite number: the best play is the candidate of the highest equity
-    /// (<see cref="CheckerPlayDecisionData.BestPlayIndex"/>), which a
-    /// non-number would leave undefined.
+    /// finite number: every ranking orders the candidates by equity
+    /// (<see cref="CheckerPlayDecisionData.RankedBy"/>), which a non-number
+    /// would leave undefined.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is not finite.</exception>
     public required double Equity

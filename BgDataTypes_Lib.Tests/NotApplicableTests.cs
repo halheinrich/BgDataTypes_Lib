@@ -153,9 +153,13 @@ public class NotApplicableTests
             TestRecords.Candidate(play: [new(13, 10), new(6, 5)], equity: 0.3),
             TestRecords.Candidate(play: [new(24, 23), new(13, 10)], equity: 0.3),
         ]);
-        Assert.Equal(1, tied.BestPlayIndex);
-        Assert.Same(tied.Plays[1], tied.BestPlay);
-        Assert.Equal(0.0, tied.EquityLoss(2));
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            var ranked = tied.RankedBy(ranking);
+            Assert.Equal(1, ranked.Best.Index);
+            Assert.Same(tied.Plays[1], ranked.Best.Candidate);
+            Assert.Equal(0.0, ranked.ForCandidate(2).Error);
+        }
     }
 
     [Fact]
@@ -261,7 +265,7 @@ public class NotApplicableTests
     [Fact]
     public void ACubeRowsRoll_IsNone_NeverZero()
     {
-        var row = DecisionRow.From(TestRecords.Cube());
+        var row = TestRecords.Row(TestRecords.Cube());
 
         Assert.Null(row.Roll);
         foreach (var (_, options) in WirePaths.Both)
@@ -274,7 +278,7 @@ public class NotApplicableTests
         // And a 0 roll is refused on read, of either kind.
         foreach (var record in new BgDecisionData[] { TestRecords.Cube(), TestRecords.CheckerPlay() })
         {
-            var document = WirePaths.Document(DecisionRow.From(record));
+            var document = WirePaths.Document(TestRecords.Row(record));
             document["Roll"] = 0;
             WirePaths.AssertRefused<DecisionRow>(document.ToJsonString());
         }
@@ -284,12 +288,16 @@ public class NotApplicableTests
     public void ARowsError_NoneRecorded_IsNone_NeverZero()
     {
         // The converter wrote 0 when no user error was recorded; the row's
-        // error is the record's, null when none is.
-        var row = DecisionRow.From(TestRecords.CheckerPlay(
-            decision: TestRecords.CheckerPlayData(userPlayIndex: null)));
+        // error is the record's, null when none is, under either ranking.
+        var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: null));
 
-        Assert.Null(row.Error);
-        foreach (var (_, options) in WirePaths.Both)
-            Assert.Null(JsonSerializer.Deserialize<DecisionRow>(JsonSerializer.Serialize(row, options), options)!.Error);
+        foreach (var ranking in Enum.GetValues<PlayRanking>())
+        {
+            var row = DecisionRow.From(record, ranking);
+
+            Assert.Null(row.Error);
+            foreach (var (_, options) in WirePaths.Both)
+                Assert.Null(JsonSerializer.Deserialize<DecisionRow>(JsonSerializer.Serialize(row, options), options)!.Error);
+        }
     }
 }

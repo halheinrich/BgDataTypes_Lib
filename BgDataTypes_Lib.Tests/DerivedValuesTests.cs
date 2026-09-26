@@ -9,11 +9,12 @@ namespace BgDataTypes_Lib.Tests;
 /// derived from them, never stored, so it cannot disagree with what it is
 /// derived from. Pinned here, one derivation each: the pip counts from the
 /// board, the source file from the id, the depth rank from the mode and
-/// level, the best play from the candidates' equities, each candidate's loss
-/// against it, the user's error where the record determines it, and the
-/// error of each stated cube action. The one error each kind stores is the
-/// one nothing determines, and it cannot be stated beside what would
-/// determine it.
+/// level, the error of each stated cube action, and the loss probabilities
+/// from the win probabilities. The best play, each candidate's error and the
+/// user's play error are a ranking's derivations, pinned in
+/// <see cref="PlayRankingTests"/>. The one error each kind stores is the one
+/// nothing determines, and it cannot be stated beside what would determine
+/// it.
 /// </summary>
 public class DerivedValuesTests
 {
@@ -71,7 +72,7 @@ public class DerivedValuesTests
         {
             var record = TestRecords.Cube(id: id);
             Assert.Equal(id.Filename, record.SourceFile);
-            Assert.Equal(id.Filename, DecisionRow.From(record).SourceFile);
+            Assert.Equal(id.Filename, TestRecords.Row(record).SourceFile);
         }
     }
 
@@ -118,48 +119,12 @@ public class DerivedValuesTests
         Assert.Equal(ranks.Length, ranks.Distinct().Count());
     }
 
-    // ── The best play, and each candidate's loss against it ───────
-
-    [Fact]
-    public void BestPlay_IsTheFirstOfTheHighestEquity_WhateverTheOrder()
-    {
-        Play[] plays = [[new(8, 5), new(6, 5)], [new(13, 10), new(6, 5)], [new(24, 23), new(13, 10)]];
-        var data = TestRecords.CheckerPlayData(plays:
-        [
-            TestRecords.Candidate(play: plays[0], equity: -0.2),
-            TestRecords.Candidate(play: plays[1], equity: 0.1),
-            TestRecords.Candidate(play: plays[2], equity: 0.1),
-        ]);
-
-        Assert.Equal(1, data.BestPlayIndex);
-        Assert.Equal([0.30000000000000004, 0.0, 0.0], [data.EquityLoss(0), data.EquityLoss(1), data.EquityLoss(2)]);
-        Assert.Throws<ArgumentOutOfRangeException>(() => data.EquityLoss(3));
-        Assert.Throws<ArgumentOutOfRangeException>(() => data.EquityLoss(-1));
-    }
-
-    [Fact]
-    public void BestPlay_AndEveryLoss_AreNeverNegative()
-    {
-        // The best has the highest equity, so no candidate loses less than 0.
-        var data = TestRecords.CheckerPlayData();
-        for (int i = 0; i < data.Plays.Count; i++)
-            Assert.True(data.EquityLoss(i) >= 0.0, $"candidate {i} loses {data.EquityLoss(i)}");
-    }
-
     // ── The user's error ──────────────────────────────────────────
-
-    [Fact]
-    public void UserPlayError_OfAListedPlay_IsItsLoss_OfAnUnlistedOne_IsTheAnalysers()
-    {
-        var listed = TestRecords.CheckerPlayData(userPlayIndex: 2);
-        var unlisted = TestRecords.CheckerPlayData(userPlayIndex: null, unlistedPlayError: 0.07);
-        var none = TestRecords.CheckerPlayData(userPlayIndex: null);
-
-        Assert.Equal(listed.EquityLoss(2), listed.UserPlayError);
-        Assert.Null(listed.UnlistedPlayError);
-        Assert.Equal(0.07, unlisted.UserPlayError);
-        Assert.Null(none.UserPlayError);
-    }
+    //
+    // The best play, each candidate's error against it, and the user's error
+    // where a candidate is the user's are a ranking's derivations, pinned
+    // under each ranking in PlayRankingTests. The one play error stored is an
+    // unlisted play's, which no ranking changes.
 
     [Fact]
     public void AnUnlistedPlaysError_CannotBeStatedBesideAListedPlay_EitherOrder_OrOnTheWire()
@@ -319,10 +284,14 @@ public class DerivedValuesTests
             Assert.Equal(record.Position.OnRollPipCount, read.Position.OnRollPipCount);
             Assert.Equal(record.Position.OpponentPipCount, read.Position.OpponentPipCount);
             Assert.Equal("match.xg", read.SourceFile);
-            Assert.Equal(0, read.Decision.BestPlayIndex);
-            Assert.Equal(record.Decision.UserPlayError, read.Decision.UserPlayError);
+            foreach (var ranking in Enum.GetValues<PlayRanking>())
+            {
+                var ranked = read.Decision.RankedBy(ranking);
+                Assert.Equal(0, ranked.Best.Index);
+                Assert.Equal(record.Decision.RankedBy(ranking).UserPlayError, ranked.UserPlayError);
+                Assert.Equal(0.0, ranked.ForCandidate(0).Error);
+            }
             Assert.Equal(30, read.Decision.Plays[0].DepthRank);
-            Assert.Equal(0.0, read.Decision.EquityLoss(0));
         }
 
         var cube = WirePaths.Document<BgDecisionData>(TestRecords.Cube());

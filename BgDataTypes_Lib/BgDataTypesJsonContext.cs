@@ -19,7 +19,7 @@ namespace BgDataTypes_Lib;
 /// (<see cref="BgDecisionData"/>, <see cref="DecisionRow"/>) and the types
 /// that define their own wire token via a bundled converter
 /// (<see cref="Play"/>, <see cref="DecisionId"/>, <see cref="ProblemKey"/>,
-/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and the seven enums — <see cref="CubeClaim"/>
+/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and the eight enums — <see cref="CubeClaim"/>
 /// among them ahead of its first embedding document, so the claim
 /// vocabulary of halheinrich/backgammon#86 is born source-genned and
 /// downstream contexts chain rather than re-cover it). Composite parts
@@ -196,6 +196,7 @@ namespace BgDataTypes_Lib;
 [JsonSerializable(typeof(CubeOwner))]
 [JsonSerializable(typeof(DecisionKind))]
 [JsonSerializable(typeof(BookEdition))]
+[JsonSerializable(typeof(PlayRanking))]
 public sealed partial class BgDataTypesJsonContext : JsonSerializerContext
 {
 }

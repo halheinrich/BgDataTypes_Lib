@@ -130,9 +130,9 @@ public class BgDataTypesJsonContextTests
         TestRecords.CheckerPlay(id: new XgpDecisionId("minimal.xgp"));
 
     // Rewritten: a row is the projection of a record.
-    private static DecisionRow FullDecisionRow() => DecisionRow.From(FullPlayDecision());
+    private static DecisionRow FullDecisionRow() => DecisionRow.From(FullPlayDecision(), PlayRanking.Equity);
 
-    private static DecisionRow CubeDecisionRow() => DecisionRow.From(FullCubeDecision());
+    private static DecisionRow CubeDecisionRow() => DecisionRow.From(FullCubeDecision(), PlayRanking.DepthFirst);
 
     // A pinned canonical key (ProblemKeyTests' grammar pins own the format;
     // this suite only needs one valid spelling).
@@ -287,7 +287,7 @@ public class BgDataTypesJsonContextTests
         Assert.Contains("\"Mop\":[0,2,0,0,0,0,-5,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,-2,1]", play);
         Assert.DoesNotContain("AfterBestBoard", play);
         Assert.Contains(
-            $"\"AfterBestBoard\":{JsonSerializer.Serialize(((CheckerPlayDecision)FullPlayDecision()).AfterBestBoard, ContextOptions)}",
+            $"\"AfterBestBoard\":{JsonSerializer.Serialize(((CheckerPlayDecision)FullPlayDecision()).AfterBestBoard(PlayRanking.Equity), ContextOptions)}",
             playRow);
         Assert.Contains("\"AfterBestBoard\":null,\"AfterPlayerBoard\":null", cubeRow);
         Assert.Equal(
@@ -378,7 +378,7 @@ public class BgDataTypesJsonContextTests
             typeof(DecisionRow), typeof(DecisionKind),
             typeof(Play), typeof(Move), typeof(DecisionId),
             typeof(ProblemKey), typeof(DiceRoll), typeof(BoardPosition),
-            typeof(AnalysisMode), typeof(AnalysisLevel), typeof(BookEdition),
+            typeof(AnalysisMode), typeof(AnalysisLevel), typeof(BookEdition), typeof(PlayRanking),
             typeof(CubeAction), typeof(CubeClaim), typeof(CubeOwner)
         ];
 

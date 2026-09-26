@@ -60,7 +60,7 @@ public sealed class CubeDecision : BgDecisionData
     /// Whether the Too Good verdict can occur at this position — the
     /// offerability fact of SPEC-scoring §3's 2026-09-02 amendment
     /// (halheinrich/backgammon#187): <see langword="false"/> exactly when the
-    /// session is money (<see cref="IDecisionFilterData.IsMoneyGame"/>), the
+    /// session is money (<see cref="BgDecisionData.IsMoneyGame"/>), the
     /// Jacoby rule is known to be in force (<see cref="BgDecisionData.IsJacoby"/>
     /// is <see langword="true"/>) and the cube is centred
     /// (<see cref="PositionData.CubeOwner"/> is
@@ -79,8 +79,8 @@ public sealed class CubeDecision : BgDecisionData
     /// record, not on <see cref="CubeDecisionData"/>, because only the record
     /// sees money, Jacoby and cube owner together; and only on a cube
     /// decision, the one kind the question has a meaning for. Money is
-    /// reached through the contract's single spelling of the rule, never a
-    /// restated <c>MatchLength == 0</c>.
+    /// reached through the record's <see cref="BgDecisionData.IsMoneyGame"/>,
+    /// never a <c>MatchLength == 0</c> restated here.
     /// </para>
     /// <para>
     /// An unknown rule is not a known Jacoby rule:
@@ -97,7 +97,7 @@ public sealed class CubeDecision : BgDecisionData
     /// </remarks>
     [JsonIgnore]
     public bool CanBeTooGood =>
-        !(((IDecisionFilterData)this).IsMoneyGame
+        !(IsMoneyGame
           && IsJacoby == true
           && Position.CubeOwner == CubeOwner.Centered);
 

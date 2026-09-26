@@ -1,16 +1,34 @@
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// Common filtering contract shared by <see cref="DecisionRow"/> and
-/// <see cref="BgDecisionData"/>: the decision's <see cref="Kind"/>, the members
-/// every kind has, and the checker play's own members, which are
-/// <see langword="null"/> for a cube decision — the one kind without them.
-/// No member holds a value standing for "not applicable"
-/// (halheinrich/backgammon#273): where a fact does not apply, the member is
-/// <see langword="null"/> and its documentation says so.
+/// Common filtering contract shared by <see cref="DecisionRow"/> and the
+/// view of a <see cref="BgDecisionData"/> (<see cref="BgDecisionData.ViewFor"/>):
+/// the decision's <see cref="Kind"/>, the members every kind has, and the
+/// checker play's own members, which are <see langword="null"/> for a cube
+/// decision — the one kind without them. No member holds a value standing
+/// for "not applicable" (halheinrich/backgammon#273): where a fact does not
+/// apply, the member is <see langword="null"/> and its documentation says so.
 /// </summary>
+/// <remarks>
+/// <b>A view is built for one ranking</b> (SPEC-scoring §2a,
+/// halheinrich/backgammon#282). The members that say best or error —
+/// <see cref="FilterError"/>, <see cref="AnalysisMode"/>,
+/// <see cref="AnalysisLevel"/>, <see cref="AfterBestBoard"/> — are
+/// <see cref="Ranking"/>'s: a record's view derives them for the ranking it
+/// was built for, and a row carries the values of the ranking it was built
+/// for. So "erred by more than x" is expressed under either ranking by
+/// filtering views built for it. A cube decision's members do not depend on
+/// the ranking.
+/// </remarks>
 public interface IDecisionFilterData
 {
+    /// <summary>
+    /// The ranking this view's best and error members are derived under
+    /// (<see cref="PlayRanking"/>). A cube decision's members do not depend on
+    /// it.
+    /// </summary>
+    PlayRanking Ranking { get; }
+
     /// <summary>
     /// The decision's kind: a checker play or a cube decision. For a record,
     /// the value form of its type (<see cref="BgDecisionData.Kind"/>); for a
@@ -87,8 +105,8 @@ public interface IDecisionFilterData
     /// <summary>
     /// How the analysis behind this decision was produced — the mode axis of
     /// the two-axis depth taxonomy: the cube analysis for a cube decision, the
-    /// best-play candidate's analysis for a checker play (mirroring the
-    /// <see cref="DecisionRow.AnalysisDepth"/> convention).
+    /// best play's analysis under <see cref="Ranking"/> for a checker play
+    /// (mirroring the <see cref="DecisionRow.AnalysisDepth"/> convention).
     /// <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/> when the producer did
     /// not record it.
     /// </summary>
@@ -105,10 +123,13 @@ public interface IDecisionFilterData
     AnalysisLevel AnalysisLevel { get; }
 
     /// <summary>
-    /// Error magnitude for this decision (≥ 0).
-    /// For checker plays: equity loss vs best play.
-    /// For cube decisions: equity loss from the doubling or take/drop decision.
-    /// Null when no user decision is recorded.
+    /// The player's error on this decision (≥ 0). For a checker play, the
+    /// player's error under <see cref="Ranking"/>
+    /// (<see cref="RankedPlays.UserPlayError"/>): none when the ranking does
+    /// not score the player's move, and the analyser's number for a move
+    /// outside the candidates. For a cube decision, the doubling error or,
+    /// failing that, the take/pass error. <see langword="null"/> when no user
+    /// decision is recorded, or none is scored.
     /// </summary>
     double? FilterError { get; }
 
@@ -134,12 +155,12 @@ public interface IDecisionFilterData
     DiceRoll? Dice { get; }
 
     /// <summary>
-    /// The board a checker play's best play leaves. <b>Frame: the next
-    /// mover's</b> — the position the play reaches, flipped as
-    /// <see cref="BoardState.ApplyPlay"/> leaves it: the opponent is on roll,
-    /// so slot 25 is the opponent's bar and their checkers are positive, while
-    /// the decision-maker's checkers are negative and slot 0 is the
-    /// decision-maker's bar. Never null for a checker play
+    /// The board a checker play's best play under <see cref="Ranking"/>
+    /// leaves. <b>Frame: the next mover's</b> — the position the play
+    /// reaches, flipped as <see cref="BoardState.ApplyPlay"/> leaves it: the
+    /// opponent is on roll, so slot 25 is the opponent's bar and their
+    /// checkers are positive, while the decision-maker's checkers are negative
+    /// and slot 0 is the decision-maker's bar. Never null for a checker play
     /// (<see cref="CheckerPlayDecision.AfterBestBoard"/>);
     /// <see langword="null"/> for a cube decision, where no play is made.
     /// </summary>
