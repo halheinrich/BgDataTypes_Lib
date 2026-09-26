@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 
 namespace BgDataTypes_Lib;
 
@@ -25,9 +24,11 @@ namespace BgDataTypes_Lib;
 /// serialized as a <see cref="CubeDecision"/> carries it as surely as one
 /// serialized as a <see cref="BgDecisionData"/>.</description></item>
 /// <item><description><b>Reading is order-independent</b>, because JSON objects
-/// are unordered: the kind is found wherever it sits, by scanning a copy of
-/// the reader. The serializer hands a converter the whole value buffered, so
-/// the look-ahead is safe on every read path.</description></item>
+/// are unordered: the kind is found wherever it sits. How — and every refusal
+/// of a document without exactly one known kind — is the one mechanism every
+/// kinded family here shares, stated on the internal <see cref="KindDispatch"/>;
+/// this converter supplies only the mapping from a kind to its
+/// contract.</description></item>
 /// <item><description><b>Every refusal is a <see cref="JsonException"/></b>, on
 /// the reflection path and through <see cref="BgDataTypesJsonContext"/>
 /// alike, so it is absorbed wherever malformed input is
@@ -76,56 +77,16 @@ public sealed class BgDecisionDataJsonConverter : JsonConverter<BgDecisionData>
 {
     /// <inheritdoc/>
     public override BgDecisionData? Read(
-        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType != JsonTokenType.StartObject)
-            throw new JsonException($"A decision record is a JSON object (got {reader.TokenType}).");
-
-        var contract = FindKind(reader, options) switch
-        {
-            DecisionKind.CheckerPlay => options.GetTypeInfo(typeof(CheckerPlayDecision)),
-            DecisionKind.Cube => options.GetTypeInfo(typeof(CubeDecision)),
-            var kind => throw new JsonException($"Unknown decision kind {kind}."),
-        };
-
-        return (BgDecisionData?)JsonSerializer.Deserialize(ref reader, contract);
-    }
+        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        KindDispatch.Read<BgDecisionData, DecisionKind>(
+            ref reader, options, "decision record", static kind => kind switch
+            {
+                DecisionKind.CheckerPlay => typeof(CheckerPlayDecision),
+                DecisionKind.Cube => typeof(CubeDecision),
+                _ => null,
+            });
 
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, BgDecisionData value, JsonSerializerOptions options) =>
-        JsonSerializer.Serialize(writer, value, options.GetTypeInfo(value.GetType()));
-
-    /// <summary>
-    /// The one kind the object at <paramref name="scan"/> states, found
-    /// wherever it sits. <paramref name="scan"/> is a copy of the caller's
-    /// reader, so the caller's position is untouched. The member is matched as
-    /// the kinds' contracts match it: its name under the options' naming
-    /// policy, case-insensitively when the options say so.
-    /// </summary>
-    private static DecisionKind FindKind(Utf8JsonReader scan, JsonSerializerOptions options)
-    {
-        string name = options.PropertyNamingPolicy?.ConvertName(nameof(BgDecisionData.Kind))
-            ?? nameof(BgDecisionData.Kind);
-        var token = (JsonTypeInfo<DecisionKind>)options.GetTypeInfo(typeof(DecisionKind));
-
-        DecisionKind? kind = null;
-        while (scan.Read() && scan.TokenType == JsonTokenType.PropertyName)
-        {
-            bool isKind = options.PropertyNameCaseInsensitive
-                ? string.Equals(scan.GetString(), name, StringComparison.OrdinalIgnoreCase)
-                : scan.ValueTextEquals(name);
-            scan.Read();
-            if (!isKind)
-            {
-                scan.Skip();
-                continue;
-            }
-            if (kind is not null)
-                throw new JsonException($"A decision record states its {name} once.");
-            kind = JsonSerializer.Deserialize(ref scan, token);
-        }
-
-        return kind ?? throw new JsonException(
-            $"A decision record states its {name} — CheckerPlay or Cube. A document without one is not a decision record of this shape.");
-    }
+        KindDispatch.Write(writer, value, options);
 }
