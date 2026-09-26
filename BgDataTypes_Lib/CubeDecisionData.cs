@@ -24,6 +24,14 @@ namespace BgDataTypes_Lib;
 /// [0, 1] despite the <c>Pct</c> suffix, surfaced verbatim from the producing
 /// analyser (XG).
 /// </para>
+/// <para>
+/// Every stored number — the equities, the probabilities and the analyser's
+/// errors — is finite, the rule stated once on the internal
+/// <c>FiniteNumber</c>: a NaN or an infinity is refused, by code with an
+/// <see cref="ArgumentOutOfRangeException"/> naming the member and by a
+/// document with a <see cref="System.Text.Json.JsonException"/> carrying it.
+/// The probabilities' range is not checked.
+/// </para>
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class CubeDecisionData
@@ -62,6 +70,24 @@ public sealed class CubeDecisionData
     private readonly int? _rolloutTrials;
     private readonly BookEdition? _bookEdition;
     private readonly int? _unrecognizedLevelCode;
+
+    // The stored numbers, each finite (the rule stated on the internal
+    // FiniteNumber).
+    private readonly double _noDoubleEquity;
+    private readonly double _doubleTakeEquity;
+    private readonly double _cubelessNoDoubleEquity;
+    private readonly double _cubelessDoubleTakeEquity;
+    private readonly double _winPctAfterNoDouble;
+    private readonly double _gammonPctAfterNoDouble;
+    private readonly double _bgPctAfterNoDouble;
+    private readonly double _loseGammonPctAfterNoDouble;
+    private readonly double _loseBgPctAfterNoDouble;
+    private readonly double _winPctAfterDoubleTake;
+    private readonly double _gammonPctAfterDoubleTake;
+    private readonly double _bgPctAfterDoubleTake;
+    private readonly double _loseGammonPctAfterDoubleTake;
+    private readonly double _loseBgPctAfterDoubleTake;
+    private readonly double _probOfOpponentErrorJustifyingDouble;
 
     /// <summary>How the cube analysis's numbers were produced — the mode axis
     /// of the two-axis depth taxonomy; see
@@ -190,7 +216,11 @@ public sealed class CubeDecisionData
     /// cube-equity units — see the class summary). One of the two inputs the
     /// cube-scoring helpers derive from.
     /// </summary>
-    public required double NoDoubleEquity { get; init; }
+    public required double NoDoubleEquity
+    {
+        get => _noDoubleEquity;
+        init => _noDoubleEquity = Finite(value, nameof(NoDoubleEquity));
+    }
 
     /// <summary>
     /// Cubeful equity of double/take (doubler's perspective, normalised
@@ -198,13 +228,25 @@ public sealed class CubeDecisionData
     /// 1 means the opponent should pass. The other input of the cube-scoring
     /// helpers.
     /// </summary>
-    public required double DoubleTakeEquity { get; init; }
+    public required double DoubleTakeEquity
+    {
+        get => _doubleTakeEquity;
+        init => _doubleTakeEquity = Finite(value, nameof(DoubleTakeEquity));
+    }
 
     /// <summary>Cubeless equity of the no-double evaluation.</summary>
-    public required double CubelessNoDoubleEquity { get; init; }
+    public required double CubelessNoDoubleEquity
+    {
+        get => _cubelessNoDoubleEquity;
+        init => _cubelessNoDoubleEquity = Finite(value, nameof(CubelessNoDoubleEquity));
+    }
 
     /// <summary>Cubeless equity of the double/take evaluation.</summary>
-    public required double CubelessDoubleTakeEquity { get; init; }
+    public required double CubelessDoubleTakeEquity
+    {
+        get => _cubelessDoubleTakeEquity;
+        init => _cubelessDoubleTakeEquity = Finite(value, nameof(CubelessDoubleTakeEquity));
+    }
 
     // Outcome-probability breakdown of the two cube evaluations, on-roll
     // (doubler's) POV, fractions in [0, 1] surfaced verbatim from XG. Win is
@@ -213,11 +255,23 @@ public sealed class CubeDecisionData
     // same evaluation, source data.
 
     /// <summary>Probability the on-roll player wins, from the no-double evaluation. Fraction in [0, 1].</summary>
-    public required double WinPctAfterNoDouble { get; init; }
+    public required double WinPctAfterNoDouble
+    {
+        get => _winPctAfterNoDouble;
+        init => _winPctAfterNoDouble = Finite(value, nameof(WinPctAfterNoDouble));
+    }
     /// <summary>XG's gammon-win figure (the "G" of its W/G/B breakdown) from the no-double evaluation. Fraction in [0, 1].</summary>
-    public required double GammonPctAfterNoDouble { get; init; }
+    public required double GammonPctAfterNoDouble
+    {
+        get => _gammonPctAfterNoDouble;
+        init => _gammonPctAfterNoDouble = Finite(value, nameof(GammonPctAfterNoDouble));
+    }
     /// <summary>XG's backgammon-win figure (the "B" of its W/G/B breakdown) from the no-double evaluation. Fraction in [0, 1].</summary>
-    public required double BgPctAfterNoDouble { get; init; }
+    public required double BgPctAfterNoDouble
+    {
+        get => _bgPctAfterNoDouble;
+        init => _bgPctAfterNoDouble = Finite(value, nameof(BgPctAfterNoDouble));
+    }
     /// <summary>
     /// Probability the on-roll player loses, from the no-double evaluation:
     /// <c>1 − </c><see cref="WinPctAfterNoDouble"/>, derived and never stored.
@@ -227,16 +281,36 @@ public sealed class CubeDecisionData
     [JsonIgnore]
     public double LosePctAfterNoDouble => 1.0 - WinPctAfterNoDouble;
     /// <summary>XG's gammon-loss figure from the no-double evaluation. Fraction in [0, 1].</summary>
-    public required double LoseGammonPctAfterNoDouble { get; init; }
+    public required double LoseGammonPctAfterNoDouble
+    {
+        get => _loseGammonPctAfterNoDouble;
+        init => _loseGammonPctAfterNoDouble = Finite(value, nameof(LoseGammonPctAfterNoDouble));
+    }
     /// <summary>XG's backgammon-loss figure from the no-double evaluation. Fraction in [0, 1].</summary>
-    public required double LoseBgPctAfterNoDouble { get; init; }
+    public required double LoseBgPctAfterNoDouble
+    {
+        get => _loseBgPctAfterNoDouble;
+        init => _loseBgPctAfterNoDouble = Finite(value, nameof(LoseBgPctAfterNoDouble));
+    }
 
     /// <summary>Probability the on-roll player wins, from the double/take evaluation. Fraction in [0, 1].</summary>
-    public required double WinPctAfterDoubleTake { get; init; }
+    public required double WinPctAfterDoubleTake
+    {
+        get => _winPctAfterDoubleTake;
+        init => _winPctAfterDoubleTake = Finite(value, nameof(WinPctAfterDoubleTake));
+    }
     /// <summary>XG's gammon-win figure from the double/take evaluation. Fraction in [0, 1].</summary>
-    public required double GammonPctAfterDoubleTake { get; init; }
+    public required double GammonPctAfterDoubleTake
+    {
+        get => _gammonPctAfterDoubleTake;
+        init => _gammonPctAfterDoubleTake = Finite(value, nameof(GammonPctAfterDoubleTake));
+    }
     /// <summary>XG's backgammon-win figure from the double/take evaluation. Fraction in [0, 1].</summary>
-    public required double BgPctAfterDoubleTake { get; init; }
+    public required double BgPctAfterDoubleTake
+    {
+        get => _bgPctAfterDoubleTake;
+        init => _bgPctAfterDoubleTake = Finite(value, nameof(BgPctAfterDoubleTake));
+    }
     /// <summary>
     /// Probability the on-roll player loses, from the double/take evaluation:
     /// <c>1 − </c><see cref="WinPctAfterDoubleTake"/>, derived and never
@@ -245,9 +319,17 @@ public sealed class CubeDecisionData
     [JsonIgnore]
     public double LosePctAfterDoubleTake => 1.0 - WinPctAfterDoubleTake;
     /// <summary>XG's gammon-loss figure from the double/take evaluation. Fraction in [0, 1].</summary>
-    public required double LoseGammonPctAfterDoubleTake { get; init; }
+    public required double LoseGammonPctAfterDoubleTake
+    {
+        get => _loseGammonPctAfterDoubleTake;
+        init => _loseGammonPctAfterDoubleTake = Finite(value, nameof(LoseGammonPctAfterDoubleTake));
+    }
     /// <summary>XG's backgammon-loss figure from the double/take evaluation. Fraction in [0, 1].</summary>
-    public required double LoseBgPctAfterDoubleTake { get; init; }
+    public required double LoseBgPctAfterDoubleTake
+    {
+        get => _loseBgPctAfterDoubleTake;
+        init => _loseBgPctAfterDoubleTake = Finite(value, nameof(LoseBgPctAfterDoubleTake));
+    }
 
     /// <summary>
     /// XG-producer-specific cube statistic, surfaced verbatim: XG's reported
@@ -255,7 +337,11 @@ public sealed class CubeDecisionData
     /// its cube-analysis pane). Fraction in [0, 1]. This library assigns it
     /// no further semantics.
     /// </summary>
-    public required double ProbOfOpponentErrorJustifyingDouble { get; init; }
+    public required double ProbOfOpponentErrorJustifyingDouble
+    {
+        get => _probOfOpponentErrorJustifyingDouble;
+        init => _probOfOpponentErrorJustifyingDouble = Finite(value, nameof(ProbOfOpponentErrorJustifyingDouble));
+    }
 
     // -----------------------------------------------------------------------
     //  Played cube actions
@@ -404,6 +490,7 @@ public sealed class CubeDecisionData
         {
             try
             {
+                FiniteNumber.Check(value, nameof(UnstatedDoublerActionError));
                 if (value is not null && _userDoublerAction is not null)
                     throw new ArgumentException(UnstatedDoublerMessage, nameof(UnstatedDoublerActionError));
             }
@@ -432,6 +519,7 @@ public sealed class CubeDecisionData
         {
             try
             {
+                FiniteNumber.Check(value, nameof(UnstatedTakerActionError));
                 if (value is not null && _userTakerAction is not null)
                     throw new ArgumentException(UnstatedTakerMessage, nameof(UnstatedTakerActionError));
             }
@@ -441,6 +529,20 @@ public sealed class CubeDecisionData
             }
             _unstatedTakerActionError = value;
         }
+    }
+
+    /// <summary><paramref name="value"/>, once it keeps the number rule (<see cref="FiniteNumber"/>).</summary>
+    private double Finite(double value, string member)
+    {
+        try
+        {
+            FiniteNumber.Check(value, member);
+        }
+        catch (ArgumentException fault) when (_read)
+        {
+            throw DocumentRefusal.Of(fault);
+        }
+        return value;
     }
 
     private const string UnstatedDoublerMessage =

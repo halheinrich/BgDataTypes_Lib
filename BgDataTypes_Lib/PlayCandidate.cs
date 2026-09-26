@@ -17,6 +17,14 @@ namespace BgDataTypes_Lib;
 /// </summary>
 /// <remarks>
 /// <para>
+/// Every stored number — the equity and the probabilities — is finite, the
+/// rule stated once on the internal <c>FiniteNumber</c>: a NaN or an infinity
+/// is refused, by code with an <see cref="ArgumentOutOfRangeException"/>
+/// naming the member and by a document with a
+/// <see cref="System.Text.Json.JsonException"/> carrying it. The
+/// probabilities' range is not checked.
+/// </para>
+/// <para>
 /// <b>The depth is typed facts.</b> The record stores the mode, the level, the
 /// rollout trial count, the book edition and an unrecognized level's raw
 /// code; the label, the abbreviation and the rank are derived from them
@@ -36,6 +44,14 @@ public class PlayCandidate
     // constructor below): each rule then refuses as a JsonException.
     private readonly bool _read;
     private readonly double _equity;
+
+    // The stored probabilities, each null or finite (the rule stated on the
+    // internal FiniteNumber, as the equity's is).
+    private readonly double? _winPct;
+    private readonly double? _winGammonPct;
+    private readonly double? _winBgPct;
+    private readonly double? _loseGammonPct;
+    private readonly double? _loseBgPct;
 
     // The typed depth facts; the mode and level null only while construction
     // is still stating them (`required` guarantees both by the end), so each
@@ -224,27 +240,16 @@ public class PlayCandidate
 
     /// <summary>
     /// Primary equity value, displayed top-right in the analysis panel. A
-    /// finite number: every ranking orders the candidates by equity
-    /// (<see cref="CheckerPlayDecisionData.RankedBy"/>), which a non-number
-    /// would leave undefined.
+    /// finite number, as every stored number in a record is (the rule stated
+    /// once on the internal <c>FiniteNumber</c>): every ranking orders the
+    /// candidates by equity (<see cref="CheckerPlayDecisionData.RankedBy"/>),
+    /// which a non-number would leave undefined.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is not finite.</exception>
     public required double Equity
     {
         get => _equity;
-        init
-        {
-            try
-            {
-                if (!double.IsFinite(value))
-                    throw new ArgumentOutOfRangeException(nameof(Equity), value, "A candidate's equity is a finite number.");
-            }
-            catch (ArgumentException fault) when (_read)
-            {
-                throw DocumentRefusal.Of(fault);
-            }
-            _equity = value;
-        }
+        init => _equity = (double)Finite(value, nameof(Equity))!;
     }
 
     // Outcome probabilities of this candidate, on-roll POV, fractions in
@@ -255,11 +260,23 @@ public class PlayCandidate
     // breakdown figures, source data.
 
     /// <summary>Probability the on-roll player wins with this play. Fraction in [0, 1]; null when not evaluated.</summary>
-    public double? WinPct { get; init; }
+    public double? WinPct
+    {
+        get => _winPct;
+        init => _winPct = Finite(value, nameof(WinPct));
+    }
     /// <summary>XG's gammon-win figure (the "G" of its W/G/B breakdown) for this play. Fraction in [0, 1]; null when not evaluated.</summary>
-    public double? WinGammonPct { get; init; }
+    public double? WinGammonPct
+    {
+        get => _winGammonPct;
+        init => _winGammonPct = Finite(value, nameof(WinGammonPct));
+    }
     /// <summary>XG's backgammon-win figure (the "B" of its W/G/B breakdown) for this play. Fraction in [0, 1]; null when not evaluated.</summary>
-    public double? WinBgPct { get; init; }
+    public double? WinBgPct
+    {
+        get => _winBgPct;
+        init => _winBgPct = Finite(value, nameof(WinBgPct));
+    }
     /// <summary>
     /// Probability the on-roll player loses with this play: <c>1 − </c><see cref="WinPct"/>,
     /// derived and never stored — every game is won or lost.
@@ -271,9 +288,31 @@ public class PlayCandidate
     [JsonIgnore]
     public double? LosePct => 1.0 - WinPct;
     /// <summary>XG's gammon-loss figure for this play. Fraction in [0, 1]; null when not evaluated.</summary>
-    public double? LoseGammonPct { get; init; }
+    public double? LoseGammonPct
+    {
+        get => _loseGammonPct;
+        init => _loseGammonPct = Finite(value, nameof(LoseGammonPct));
+    }
     /// <summary>XG's backgammon-loss figure for this play. Fraction in [0, 1]; null when not evaluated.</summary>
-    public double? LoseBgPct { get; init; }
+    public double? LoseBgPct
+    {
+        get => _loseBgPct;
+        init => _loseBgPct = Finite(value, nameof(LoseBgPct));
+    }
+
+    /// <summary><paramref name="value"/>, once it keeps the number rule (<see cref="FiniteNumber"/>).</summary>
+    private double? Finite(double? value, string member)
+    {
+        try
+        {
+            FiniteNumber.Check(value, member);
+        }
+        catch (ArgumentException fault) when (_read)
+        {
+            throw DocumentRefusal.Of(fault);
+        }
+        return value;
+    }
 
     /// <summary>
     /// Holds the depth facts stated so far, <paramref name="member"/>'s value

@@ -33,8 +33,9 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// <b>Well-formed by construction.</b> The roll is two faces 1–6; there is
 /// at least one candidate; <see cref="UserPlayIndex"/> identifies one or is
-/// <see langword="null"/>; and an unlisted play's error is stated only when
-/// no candidate is the user's. Each init setter checks what it can against
+/// <see langword="null"/>; and an unlisted play's error is finite (the rule
+/// stated once on the internal <c>FiniteNumber</c>) and stated only when no
+/// candidate is the user's. Each init setter checks what it can against
 /// the members already set, so whichever of two members is set second
 /// refuses a mismatch — in an object initializer in either order and in a
 /// JSON document in either property order alike. The two collections are
@@ -223,6 +224,7 @@ public sealed class CheckerPlayDecisionData
         {
             try
             {
+                FiniteNumber.Check(value, nameof(UnlistedPlayError));
                 if (value is not null && _userPlayIndex is not null)
                     throw new ArgumentException(UnlistedMessage, nameof(UnlistedPlayError));
             }

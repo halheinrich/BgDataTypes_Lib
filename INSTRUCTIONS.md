@@ -46,7 +46,8 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `PositionData` and `DescriptiveData`, and each kind's `Decision`
   category, `CheckerPlayDecisionData` (with `PlayCandidate` beneath it) and
   `CubeDecisionData`; `DecisionRules`, the internal statement of the rules
-  that bind a decision's members, and `DocumentRefusal`, the internal one
+  that bind a decision's members, `FiniteNumber`, the internal statement
+  of the rule every stored number keeps, and `DocumentRefusal`, the internal one
   spelling of how a rule a document breaks is refused. The ranking —
   `PlayRanking`, and `RankedPlays` of `RankedPlay`, what a checker play
   derives for one — the player's result, `PlayerResult` and
@@ -340,6 +341,23 @@ producer wrote the grid's floor 0. `Date` was already `DateOnly?`. The
 analysis enums keep `Unknown`, a member the producer states.
 `IDecisionFilterData.Player` is `string?` accordingly.
 
+**Every stored number is finite** (the umbrella's fourth-round ruling on
+the records leg). Each stored floating-point value in the records — the
+candidate's equity and probabilities, the cube's equities and
+probabilities, `ProbOfOpponentErrorJustifyingDouble`, and the analyser's
+stored errors (`UnlistedPlayError`, `UnstatedDoublerActionError`,
+`UnstatedTakerActionError`) — is a finite number, or `null` where a
+nullable one records none. A NaN or an infinity is refused by code with an
+`ArgumentOutOfRangeException` naming the member, and by a document with a
+`JsonException` carrying it, on both paths (where the reader's options
+admit a named non-finite literal at all; by default the token itself is
+refused). The one statement of the rule is the internal `FiniteNumber`,
+which the candidate's equity rule became. Range is not checked: a
+probability's bounds are not measured against real data. A test finds the
+stored numbers by reflection, so one added without the rule fails it.
+`DecisionRow`, a projection, carries the record's numbers and is not
+checked again.
+
 ### Stored or derived
 
 The audit behind the rule, over every record type (the umbrella's verdict
@@ -559,7 +577,7 @@ not-scored classification is this library's.
 | `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
 | `PlayChain` | **internal** `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a route from a source to a landing point, which the notation writes as one `from/to`, joining consecutive moves and eliding the touch-down points between. It stops where its moves stop or at a hit point whose mark it carries, so it is not a checker's whole trajectory: an intermediate hit splits one trajectory into two chains (`13/10*/8` is written `13/10* 10/8`). Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | **internal** `readonly struct` (`halheinrich/backgammon#273`: consumers spell plays with `Play.ToNotation()` and compare them by position, so the chain form can change without breaking one), fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by the internal `Play.ToCanonical()` — no other constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's error against the best is a ranking's (`CheckerPlayDecisionData.RankedBy`): it needs the other candidates and a ranking. An error of exactly 0 is the test for "is this a best play" under that ranking; `RankedPlays.Best` names its single best, the ranking's first. |
+| `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite, as every stored number is), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's error against the best is a ranking's (`CheckerPlayDecisionData.RankedBy`): it needs the other candidates and a ranking. An error of exactly 0 is the test for "is this a best play" under that ranking; `RankedPlays.Best` names its single best, the ranking's first. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 | `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `TryDerive` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. Both doors run the same fact validation, and facts that would force a guess get **no key** rather than a wrong one (see "ProblemKey" below and Pitfalls). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
@@ -1743,7 +1761,7 @@ public class PositionData    { /* required init-only properties per the categori
                                [JsonIgnore] public int OnRollPipCount { get; }    /* Mop's, by BoardState's pip rule */
                                [JsonIgnore] public int OpponentPipCount { get; } }
 public class DescriptiveData { /* init-only properties per the categories table; OnRollName?, OpponentName?, Title?, Date?, Event?, IsStandardStart?, Comment? */ }
-public class PlayCandidate   { /* required init-only properties per Architecture table; Equity finite; the depth facts and five stored probabilities nullable */
+public class PlayCandidate   { /* required init-only properties per Architecture table; every stored number finite; the depth facts and five stored probabilities nullable */
                                [JsonIgnore] public string Notation { get; }  /* Play.ToNotation(); never stored */
                                [JsonIgnore] public string? Depth { get; }            /* from the typed depth facts; see "The depth as typed facts" */
                                [JsonIgnore] public string? DepthAbbreviation { get; }
