@@ -14,9 +14,10 @@ namespace BgDataTypes_Lib.Tests;
 /// failure: both halves are required (halheinrich/backgammon#222), so a
 /// document without one is a <see cref="JsonException"/> on both paths —
 /// where the reflection path once kept the half's default and the context
-/// once passed it as <c>default</c>, a null. Before #221 the halves accepted
-/// null and <see cref="ProblemKey.TryDerive"/> carried a no-key rung for the
-/// resulting record; that rung is gone, since the record cannot exist.
+/// once passed it as <c>default</c>, a null. Before
+/// halheinrich/backgammon#221 the halves accepted null and
+/// <see cref="ProblemKey.TryDerive"/> carried a no-key rung for the resulting
+/// record; that rung is gone, since the record cannot exist.
 /// </summary>
 public class BgDecisionDataNullHalfTests
 {

@@ -207,10 +207,10 @@ Design points:
   its pair is constructor-bound, where `required` cannot reach, so it
   carries `[property: JsonRequired]` (an absent `ToPt` would otherwise read
   as 0, a bear-off).
-- **Why the paths now agree.** The divergence #222 found — the generated
-  creator dropping a property initializer the reflection path honoured — has
-  nothing left to act on: a required member has no initializer, and a
-  nullable one defaults to `null` on both.
+- **Why the paths now agree.** The divergence halheinrich/backgammon#222
+  found — the generated creator dropping a property initializer the
+  reflection path honoured — has nothing left to act on: a required member
+  has no initializer, and a nullable one defaults to `null` on both.
 - **The classification, member by member.** Nullable (absent means
   something): `PositionData.IsJacoby`; `DecisionData.UserPlayError`,
   `UserDoubleError`, `UserTakeError`, `UserDoublerAction`,
