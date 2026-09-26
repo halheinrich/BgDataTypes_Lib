@@ -1,15 +1,26 @@
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// Common filtering contract shared by <see cref="DecisionRow"/> and <see cref="BgDecisionData"/>.
+/// Common filtering contract shared by <see cref="DecisionRow"/> and
+/// <see cref="BgDecisionData"/>: the decision's <see cref="Kind"/>, the members
+/// every kind has, and the checker play's own members, which are
+/// <see langword="null"/> for a cube decision — the one kind without them.
+/// No member holds a value standing for "not applicable"
+/// (halheinrich/backgammon#273): where a fact does not apply, the member is
+/// <see langword="null"/> and its documentation says so.
 /// </summary>
 public interface IDecisionFilterData
 {
+    /// <summary>
+    /// The decision's kind: a checker play or a cube decision. For a record,
+    /// the value form of its type (<see cref="BgDecisionData.Kind"/>); for a
+    /// row, its stored column. Where the record itself is at hand, match on it
+    /// exhaustively with <see cref="BgDecisionData.Match{TResult}"/>.
+    /// </summary>
+    DecisionKind Kind { get; }
+
     /// <summary>Name of the player who made the decision.</summary>
     string Player { get; }
-
-    /// <summary>True if this is a cube decision; false if a checker play.</summary>
-    bool IsCube { get; }
 
     /// <summary>Away score for the player on roll. 0 for money games.</summary>
     int OnRollNeeds { get; }
@@ -59,18 +70,23 @@ public interface IDecisionFilterData
     /// </summary>
     int? MoveNumber { get; }
 
-    /// <summary>True if the game started from the canonical opening position.
-    /// Move-number filtering is only meaningful when this is true; non-standard starts
-    /// (custom problem positions, Bg960, etc.) automatically fail move-number filters.</summary>
-    bool IsStandardStart { get; }
+    /// <summary>
+    /// Whether the game started from the canonical opening position;
+    /// <see langword="null"/> for a decision in a standalone position, which
+    /// belongs to no game (halheinrich/backgammon#124). Move-number filtering
+    /// is only meaningful when this is true; non-standard starts (custom
+    /// problem positions, Bg960, etc.) and standalone positions have no move
+    /// number to filter.
+    /// </summary>
+    bool? IsStandardStart { get; }
 
     /// <summary>
     /// How the analysis behind this decision was produced — the mode axis of
-    /// the two-axis depth taxonomy: the cube analysis for cube decisions, the
-    /// best-play candidate's analysis for checker plays (mirroring the
+    /// the two-axis depth taxonomy: the cube analysis for a cube decision, the
+    /// best-play candidate's analysis for a checker play (mirroring the
     /// <see cref="DecisionRow.AnalysisDepth"/> convention).
-    /// <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/> when the depth was
-    /// never stamped (legacy data).
+    /// <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/> when the producer did
+    /// not record it.
     /// </summary>
     AnalysisMode AnalysisMode { get; }
 
@@ -79,24 +95,16 @@ public interface IDecisionFilterData
     /// paired with <see cref="AnalysisMode"/> (for rollout-family modes, the
     /// inner level), drawn from the same analysis
     /// <see cref="AnalysisMode"/> reports.
-    /// <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when the depth was
-    /// never stamped (legacy data).
+    /// <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when the producer
+    /// did not record it.
     /// </summary>
     AnalysisLevel AnalysisLevel { get; }
 
     /// <summary>
-    /// The dice rolled for this decision, in canonical unordered form.
-    /// Null for cube decisions (<see cref="IsCube"/> == true) — a cube is
-    /// offered before the on-roll player rolls, so no dice apply; the
-    /// null-when-inapplicable convention shared with <see cref="FilterError"/>.
-    /// </summary>
-    DiceRoll? Dice { get; }
-
-    /// <summary>
     /// Error magnitude for this decision (≥ 0).
     /// For checker plays: equity loss vs best play.
-    /// For cube decisions: equity loss from doubling or take/drop decision.
-    /// Null if not applicable or not recorded.
+    /// For cube decisions: equity loss from the doubling or take/drop decision.
+    /// Null when no user decision is recorded.
     /// </summary>
     double? FilterError { get; }
 
@@ -109,27 +117,36 @@ public interface IDecisionFilterData
     /// </summary>
     BoardPosition Board { get; }
 
+    // -----------------------------------------------------------------------
+    //  The checker play's own members: null for a cube decision
+    // -----------------------------------------------------------------------
+
     /// <summary>
-    /// The board after the best play. <b>Frame: the next mover's</b> — the
-    /// position the play reaches, flipped as <see cref="BoardState.ApplyPlay"/>
-    /// leaves it: the opponent is on roll, so slot 25 is the opponent's bar
-    /// and their checkers are positive, while the decision-maker's checkers
-    /// are negative and slot 0 is the decision-maker's bar.
-    /// <para>
-    /// <see langword="null"/> when absent: always for a cube decision
-    /// (<see cref="IsCube"/> == true), and on a checker play whose boards the
-    /// producer could not compute (<see cref="PlayOutcomeData"/>). Consumers
-    /// test for <see langword="null"/>.
-    /// </para>
+    /// The dice rolled for a checker play, in canonical unordered form;
+    /// <see langword="null"/> for a cube decision — a cube is offered before
+    /// the on-roll player rolls, so no dice apply. Never null for a checker
+    /// play (<see cref="CheckerPlayDecision.Dice"/>).
+    /// </summary>
+    DiceRoll? Dice { get; }
+
+    /// <summary>
+    /// The board a checker play's best play leaves. <b>Frame: the next
+    /// mover's</b> — the position the play reaches, flipped as
+    /// <see cref="BoardState.ApplyPlay"/> leaves it: the opponent is on roll,
+    /// so slot 25 is the opponent's bar and their checkers are positive, while
+    /// the decision-maker's checkers are negative and slot 0 is the
+    /// decision-maker's bar. Never null for a checker play
+    /// (<see cref="CheckerPlayDecision.AfterBestBoard"/>);
+    /// <see langword="null"/> for a cube decision, where no play is made.
     /// </summary>
     BoardPosition? AfterBestBoard { get; }
 
     /// <summary>
-    /// The board after the player's actual play, in the same frame as
+    /// The board the user's checker play leaves, in the same frame as
     /// <see cref="AfterBestBoard"/> — the next mover's.
-    /// <para>
-    /// <see langword="null"/> when absent, as for <see cref="AfterBestBoard"/>.
-    /// </para>
+    /// <see langword="null"/> when the user's play is not among the
+    /// candidates (<see cref="CheckerPlayDecision.AfterPlayerBoard"/>), and
+    /// for a cube decision.
     /// </summary>
     BoardPosition? AfterPlayerBoard { get; }
 }

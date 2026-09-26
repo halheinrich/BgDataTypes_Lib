@@ -3,16 +3,15 @@ using System.Text.Json.Serialization;
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// The decision category of a <see cref="BgDecisionData"/>: what was analysed
-/// and how the user's choice scored. One record describes either a checker
-/// play (<see cref="IsCube"/> false — <see cref="Dice"/>, <see cref="Plays"/>
-/// and the <c>UserPlay*</c> fields are live) or a cube decision
-/// (<see cref="IsCube"/> true — the <c>Cube*</c> depth fields, the equity /
-/// probability fields and the <c>UserDouble*</c> / <c>UserTake*</c> fields
-/// are live). Fields of the inactive half hold their defaults, stated by the
-/// producer: every member but the nullable ones is <c>required</c>, per the
-/// wire rule stated on <see cref="BgDataTypesJsonContext"/>, and each
-/// nullable member's documentation says what <see langword="null"/> means.
+/// The decision category of a <see cref="CubeDecision"/>: the cube analysis,
+/// the user's cube errors and played actions, and the cube-scoring policy
+/// derived from the analysis. It carries a cube decision's fields and nothing
+/// else — a checker play's are on <see cref="CheckerPlayDecisionData"/>, and
+/// no member of either kind stands for "not applicable"
+/// (halheinrich/backgammon#273). Every member but the nullable ones is
+/// <c>required</c>, per the wire rule stated on
+/// <see cref="BgDataTypesJsonContext"/>, and each nullable member's
+/// documentation says what <see langword="null"/> means.
 ///
 /// <para>
 /// All equities are in normalised cube-equity units from the on-roll
@@ -23,69 +22,40 @@ namespace BgDataTypes_Lib;
 /// analyser (XG).
 /// </para>
 /// </summary>
-public class DecisionData
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class CubeDecisionData
 {
-    /// <summary>Always length 2. Ignored when IsCube is true.</summary>
-    public required IReadOnlyList<int> Dice { get; init; }
-
-    /// <summary>
-    /// The analysed candidate plays of a checker-play decision, in
-    /// producer-supplied order (not guaranteed equity-sorted).
-    /// <see cref="BestPlayIndex"/> and <see cref="UserPlayIndex"/> index into
-    /// this list. Empty when <see cref="IsCube"/> is true.
-    /// </summary>
-    public required IReadOnlyList<PlayCandidate> Plays { get; init; }
-    /// <summary>Index into Plays identifying the best play. </summary>
-    public required int BestPlayIndex { get; init; }
-    /// <summary>
-    /// Equity loss from the user's checker play vs. the best play (≥ 0).
-    /// Null when no user play is recorded or IsCube is true.
-    /// </summary>
-    public double? UserPlayError { get; init; }
-    /// <summary>
-    /// Index into Plays identifying the user's play. -1 if not applicable —
-    /// no user play recorded (analysis-only position) or a cube decision.
-    /// The single source of "which candidate did the user play"; there is
-    /// deliberately no per-candidate flag to keep consistent with it.
-    /// </summary>
-    public required int UserPlayIndex { get; init; }
-
-    /// <summary>
-    /// Decision-kind discriminator: true for a cube decision, false for a
-    /// checker play. Selects which half of this record is live — see the
-    /// class summary.
-    /// </summary>
-    public required bool IsCube { get; init; }
-
     // -----------------------------------------------------------------------
-    //  Cube decision equity fields
+    //  The cube analysis
     // -----------------------------------------------------------------------
-    /// <summary>Analysis depth label for a cube decision, e.g. "3-ply",
-    /// "Rollout: 1296 trials. 3-ply". Empty when IsCube is false.</summary>
-    public required string CubeDepth { get; init; }
 
-    /// <summary>Compact display form of CubeDepth. Empty when IsCube is false.</summary>
-    public required string CubeDepthAbbreviation { get; init; }
+    /// <summary>Analysis depth label of the cube analysis, e.g. "3-ply",
+    /// "Rollout: 1296 trials. 3-ply"; see <see cref="PlayCandidate.Depth"/>
+    /// for a candidate's.</summary>
+    public required string Depth { get; init; }
 
-    /// <summary>Ordinal ranking of CubeDepth; see PlayCandidate.DepthRank
-    /// for semantics. 0 when IsCube is false.</summary>
-    public required int CubeDepthRank { get; init; }
+    /// <summary>Compact display form of <see cref="Depth"/>.</summary>
+    public required string DepthAbbreviation { get; init; }
+
+    /// <summary>Ordinal ranking of <see cref="Depth"/>; see
+    /// <see cref="PlayCandidate.DepthRank"/> for semantics.</summary>
+    public required int DepthRank { get; init; }
 
     /// <summary>How the cube analysis's numbers were produced — the mode axis
     /// of the two-axis depth taxonomy; see
     /// <see cref="PlayCandidate.AnalysisMode"/> for semantics.
-    /// <see cref="AnalysisMode.Unknown"/> when IsCube is false or when the
-    /// producer did not record it.</summary>
-    public required AnalysisMode CubeAnalysisMode { get; init; }
+    /// <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/> when the producer
+    /// did not record it.</summary>
+    public required AnalysisMode AnalysisMode { get; init; }
 
     /// <summary>Evaluation level of the cube analysis — the level axis paired
-    /// with <see cref="CubeAnalysisMode"/>. For a rollout this is the inner
-    /// cube level, which (unlike checker rows) can be a Roller-family level:
-    /// the shipped opening-book database contains cube rollout levels of
-    /// XG Roller. See <see cref="PlayCandidate.AnalysisLevel"/> for the
-    /// checker-row counterpart. <see cref="AnalysisLevel.Unknown"/> when
-    /// IsCube is false or when the producer did not record it.</summary>
-    public required AnalysisLevel CubeAnalysisLevel { get; init; }
+    /// with <see cref="AnalysisMode"/>. For a rollout this is the inner cube
+    /// level, which (unlike a candidate's) can be a Roller-family level: the
+    /// shipped opening-book database contains cube rollout levels of XG
+    /// Roller. See <see cref="PlayCandidate.AnalysisLevel"/> for a
+    /// candidate's. <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when
+    /// the producer did not record it.</summary>
+    public required AnalysisLevel AnalysisLevel { get; init; }
 
     /// <summary>
     /// Cubeful equity of not doubling (doubler's perspective, normalised
@@ -146,15 +116,21 @@ public class DecisionData
     /// no further semantics.
     /// </summary>
     public required double ProbOfOpponentErrorJustifyingDouble { get; init; }
+
+    // -----------------------------------------------------------------------
+    //  The user's errors
+    // -----------------------------------------------------------------------
+
     /// <summary>
-    /// Equity loss from the user's doubling decision vs. the correct cube action (≥ 0).
-    /// Null when no cube decision is recorded or IsCube is false.
+    /// Equity loss from the user's doubling decision vs. the correct cube
+    /// action (≥ 0). Null when no doubling decision is recorded.
     /// </summary>
     public double? UserDoubleError { get; init; }
 
     /// <summary>
-    /// Equity loss from the user's take/drop decision vs. the correct response (≥ 0).
-    /// Null when no cube decision is recorded or IsCube is false.
+    /// Equity loss from the user's take/drop decision vs. the correct response
+    /// (≥ 0). Null when no take decision is recorded — in particular when no
+    /// double was offered.
     /// </summary>
     public double? UserTakeError { get; init; }
 
@@ -176,9 +152,7 @@ public class DecisionData
     /// <summary>
     /// The doubler action the player on roll actually played —
     /// <see cref="CubeAction.NoDouble"/> or <see cref="CubeAction.Double"/>.
-    /// Null when the played action is not recorded — which is retroactively
-    /// true of all JSON written before this field existed — or when
-    /// <see cref="IsCube"/> is false.
+    /// Null when the played action is not recorded.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown on init when the value is not <see cref="CubeAction.NoDouble"/>,
@@ -200,8 +174,7 @@ public class DecisionData
     /// Present only when a double was offered and a response recorded: in an
     /// undoubled game no taker decision exists, so this stays null even when
     /// <see cref="UserDoublerAction"/> is recorded. Null also when the played
-    /// actions are not recorded (all JSON written before this field existed)
-    /// or when <see cref="IsCube"/> is false.
+    /// actions are not recorded.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown on init when the value is not <see cref="CubeAction.Take"/>,
@@ -230,9 +203,8 @@ public class DecisionData
     //      BestTakerAction, TakerActionError.
     //
     //  Pure equity-loss between two cube actions, evaluated separately, with
-    //  no cross-decision overrides. All four throw InvalidOperationException
-    //  when IsCube is false — they are only meaningful on cube decisions, and
-    //  silent zero / default returns on play decisions would mask misuse.
+    //  no cross-decision overrides. They exist on the cube decision only, so
+    //  asking them of a checker play does not compile.
 
     /// <summary>
     /// Equity the doubler earns when the opponent passes a double — always
@@ -251,20 +223,11 @@ public class DecisionData
     /// (<c>min(DoubleTakeEquity, 1) == NoDoubleEquity</c>) favours
     /// <see cref="CubeAction.NoDouble"/>.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
-    /// </exception>
     [JsonIgnore]
-    public CubeAction BestDoublerAction
-    {
-        get
-        {
-            RequireCube();
-            return Math.Min(DoubleTakeEquity, PassEquity) > NoDoubleEquity
-                ? CubeAction.Double
-                : CubeAction.NoDouble;
-        }
-    }
+    public CubeAction BestDoublerAction =>
+        Math.Min(DoubleTakeEquity, PassEquity) > NoDoubleEquity
+            ? CubeAction.Double
+            : CubeAction.NoDouble;
 
     /// <summary>
     /// The correct atomic taker action — <see cref="CubeAction.Take"/>
@@ -277,20 +240,11 @@ public class DecisionData
     /// <c>-1</c>. Tie (<c>DoubleTakeEquity == 1</c>) favours
     /// <see cref="CubeAction.Pass"/>.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
-    /// </exception>
     [JsonIgnore]
-    public CubeAction BestTakerAction
-    {
-        get
-        {
-            RequireCube();
-            return DoubleTakeEquity < PassEquity
-                ? CubeAction.Take
-                : CubeAction.Pass;
-        }
-    }
+    public CubeAction BestTakerAction =>
+        DoubleTakeEquity < PassEquity
+            ? CubeAction.Take
+            : CubeAction.Pass;
 
     /// <summary>
     /// The correct doubler <em>claim</em> — <see cref="BestDoublerAction"/>
@@ -347,18 +301,14 @@ public class DecisionData
     /// Jacoby context enters (Too Good occurs in money too, via Jacoby
     /// redoubles). Whether the verdict <em>can</em> occur at a position is a
     /// separate fact of the rules context, derived beside this one on the
-    /// record — <see cref="BgDecisionData.CanBeTooGood"/>.
+    /// record — <see cref="CubeDecision.CanBeTooGood"/>.
     /// </para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
-    /// </exception>
     [JsonIgnore]
     public CubeClaim BestDoublerClaim
     {
         get
         {
-            RequireCube();
             if (BestDoublerAction == CubeAction.Double)
                 return CubeClaim.Double;
             return NoDoubleEquity > PassEquity && BestTakerAction == CubeAction.Pass
@@ -393,9 +343,6 @@ public class DecisionData
     /// the umbrella as a candidate spec sharpening rather than silently
     /// rounded away here.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
-    /// </exception>
     [JsonIgnore]
     public CubeClaimPair BestClaimPair => new(BestDoublerClaim, BestTakerAction);
 
@@ -410,16 +357,12 @@ public class DecisionData
     /// (<c>min(DoubleTakeEquity, 1)</c>); <c>NoDouble</c>'s value is
     /// <see cref="NoDoubleEquity"/>.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
-    /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="action"/> is not
     /// <see cref="CubeAction.Double"/> or <see cref="CubeAction.NoDouble"/>.
     /// </exception>
     public double DoublerActionError(CubeAction action)
     {
-        RequireCube();
         double actionEquity = action switch
         {
             CubeAction.Double   => Math.Min(DoubleTakeEquity, PassEquity),
@@ -442,16 +385,12 @@ public class DecisionData
     /// Taker equities are the doubler's negated: <c>Take</c> ⇒
     /// <c>-DoubleTakeEquity</c>; <c>Pass</c> ⇒ <c>-1</c>.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
-    /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="action"/> is not
     /// <see cref="CubeAction.Take"/> or <see cref="CubeAction.Pass"/>.
     /// </exception>
     public double TakerActionError(CubeAction action)
     {
-        RequireCube();
         double actionEquity = action switch
         {
             CubeAction.Take => -DoubleTakeEquity,
@@ -461,21 +400,5 @@ public class DecisionData
         };
         double bestEquity = Math.Max(-DoubleTakeEquity, -PassEquity);
         return Math.Max(0.0, bestEquity - actionEquity);
-    }
-
-    /// <summary>
-    /// The single <see cref="IsCube"/> guard behind every cube-only derived
-    /// member — here and on the composite record
-    /// (<see cref="BgDecisionData.CanBeTooGood"/>), so a non-cube decision
-    /// fails the same way from every door.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="IsCube"/> is <see langword="false"/>.
-    /// </exception>
-    internal void RequireCube()
-    {
-        if (!IsCube)
-            throw new InvalidOperationException(
-                "Cube-decision scoring helpers require IsCube to be true.");
     }
 }

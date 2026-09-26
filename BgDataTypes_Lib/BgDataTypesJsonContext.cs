@@ -19,21 +19,23 @@ namespace BgDataTypes_Lib;
 /// (<see cref="BgDecisionData"/>, <see cref="DecisionRow"/>) and the types
 /// that define their own wire token via a bundled converter
 /// (<see cref="Play"/>, <see cref="DecisionId"/>, <see cref="ProblemKey"/>,
-/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and the five enums — <see cref="CubeClaim"/>
+/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and the six enums — <see cref="CubeClaim"/>
 /// among them ahead of its first embedding document, so the claim
 /// vocabulary of halheinrich/backgammon#86 is born source-genned and
 /// downstream contexts chain rather than re-cover it). Composite parts
-/// (<see cref="PositionData"/>, <see cref="DecisionData"/>,
-/// <see cref="DescriptiveData"/>, <see cref="PlayOutcomeData"/>,
+/// (<see cref="PositionData"/>, <see cref="CheckerPlayDecisionData"/>,
+/// <see cref="CubeDecisionData"/>, <see cref="DescriptiveData"/>,
 /// <see cref="PlayCandidate"/>) ride the generator's property-graph walk
-/// from the document roots. <see cref="Move"/> is declared explicitly
-/// because no walk can reach it: <see cref="Play"/>'s converter stops the
-/// generator at <see cref="Play"/>, yet emits <see cref="Move"/> elements by
-/// resolving them through the active
-/// <see cref="System.Text.Json.JsonSerializerOptions"/> at runtime — this
-/// declaration is what that resolution finds in a trimmed consumer. A
-/// completeness test keeps the declarations honest: the serialized-property
-/// closure of the roots must resolve through this context, member by member.
+/// from the roots. Two converters stop that walk, so what lies past them is
+/// declared explicitly and resolved through the active
+/// <see cref="System.Text.Json.JsonSerializerOptions"/> at runtime — these
+/// declarations are what that resolution finds in a trimmed consumer:
+/// <see cref="Play"/>'s converter emits <see cref="Move"/> elements, and
+/// <see cref="BgDecisionDataJsonConverter"/> delegates to the two kinds,
+/// <see cref="CheckerPlayDecision"/> and <see cref="CubeDecision"/>, reading
+/// <see cref="DecisionKind"/> to choose. A completeness test keeps the
+/// declarations honest: the serialized-property closure of the roots must
+/// resolve through this context, member by member.
 /// </para>
 ///
 /// <para>
@@ -59,6 +61,20 @@ namespace BgDataTypes_Lib;
 /// member needs none, and a nullable one defaults to
 /// <see langword="null"/>. A test walks every member of the graph and pins
 /// both halves on both paths.
+/// </para>
+/// <para>
+/// <b>A decision's kind is explicit, and a member of the other kind is
+/// refused</b> (halheinrich/backgammon#273). Every decision states its
+/// <see cref="DecisionKind"/> as a real member, and no reader infers it from
+/// which members are present; see <see cref="BgDecisionDataJsonConverter"/>.
+/// The types whose members belong to one kind — the two records and their
+/// two <c>Decision</c> categories — disallow unmapped members, so a document
+/// whose kind contradicts its members is a
+/// <see cref="System.Text.Json.JsonException"/> rather than a record that
+/// silently dropped the other kind's data. The shared categories
+/// (<see cref="PositionData"/>, <see cref="DescriptiveData"/>,
+/// <see cref="PlayCandidate"/>) keep the serializer's default and ignore a
+/// member they do not know: no member of theirs can belong to the other kind.
 /// </para>
 ///
 /// <para>
@@ -106,6 +122,8 @@ namespace BgDataTypes_Lib;
 /// </summary>
 [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(BgDecisionData))]
+[JsonSerializable(typeof(CheckerPlayDecision))]
+[JsonSerializable(typeof(CubeDecision))]
 [JsonSerializable(typeof(DecisionRow))]
 [JsonSerializable(typeof(Play))]
 [JsonSerializable(typeof(Move))]
@@ -118,6 +136,7 @@ namespace BgDataTypes_Lib;
 [JsonSerializable(typeof(CubeAction))]
 [JsonSerializable(typeof(CubeClaim))]
 [JsonSerializable(typeof(CubeOwner))]
+[JsonSerializable(typeof(DecisionKind))]
 public sealed partial class BgDataTypesJsonContext : JsonSerializerContext
 {
 }

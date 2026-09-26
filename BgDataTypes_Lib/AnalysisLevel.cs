@@ -45,7 +45,7 @@ namespace BgDataTypes_Lib;
 /// The enum's order is a rigor ordering over levels alone. Consumers that
 /// need to compare whole analyses — across the mode axis as well — still use
 /// <see cref="PlayCandidate.DepthRank"/> /
-/// <see cref="DecisionData.CubeDepthRank"/>, which rank the
+/// <see cref="CubeDecisionData.DepthRank"/>, which rank the
 /// <see cref="AnalysisMode"/> × <see cref="AnalysisLevel"/> pair.
 /// </para>
 /// <para>

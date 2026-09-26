@@ -4,66 +4,39 @@ using BgDataTypes_Lib;
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
-/// The Crawford-cube invariant on the composite record
-/// (halheinrich/backgammon#201): doubling is prohibited in the Crawford
-/// game, so a record whose <see cref="PositionData.IsCrawford"/> and
-/// <see cref="DecisionData.IsCube"/> are both true describes a decision
-/// that cannot exist, and the record refuses to be constructed. The guard
-/// sits in both init setters so whichever half is set second fires — an
-/// object initializer in either member order and a JSON document in either
-/// property order all fail the same way. The <c>UserDoublerAction</c>
-/// rejection tests are the pattern.
+/// The Crawford rule on the record (halheinrich/backgammon#201): doubling is
+/// prohibited in the Crawford game, so a cube decision in a Crawford position
+/// describes a decision that cannot exist, and the record refuses to be
+/// constructed. The kind is the record's type now, fixed before any member
+/// is set, so the rule is one guard on <see cref="BgDecisionData.Position"/>:
+/// it fires whatever order the members are set in, from an object
+/// initializer (an <see cref="ArgumentException"/> naming Position) and from
+/// a document in any property order (a <see cref="JsonException"/> on both
+/// paths, carrying it).
 /// </summary>
 public class BgDecisionDataCrawfordCubeTests
 {
-    private static readonly JsonSerializerOptions ContextOptions = new()
-    {
-        TypeInfoResolver = BgDataTypesJsonContext.Default
-    };
-
     private static PositionData Crawford() =>
         TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
 
     private static PositionData NotCrawford() =>
         TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3);
 
-    private static DecisionData Cube() => TestRecords.Decision(isCube: true);
-
-    private static DecisionData Play() => TestRecords.Decision(isCube: false, dice: [3, 1]);
-
     // ---------------------------------------------------------------------
-    //  Object initializers — whichever half completes the Crawford cube
-    //  is the one named
+    //  Object initializers
     // ---------------------------------------------------------------------
 
     [Fact]
-    public void CrawfordCube_DecisionSetSecond_ThrowsNamingDecision()
+    public void CrawfordCube_PositionSetAfterDecision_ThrowsNamingPosition()
     {
-        var ex = Assert.Throws<ArgumentException>(() => new BgDecisionData
+        // Rewritten from CrawfordCube_PositionSetSecond_ThrowsNamingPosition.
+        var ex = Assert.Throws<ArgumentException>(() => new CubeDecision
         {
-            Id = new XgpDecisionId("test.xgp"),
+            Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
             Xgid = "",
-            Position = Crawford(),
-            Decision = Cube(),
-            Descriptive = TestRecords.Descriptive(),
-            Outcome = TestRecords.Outcome(),
-        });
-
-        Assert.Equal("Decision", ex.ParamName);
-        Assert.Contains("Crawford", ex.Message);
-    }
-
-    [Fact]
-    public void CrawfordCube_PositionSetSecond_ThrowsNamingPosition()
-    {
-        var ex = Assert.Throws<ArgumentException>(() => new BgDecisionData
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Xgid = "",
-            Decision = Cube(),
+            Decision = TestRecords.CubeData(),
             Position = Crawford(),
             Descriptive = TestRecords.Descriptive(),
-            Outcome = TestRecords.Outcome(),
         });
 
         Assert.Equal("Position", ex.ParamName);
@@ -71,138 +44,107 @@ public class BgDecisionDataCrawfordCubeTests
     }
 
     [Fact]
-    public void CrawfordPlay_Constructs_InEitherOrder()
+    public void CrawfordCube_PositionSetBeforeDecision_ThrowsNamingPosition()
     {
-        var positionFirst = new BgDecisionData
+        // Rewritten from CrawfordCube_DecisionSetSecond_ThrowsNamingDecision:
+        // the other half no longer completes the contradiction — the kind is
+        // the type, known before Position is set — so Position is named in
+        // this order too.
+        var ex = Assert.Throws<ArgumentException>(() => new CubeDecision
         {
-            Id = new XgpDecisionId("test.xgp"),
+            Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
             Xgid = "",
             Position = Crawford(),
-            Decision = Play(),
+            Decision = TestRecords.CubeData(),
             Descriptive = TestRecords.Descriptive(),
-            Outcome = TestRecords.Outcome(),
-        };
-        var decisionFirst = new BgDecisionData
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Xgid = "",
-            Decision = Play(),
-            Position = Crawford(),
-            Descriptive = TestRecords.Descriptive(),
-            Outcome = TestRecords.Outcome(),
-        };
+        });
 
-        Assert.True(positionFirst.IsCrawford);
-        Assert.False(positionFirst.IsCube);
-        Assert.True(decisionFirst.IsCrawford);
-        Assert.False(decisionFirst.IsCube);
+        Assert.Equal("Position", ex.ParamName);
     }
 
     [Fact]
-    public void NonCrawfordCube_Constructs_InEitherOrder()
+    public void CrawfordPlay_Constructs()
     {
-        var positionFirst = new BgDecisionData
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Xgid = "",
-            Position = NotCrawford(),
-            Decision = Cube(),
-            Descriptive = TestRecords.Descriptive(),
-            Outcome = TestRecords.Outcome(),
-        };
-        var decisionFirst = new BgDecisionData
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Xgid = "",
-            Decision = Cube(),
-            Position = NotCrawford(),
-            Descriptive = TestRecords.Descriptive(),
-            Outcome = TestRecords.Outcome(),
-        };
+        // Rewritten from CrawfordPlay_Constructs_InEitherOrder.
+        var play = TestRecords.CheckerPlay(position: Crawford());
 
-        Assert.False(positionFirst.IsCrawford);
-        Assert.True(positionFirst.IsCube);
-        Assert.False(decisionFirst.IsCrawford);
-        Assert.True(decisionFirst.IsCube);
+        Assert.True(play.IsCrawford);
+        Assert.Equal(DecisionKind.CheckerPlay, play.Kind);
     }
 
     [Fact]
-    public void HalfSetRecord_IsRefused_OnBothPaths()
+    public void NonCrawfordCube_Constructs()
     {
-        // Rewritten from HalfSetRecord_NeverThrows. A record with one half
-        // set used to load with the other at its default ("not cube, not
-        // Crawford"), so it could never complete the forbidden pair. Both
-        // halves are required now (halheinrich/backgammon#222): an
-        // initializer omitting one does not compile, and a document omitting
-        // one is refused as absent, not read as a default half.
-        string crawfordOnly = Document(("Position", Json(Crawford())));
-        string cubeOnly = Document(("Decision", Json(Cube())));
+        // Rewritten from NonCrawfordCube_Constructs_InEitherOrder.
+        var cube = TestRecords.Cube(position: NotCrawford());
 
-        foreach (var json in new[] { crawfordOnly, cubeOnly })
-        {
-            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<BgDecisionData>(json));
-            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<BgDecisionData>(json, ContextOptions));
-        }
+        Assert.False(cube.IsCrawford);
+        Assert.Equal(DecisionKind.Cube, cube.Kind);
     }
 
     // ---------------------------------------------------------------------
-    //  The wire — the same guards run during deserialization, in either
-    //  property order, through the reflection path and the source-generated
-    //  context alike
+    //  The wire — the same guard runs during deserialization, in any
+    //  property order, and the refusal is a JsonException on both paths
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// A composite document holding <paramref name="halves"/> in the order
-    /// given, then the other stored members. Rewritten from literal JSON:
-    /// every member of the halves is required, so each half is a full
-    /// serialized category.
+    /// A cube document with a Crawford position, its <c>Position</c> member
+    /// placed first or last. Rewritten from the halves-in-either-order
+    /// documents: only Position can complete the contradiction now.
     /// </summary>
-    private static string Document(params (string Name, string Json)[] halves)
+    public static TheoryData<bool> PositionFirst => [true, false];
+
+    private static string CrawfordCubeDocument(bool positionFirst)
     {
-        var members = new List<string> { "\"Id\":\"test.xgp\"", "\"Xgid\":\"\"" };
-        foreach (var (name, json) in halves)
-            members.Add($"\"{name}\":{json}");
-        members.Add($"\"Descriptive\":{Json(TestRecords.Descriptive())}");
-        members.Add($"\"Outcome\":{Json(TestRecords.Outcome())}");
-        return "{" + string.Join(",", members) + "}";
-    }
-
-    private static string Json<T>(T value) => JsonSerializer.Serialize(value);
-
-    public static TheoryData<string> CrawfordCubeDocuments =>
-    [
-        Document(("Position", Json(Crawford())), ("Decision", Json(Cube()))),
-        Document(("Decision", Json(Cube())), ("Position", Json(Crawford()))),
-    ];
-
-    [Theory]
-    [MemberData(nameof(CrawfordCubeDocuments))]
-    public void Deserialize_CrawfordCube_Throws(string json)
-    {
-        Assert.Throws<ArgumentException>(
-            () => JsonSerializer.Deserialize<BgDecisionData>(json));
+        var document = WirePaths.Document<BgDecisionData>(TestRecords.Cube(position: NotCrawford()));
+        document.Remove("Position");
+        var crawford = JsonSerializer.SerializeToNode(Crawford(), WirePaths.Context)!;
+        if (positionFirst)
+            document.Insert(0, "Position", crawford);
+        else
+            document.Add("Position", crawford);
+        return document.ToJsonString();
     }
 
     [Theory]
-    [MemberData(nameof(CrawfordCubeDocuments))]
-    public void Deserialize_CrawfordCube_ThroughContext_Throws(string json)
+    [MemberData(nameof(PositionFirst))]
+    public void Deserialize_CrawfordCube_IsRefused_BothPaths(bool positionFirst)
     {
-        Assert.Throws<ArgumentException>(
-            () => JsonSerializer.Deserialize<BgDecisionData>(json, ContextOptions));
+        // Rewritten from Deserialize_CrawfordCube_Throws and
+        // Deserialize_CrawfordCube_ThroughContext_Throws: a malformed
+        // document is a JsonException now, the guard's refusal inside it.
+        var ex = WirePaths.AssertRefused<BgDecisionData>(CrawfordCubeDocument(positionFirst));
+
+        var guard = Assert.IsType<ArgumentException>(ex.InnerException);
+        Assert.Equal("Position", guard.ParamName);
+        Assert.Contains("Crawford", ex.Message);
     }
 
-    public static TheoryData<string> OneFactDocuments =>
-    [
-        Document(("Position", Json(Crawford())), ("Decision", Json(Play()))),
-        Document(("Position", Json(NotCrawford())), ("Decision", Json(Cube()))),
-    ];
-
-    [Theory]
-    [MemberData(nameof(OneFactDocuments))]
-    public void Deserialize_OneFactOnly_Loads(string json)
+    [Fact]
+    public void Deserialize_CrawfordPlayAndNonCrawfordCube_Load_BothPaths()
     {
-        var restored = JsonSerializer.Deserialize<BgDecisionData>(json)!;
+        // Rewritten from Deserialize_OneFactOnly_Loads.
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            var play = WirePaths.RoundTrip<BgDecisionData>(TestRecords.CheckerPlay(position: Crawford()), options);
+            var cube = WirePaths.RoundTrip<BgDecisionData>(TestRecords.Cube(position: NotCrawford()), options);
 
-        Assert.NotEqual(restored.IsCrawford, restored.IsCube);
+            Assert.True(play.IsCrawford);
+            Assert.IsType<CheckerPlayDecision>(play);
+            Assert.False(cube.IsCrawford);
+            Assert.IsType<CubeDecision>(cube);
+        }
+    }
+
+    [Fact]
+    public void Deserialize_CubeWithoutPosition_IsRefused_BothPaths()
+    {
+        // Rewritten from HalfSetRecord_IsRefused_OnBothPaths: a member absent
+        // is refused as absent, never read as a default that could dodge the
+        // rule.
+        var document = WirePaths.Document<BgDecisionData>(TestRecords.Cube());
+        document.Remove("Position");
+
+        WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
     }
 }

@@ -47,8 +47,8 @@ public class ProblemKeyTests
         bool? isJacoby = null,
         int[]? dice = null,
         DescriptiveData? descriptive = null,
-        DecisionId? id = null) => TestRecords.Record(
-        id: id ?? new XgpDecisionId("fixture.xgp"),
+        DecisionId? id = null) => TestRecords.CheckerPlay(
+        id: id ?? new XgDecisionId("fixture.xg", Game: 1, MoveNumber: 1, IsCube: false),
         xgid: "XGID=not-consulted-by-derivation",
         position: TestRecords.Position(
             mop: new BoardPosition(mop ?? StandardMop()),
@@ -58,8 +58,10 @@ public class ProblemKeyTests
             cubeSize: cubeSize,
             cubeOwner: cubeOwner,
             isJacoby: isJacoby),
-        decision: TestRecords.Decision(isCube: false, dice: dice ?? [3, 1]),
-        descriptive: descriptive ?? TestRecords.Descriptive());
+        // The key reads the roll, never the candidates: one pass, which is
+        // valid from every board a fixture here states.
+        decision: TestRecords.CheckerPlayData(dice: dice ?? [3, 1], plays: [TestRecords.Candidate(play: [])]),
+        descriptive: descriptive);
 
     private static BgDecisionData CubeDecision(
         int[]? mop = null,
@@ -70,8 +72,8 @@ public class ProblemKeyTests
         CubeOwner cubeOwner = CubeOwner.OnRoll,
         bool? isJacoby = null,
         DescriptiveData? descriptive = null,
-        DecisionId? id = null) => TestRecords.Record(
-        id: id ?? new XgpDecisionId("fixture.xgp"),
+        DecisionId? id = null) => TestRecords.Cube(
+        id: id ?? new XgDecisionId("fixture.xg", Game: 1, MoveNumber: 2, IsCube: true),
         xgid: "XGID=not-consulted-by-derivation",
         position: TestRecords.Position(
             mop: new BoardPosition(mop ?? StandardMop()),
@@ -81,8 +83,8 @@ public class ProblemKeyTests
             cubeSize: cubeSize,
             cubeOwner: cubeOwner,
             isJacoby: isJacoby),
-        decision: TestRecords.Decision(isCube: true),
-        descriptive: descriptive ?? TestRecords.Descriptive());
+        decision: TestRecords.CubeData(),
+        descriptive: descriptive);
 
     /// <summary>
     /// A money-game (0-away/0-away) checker play carrying the Jacoby fact —
@@ -434,7 +436,8 @@ public class ProblemKeyTests
                 matchLength: 7,
                 onRollName: "Carol",
                 opponentName: "Dave",
-                sourceFile: "two.xgp"));
+                sourceFile: "two.xgp",
+                isStandardStart: null));
 
         Assert.Equal(Derive(a), Derive(b));
     }
@@ -482,11 +485,14 @@ public class ProblemKeyTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void NoKey_UnstampedDiceOnPlay()
+    public void UnstampedDiceOnPlay_CannotBeBuilt()
     {
-        // The spec's named case: a checker play whose dice were never
-        // stamped (the [0,0] default). Guessing a roll is forbidden.
-        AssertNoKey(PlayDecision(dice: [0, 0]));
+        // Rewritten from NoKey_UnstampedDiceOnPlay. The spec's named case — a
+        // checker play whose dice were never stamped, the [0,0] a cube
+        // carried — no longer reaches the no-key rung: a checker play's roll
+        // is two faces 1-6 by construction, so the record cannot exist and
+        // the key never guesses.
+        Assert.Throws<ArgumentOutOfRangeException>(() => PlayDecision(dice: [0, 0]));
     }
 
     [Theory]
@@ -494,27 +500,29 @@ public class ProblemKeyTests
     [InlineData(new[] { 3 })]
     [InlineData(new[] { 3, 1, 2 })]
     [InlineData(new int[0])]
-    public void NoKey_MalformedDiceOnPlay(int[] dice)
+    public void MalformedDiceOnPlay_CannotBeBuilt(int[] dice)
     {
-        AssertNoKey(PlayDecision(dice: dice));
+        // Rewritten from NoKey_MalformedDiceOnPlay, as above.
+        Assert.ThrowsAny<ArgumentException>(() => PlayDecision(dice: dice));
     }
 
     [Fact]
-    public void NoKey_NullDiceListOnPlay()
+    public void NullDiceListOnPlay_IsRefused()
     {
-        // Lenient JSON input can null the dice list through init: the member
-        // is required (present), but a present null is not refused. Rewritten
-        // to take the null through JSON, since the builder states a list.
-        var template = PlayDecision();
-        var decision = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(template.Decision))!.AsObject();
-        decision["Dice"] = null;
-        var nullDice = JsonSerializer.Deserialize<DecisionData>(decision.ToJsonString())!;
-        Assert.Null(nullDice.Dice);
+        // Rewritten from NoKey_NullDiceListOnPlay: a present null list is
+        // refused at init now, and read through the wire unit it is a
+        // JsonException on both paths — so the key never meets it.
+        var ex = Assert.Throws<ArgumentNullException>(() => new CheckerPlayDecisionData
+        {
+            Dice = null!,
+            Plays = [TestRecords.Candidate()],
+            BestPlayIndex = 0,
+        });
+        Assert.Equal("Dice", ex.ParamName);
 
-        AssertNoKey(TestRecords.Record(
-            id: template.Id,
-            position: template.Position,
-            decision: nullDice));
+        var document = WirePaths.Document<BgDecisionData>(PlayDecision());
+        document["Decision"]!["Dice"] = null;
+        WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
     }
 
     [Fact]
@@ -725,13 +733,11 @@ public class ProblemKeyTests
     /// Rebuilds a fixture under a different <see cref="BgDecisionData.Xgid"/>,
     /// leaving every decomposed fact untouched.
     /// </summary>
-    private static BgDecisionData WithXgid(BgDecisionData data, string xgid) => TestRecords.Record(
-        id: data.Id,
-        xgid: xgid,
-        position: data.Position,
-        decision: data.Decision,
-        descriptive: data.Descriptive,
-        outcome: data.Outcome);
+    private static BgDecisionData WithXgid(BgDecisionData data, string xgid) => data.Match<BgDecisionData>(
+        play => TestRecords.CheckerPlay(
+            id: play.Id, xgid: xgid, position: play.Position, decision: play.Decision, descriptive: play.Descriptive),
+        cube => TestRecords.Cube(
+            id: cube.Id, xgid: xgid, position: cube.Position, decision: cube.Decision, descriptive: cube.Descriptive));
 
     [Fact]
     public void TryParse_RetiredV2MoneySpelling_Rejected()

@@ -3,13 +3,13 @@ using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
 
-public class DecisionDataUserCubeActionTests
+public class CubeDecisionDataUserCubeActionTests
 {
     // The played-cube-action halves are guarded to their own action domains,
     // mirroring CubeDecisionPair's half-guards: UserDoublerAction admits
     // NoDouble / Double (or null), UserTakerAction admits Take / Pass (or
     // null). Cross-half consistency between the two is a producer contract
-    // and deliberately not guarded — see the section comment in DecisionData.
+    // and deliberately not guarded — see the section comment in CubeDecisionData.
 
     // ---------------------------------------------------------------------
     //  Valid domains — every in-domain value (including null) is accepted
@@ -21,7 +21,7 @@ public class DecisionDataUserCubeActionTests
     [InlineData(CubeAction.Double)]
     public void UserDoublerAction_DoublerHalfOrNull_Accepted(CubeAction? action)
     {
-        var d = TestRecords.Decision(isCube: true, userDoublerAction: action);
+        var d = TestRecords.CubeData(userDoublerAction: action);
 
         Assert.Equal(action, d.UserDoublerAction);
     }
@@ -32,7 +32,7 @@ public class DecisionDataUserCubeActionTests
     [InlineData(CubeAction.Pass)]
     public void UserTakerAction_TakerHalfOrNull_Accepted(CubeAction? action)
     {
-        var d = TestRecords.Decision(isCube: true, userTakerAction: action);
+        var d = TestRecords.CubeData(userTakerAction: action);
 
         Assert.Equal(action, d.UserTakerAction);
     }
@@ -48,7 +48,7 @@ public class DecisionDataUserCubeActionTests
     public void UserDoublerAction_NonDoublerAction_Throws(CubeAction takerAction)
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => TestRecords.Decision(isCube: true, userDoublerAction: takerAction));
+            () => TestRecords.CubeData(userDoublerAction: takerAction));
     }
 
     [Theory]
@@ -58,7 +58,7 @@ public class DecisionDataUserCubeActionTests
     public void UserTakerAction_NonTakerAction_Throws(CubeAction doublerAction)
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => TestRecords.Decision(isCube: true, userTakerAction: doublerAction));
+            () => TestRecords.CubeData(userTakerAction: doublerAction));
     }
 
     // ---------------------------------------------------------------------
@@ -66,14 +66,28 @@ public class DecisionDataUserCubeActionTests
     // ---------------------------------------------------------------------
 
     [Theory]
-    [InlineData("{\"IsCube\":true,\"UserDoublerAction\":\"Take\"}")]
-    [InlineData("{\"IsCube\":true,\"UserTakerAction\":\"Double\"}")]
+    [InlineData("{\"UserDoublerAction\":\"Take\"}")]
+    [InlineData("{\"UserTakerAction\":\"Double\"}")]
     public void Deserialize_CrossHalfValue_Throws(string json)
     {
-        // The init guards run during deserialization too: corrupt wire data
-        // surfaces at read time rather than as a silently-carried invalid
-        // action.
+        // Rewritten: the retired "IsCube" member is gone from the fragments —
+        // the cube category now refuses a member it does not have. The init
+        // guards run during deserialization too: corrupt wire data surfaces
+        // at read time rather than as a silently-carried invalid action.
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => JsonSerializer.Deserialize<DecisionData>(json));
+            () => JsonSerializer.Deserialize<CubeDecisionData>(json));
+    }
+
+    [Theory]
+    [InlineData("UserDoublerAction", "Take")]
+    [InlineData("UserTakerAction", "Double")]
+    public void Deserialize_CrossHalfValueInARecord_IsRefused_BothPaths(string member, string action)
+    {
+        // Added: read as the wire unit, the guard's refusal is a JsonException.
+        var document = WirePaths.Document<BgDecisionData>(TestRecords.Cube());
+        document["Decision"]![member] = action;
+
+        var ex = WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
+        Assert.IsType<ArgumentOutOfRangeException>(ex.InnerException);
     }
 }

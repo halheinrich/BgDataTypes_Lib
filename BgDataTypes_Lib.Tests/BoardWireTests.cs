@@ -8,9 +8,10 @@ namespace BgDataTypes_Lib.Tests;
 /// Stored boards on the wire (halheinrich/backgammon#15): a board is a
 /// <see cref="BoardPosition"/> written as its 26 counts, a malformed board is
 /// a malformed document, and an absent after-board is <c>null</c> — written
-/// as null, read from null or from a missing member, and read from the empty
-/// array older documents wrote. Every case runs on the reflection path and
-/// through <see cref="BgDataTypesJsonContext"/>.
+/// as null and read from null or from a missing member. The after-boards are
+/// the row's columns now; a record derives its own and writes none. Every
+/// case runs on the reflection path and through
+/// <see cref="BgDataTypesJsonContext"/>.
 /// </summary>
 public class BoardWireTests
 {
@@ -74,8 +75,8 @@ public class BoardWireTests
         // A board that must be present is never absent in disguise: neither
         // null nor the empty array reads as a board.
         var options = OptionsFor(path);
-        var record = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Record(), options))!.AsObject();
-        var row = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Row(roll: 31), options))!.AsObject();
+        var record = JsonNode.Parse(JsonSerializer.Serialize<BgDecisionData>(TestRecords.Cube(), options))!.AsObject();
+        var row = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Row(), options))!.AsObject();
 
         foreach (JsonNode? value in new JsonNode?[] { null, new JsonArray() })
         {
@@ -90,94 +91,96 @@ public class BoardWireTests
     }
 
     // ── Optional after-boards ─────────────────────────────────────
+    //
+    // A record's after-boards are derived and never on its wire
+    // (AfterBoardDerivationTests); the row carries them as optional columns,
+    // taken from the record. The empty array older documents wrote for an
+    // absent board belonged to the retired shape, which is refused whole
+    // (WireGoldenTests), so it is refused here as the malformed board it is.
 
     [Theory]
     [MemberData(nameof(Paths))]
     public void AfterBoards_Null_RoundTrip(string path)
     {
+        // Rewritten: a checker row with no user play among the candidates
+        // writes its player board as null and reads it back as null; its best
+        // board is present. (The retired PlayOutcomeData half is gone.)
         var options = OptionsFor(path);
-        var outcome = TestRecords.Outcome(afterBestBoard: BoardPosition.Standard, afterPlayerBoard: null);
-        var row = TestRecords.Row(roll: 31, afterBestBoard: null, afterPlayerBoard: BoardPosition.Standard);
+        var row = TestRecords.Row(TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: null)));
 
-        var outcomeJson = JsonSerializer.Serialize(outcome, options);
         var rowJson = JsonSerializer.Serialize(row, options);
-        var outcomeBack = JsonSerializer.Deserialize<PlayOutcomeData>(outcomeJson, options)!;
         var rowBack = JsonSerializer.Deserialize<DecisionRow>(rowJson, options)!;
 
-        Assert.Equal($"{{\"AfterBestBoard\":{StandardJson},\"AfterPlayerBoard\":null}}", outcomeJson);
-        Assert.Contains($"\"AfterBestBoard\":null,\"AfterPlayerBoard\":{StandardJson}", rowJson);
-        Assert.Equal(BoardPosition.Standard, outcomeBack.AfterBestBoard);
-        Assert.Null(outcomeBack.AfterPlayerBoard);
-        Assert.Null(rowBack.AfterBestBoard);
-        Assert.Equal(BoardPosition.Standard, rowBack.AfterPlayerBoard);
-    }
-
-    [Theory]
-    [MemberData(nameof(Paths))]
-    public void AfterBoards_OldEmptyArray_ReadsAsNull(string path)
-    {
-        // Documents written before the boards were typed spelled an absent
-        // after-board as []; they keep loading, as null.
-        var options = OptionsFor(path);
-
-        var outcome = JsonSerializer.Deserialize<PlayOutcomeData>(
-            "{\"AfterBestBoard\":[],\"AfterPlayerBoard\":[ ]}", options)!;
-        var row = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Row(roll: 0), options))!.AsObject();
-        row["AfterBestBoard"] = new JsonArray();
-        row["AfterPlayerBoard"] = new JsonArray();
-        var rowBack = JsonSerializer.Deserialize<DecisionRow>(row.ToJsonString(), options)!;
-
-        Assert.Null(outcome.AfterBestBoard);
-        Assert.Null(outcome.AfterPlayerBoard);
-        Assert.Null(rowBack.AfterBestBoard);
+        Assert.Contains("\"AfterPlayerBoard\":null", rowJson);
         Assert.Null(rowBack.AfterPlayerBoard);
-
-        // …and it is never written: a read-back writes null.
-        Assert.Equal("{\"AfterBestBoard\":null,\"AfterPlayerBoard\":null}",
-            JsonSerializer.Serialize(outcome, options));
+        Assert.Equal(row.AfterBestBoard, rowBack.AfterBestBoard);
+        Assert.NotNull(rowBack.AfterBestBoard);
     }
 
     [Theory]
     [MemberData(nameof(Paths))]
-    public void AfterBoards_OldEmptyArray_InsideARecord_ReadsAsNull(string path)
+    public void AfterBoards_OldEmptyArray_IsRefused(string path)
     {
-        // The shape an old cube record carried, inside the whole document.
+        // Rewritten from AfterBoards_OldEmptyArray_ReadsAsNull: the retired
+        // NullableBoardPositionJsonConverter read [] as an absent board for
+        // documents written before the boards were typed; every such document
+        // is of the retired shape and refused whole, so the tolerance went
+        // with it and [] is a malformed board.
         var options = OptionsFor(path);
-        var record = JsonNode.Parse(JsonSerializer.Serialize(
-            TestRecords.Record(decision: TestRecords.Decision(isCube: true)), options))!.AsObject();
+        var row = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Row(TestRecords.Cube()), options))!.AsObject();
+        row["AfterBestBoard"] = new JsonArray();
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DecisionRow>(row.ToJsonString(), options));
+    }
+
+    [Theory]
+    [MemberData(nameof(Paths))]
+    public void AfterBoards_OldOutcomeInsideARecord_IsRefused(string path)
+    {
+        // Rewritten from AfterBoards_OldEmptyArray_InsideARecord_ReadsAsNull:
+        // the shape an old cube record carried — an Outcome with empty boards
+        // — is a member no decision has now, and a decision refuses a member
+        // it does not have.
+        var options = OptionsFor(path);
+        var record = JsonNode.Parse(JsonSerializer.Serialize<BgDecisionData>(TestRecords.Cube(), options))!.AsObject();
         record["Outcome"] = JsonNode.Parse("{\"AfterBestBoard\":[],\"AfterPlayerBoard\":[]}");
 
-        var restored = JsonSerializer.Deserialize<BgDecisionData>(record.ToJsonString(), options)!;
-
-        Assert.Null(restored.AfterBestBoard);
-        Assert.Null(restored.AfterPlayerBoard);
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<BgDecisionData>(record.ToJsonString(), options));
     }
 
     [Theory]
     [MemberData(nameof(Paths))]
-    public void AfterBoards_CubeRecord_WrittenAsNull(string path)
+    public void AfterBoards_CubeDecision_NoneOnTheRecord_NullOnTheRow(string path)
     {
-        // The one intended byte change of the leg: a cube record's absent
-        // after-boards were written [] and are written null.
-        var json = JsonSerializer.Serialize(
-            TestRecords.Record(decision: TestRecords.Decision(isCube: true)), OptionsFor(path));
+        // Rewritten from AfterBoards_CubeRecord_WrittenAsNull: a cube record
+        // writes no after-board at all — no member of it — and a cube row
+        // writes its two empty columns as null.
+        var options = OptionsFor(path);
+        var recordJson = JsonSerializer.Serialize<BgDecisionData>(TestRecords.Cube(), options);
+        var rowJson = JsonSerializer.Serialize(TestRecords.Row(TestRecords.Cube()), options);
 
-        Assert.EndsWith("\"Outcome\":{\"AfterBestBoard\":null,\"AfterPlayerBoard\":null}}", json);
+        Assert.DoesNotContain("AfterBestBoard", recordJson);
+        Assert.DoesNotContain("Outcome", recordJson);
+        Assert.Contains("\"AfterBestBoard\":null,\"AfterPlayerBoard\":null", rowJson);
     }
 
     [Theory]
     [MemberData(nameof(MalformedBoards))]
     public void AfterBoards_Malformed_IsAJsonException_OnBothPaths(string name, string json)
     {
-        // Only null and the empty array mean absent; every other malformed
-        // board is refused as it is for a required board.
-        if (json is "null" or "[]")
+        // Rewritten onto the row's optional player board: only null means
+        // absent now; every other malformed board — the empty array included —
+        // is refused as it is for a required board.
+        if (json is "null")
             return;
 
         foreach (var path in new[] { "reflection", "context" })
         {
-            var ex = Record.Exception(() => JsonSerializer.Deserialize<PlayOutcomeData>(
-                $"{{\"AfterBestBoard\":{json}}}", OptionsFor(path)));
+            var options = OptionsFor(path);
+            var row = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Row(), options))!.AsObject();
+            row["AfterPlayerBoard"] = JsonNode.Parse(json);
+
+            var ex = Record.Exception(() => JsonSerializer.Deserialize<DecisionRow>(row.ToJsonString(), options));
             Assert.True(ex is JsonException, $"{name} on the {path} path: {ex?.GetType().Name ?? "no exception"}");
         }
     }

@@ -8,19 +8,18 @@ namespace BgDataTypes_Lib.Tests;
 /// (halheinrich/backgammon#86; amended 2026-09-02 by
 /// halheinrich/backgammon#187): Too Good ⟺ best doubler action is NoDouble
 /// AND NoDoubleEquity &gt; 1 AND best taker action is Pass — implemented as
-/// <see cref="DecisionData.BestDoublerClaim"/> beside its action-level
-/// siblings, with <see cref="DecisionData.BestClaimPair"/> composing the
+/// <see cref="CubeDecisionData.BestDoublerClaim"/> beside its action-level
+/// siblings, with <see cref="CubeDecisionData.BestClaimPair"/> composing the
 /// full derived truth. Equities are synthesized inline per the TestData
 /// rule; the real-corpus exercise of the same predicate lives in
 /// <see cref="TooGoodCorpusExerciseTests"/>, and the offerability fact that
 /// sits beside the claim on the composite record is pinned in
-/// <see cref="BgDecisionDataTooGoodOfferabilityTests"/>.
+/// <see cref="CubeDecisionTooGoodOfferabilityTests"/>.
 /// </summary>
-public class DecisionDataClaimDerivationTests
+public class CubeDecisionDataClaimDerivationTests
 {
-    private static DecisionData MakeCube(double noDoubleEquity, double doubleTakeEquity)
-        => TestRecords.Decision(
-            isCube: true,
+    private static CubeDecisionData MakeCube(double noDoubleEquity, double doubleTakeEquity)
+        => TestRecords.CubeData(
             noDoubleEquity: noDoubleEquity,
             doubleTakeEquity: doubleTakeEquity);
 
@@ -181,11 +180,11 @@ public class DecisionDataClaimDerivationTests
     // the claim: a full money/Jacoby record in redouble posture derives Too
     // Good from the same three equities as any match position. (Whether the
     // verdict is offered at a position is the separate offerability fact,
-    // BgDecisionData.CanBeTooGood, pinned in its own suite.)
+    // CubeDecision.CanBeTooGood, pinned in its own suite.)
     [Fact]
     public void Derivation_IsContextFree_JacobyRedoubleDerivesTooGood()
     {
-        var record = TestRecords.Record(
+        var record = TestRecords.Cube(
             id: new XgpDecisionId("jacoby-redouble.xgp"),
             position: TestRecords.Position(
                 mop: BoardPosition.Empty,
@@ -195,32 +194,35 @@ public class DecisionDataClaimDerivationTests
                 cubeSize: 2,               // cube already turned:
                 cubeOwner: CubeOwner.OnRoll // a redouble decision
             ),
-            decision: TestRecords.Decision(
-                isCube: true,
+            decision: TestRecords.CubeData(
                 noDoubleEquity: 1.15,      // playing on (gammons re-armed)
                 doubleTakeEquity: 1.30     // beats cashing; opponent passes
-            ));
+            ),
+            descriptive: TestRecords.Descriptive(matchLength: 0, isStandardStart: null));
 
         Assert.Equal(CubeClaim.TooGood, record.Decision.BestDoublerClaim);
         Assert.Equal(CubeClaimPair.TooGoodPass, record.Decision.BestClaimPair);
     }
 
     // ---------------------------------------------------------------------
-    //  IsCube guard and serialization posture — sibling parity
+    //  A cube decision's members only, and serialization posture
     // ---------------------------------------------------------------------
 
     [Fact]
-    public void ClaimDerivation_Throws_WhenNotCube()
+    public void ClaimDerivation_IsNotAMemberOfACheckerPlay()
     {
-        var play = TestRecords.Decision();   // IsCube defaults to false
-
-        Assert.Throws<InvalidOperationException>(() => _ = play.BestDoublerClaim);
-        Assert.Throws<InvalidOperationException>(() => _ = play.BestClaimPair);
+        // Rewritten from ClaimDerivation_Throws_WhenNotCube: asking a checker
+        // play for its claim no longer compiles, so no guard throws.
+        foreach (var name in new[] { nameof(CubeDecisionData.BestDoublerClaim), nameof(CubeDecisionData.BestClaimPair) })
+        {
+            Assert.NotNull(typeof(CubeDecisionData).GetProperty(name));
+            Assert.Null(typeof(CheckerPlayDecisionData).GetProperty(name));
+            Assert.Null(typeof(CheckerPlayDecision).GetProperty(name));
+        }
     }
 
-    // Without [JsonIgnore], System.Text.Json would invoke the throwing
-    // getters on every play decision it serialises — the BestDoublerAction
-    // precedent, extended to the claim members.
+    // A derivation, not wire: [JsonIgnore] keeps the claim members off the
+    // document (the BestDoublerAction precedent).
     [Fact]
     public void ClaimDerivation_IsNotSerialised()
     {

@@ -16,9 +16,14 @@ namespace BgDataTypes_Lib;
 /// Public, like every converter a type-level <c>[JsonConverter]</c> here
 /// names: a downstream <see cref="JsonSerializerContext"/> whose documents
 /// embed the annotated type must instantiate the converter from its own
-/// generated code (see <see cref="PlayJsonConverter"/>). The optional
-/// after-boards use <see cref="NullableBoardPositionJsonConverter"/>, which
-/// shares this wire form.
+/// generated code (see <see cref="PlayJsonConverter"/>). An optional board
+/// (the row's after-board columns) is a <c>BoardPosition?</c>, which the
+/// serializer wraps around this converter: <c>null</c> reads and writes as
+/// <c>null</c>, and anything else is this wire form. The retired
+/// <c>NullableBoardPositionJsonConverter</c> also read the empty array older
+/// documents wrote for an absent board; every document of that shape is now
+/// refused whole (it states no decision kind), so the tolerance went with
+/// it, and an empty array is a malformed board like any other.
 /// </para>
 /// </summary>
 public sealed class BoardPositionJsonConverter : JsonConverter<BoardPosition>

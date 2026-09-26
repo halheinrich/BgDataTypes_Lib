@@ -1,58 +1,154 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// The composite decision record — one analysed backgammon decision as the
-/// ecosystem's JSON wire unit, composing four orthogonal categories:
-/// <see cref="Position"/> (board and match state), <see cref="Decision"/>
-/// (the analysis and the user's choice), <see cref="Descriptive"/>
-/// (provenance and metadata) and <see cref="Outcome"/> (after-boards).
-/// Round-trips through <c>System.Text.Json</c> with no consumer-side
-/// converter registration — the member types bundle their own converters.
-/// Implements <see cref="IDecisionFilterData"/> by forwarding into the
-/// category members; that view is a read-side derivation and is excluded
-/// from JSON — the category members are the wire form
-/// (halheinrich/backgammon#14). Every stored member is <c>required</c>, per
-/// the wire rule stated on <see cref="BgDataTypesJsonContext"/>.
+/// The decision record — one analysed backgammon decision as the ecosystem's
+/// JSON wire unit. A decision is one of two types
+/// (halheinrich/backgammon#273, Hal's ruling of 2026-09-25):
+/// <see cref="CheckerPlayDecision"/> and <see cref="CubeDecision"/>, each
+/// carrying only its own fields, so code that reads one kind's field off the
+/// other does not compile and no member holds a value standing for "not
+/// applicable". This base holds what every decision has — its
+/// <see cref="Kind"/>, <see cref="Id"/>, <see cref="Xgid"/>, the
+/// <see cref="Position"/> it was made in and the <see cref="Descriptive"/>
+/// provenance — and each kind adds its own <c>Decision</c> category.
 ///
 /// <para>
-/// <b>The Crawford rule binds the record</b> (halheinrich/backgammon#201).
-/// Doubling is prohibited in the Crawford game, so a cube decision
-/// (<see cref="DecisionData.IsCube"/>) in a Crawford position
-/// (<see cref="PositionData.IsCrawford"/>) cannot exist, and the record
-/// cannot be constructed: the <see cref="Position"/> and
-/// <see cref="Decision"/> init setters each check the other half, so
-/// whichever is set second throws <see cref="ArgumentException"/> naming
-/// itself — from an object initializer in either member order and from a
-/// JSON document in either property order alike, since
-/// <c>System.Text.Json</c> populates init setters. The half set first never
-/// throws: until it is set, the other half counts as neither cube nor
-/// Crawford.
+/// <b>A closed pair.</b> The constructor is not reachable outside this
+/// library, so these two kinds are the only ones there are, and
+/// <see cref="Match{TResult}"/> and <see cref="Switch"/> take one branch per
+/// kind: a consumer's match over the kind has no silent fall-through, and a
+/// third kind would break every match at compile time. Reading a kind's own
+/// members is a pattern match
+/// (<c>record is CubeDecision cube</c>) or a <see cref="Match{TResult}"/>.
+/// </para>
+///
+/// <para>
+/// <b>On the wire</b> the kind is a real member, <c>"Kind"</c>, written first
+/// whatever static type the value is serialized as, and read wherever it sits;
+/// <see cref="BgDecisionDataJsonConverter"/> finds it, refuses a document
+/// without exactly one known kind, and hands the whole document to that
+/// kind's generated contract. Read a record as <see cref="BgDecisionData"/>:
+/// that is where every refusal — a member of the other kind, a missing
+/// member, a construction rule broken — is a
+/// <see cref="JsonException"/>. Every stored member is <c>required</c> or
+/// nullable, per the wire rule stated on <see cref="BgDataTypesJsonContext"/>;
+/// <see cref="Kind"/> is required through <see cref="JsonRequiredAttribute"/>,
+/// since the type states it and code never does.
+/// </para>
+///
+/// <para>
+/// <b>The members agree by construction.</b> Each init setter checks its value
+/// against the members already set and against the kind, which the type
+/// fixes before any member is set, so a record breaking a rule of
+/// <see cref="DecisionRules"/> cannot be built — from an object initializer in
+/// any member order (an <see cref="ArgumentException"/> naming the member that
+/// completed the contradiction) or from JSON (a
+/// <see cref="JsonException"/>):
+/// </para>
+/// <list type="bullet">
+/// <item><description>a cube decision is never made in the Crawford game
+/// (halheinrich/backgammon#201) — <see cref="Position"/> refuses it;</description></item>
+/// <item><description>an <see cref="XgDecisionId"/> names this record's own kind
+/// — <see cref="Id"/> refuses the other;</description></item>
+/// <item><description>a standalone position states no
+/// <see cref="DescriptiveData.IsStandardStart"/>, and a decision in a game
+/// does (halheinrich/backgammon#124) — whichever of <see cref="Id"/> and
+/// <see cref="Descriptive"/> is set second refuses a mismatch;</description></item>
+/// <item><description>a checker play's candidates are all valid from its
+/// position — see <see cref="CheckerPlayDecision"/>.</description></item>
+/// </list>
+/// <para>
 /// <see cref="ProblemKey"/>'s grammar still accepts a Crawford cube key,
-/// because stats documents written before this guard hold such keys and
-/// must keep loading; those keys are inert rather than orphaned — stats are
-/// looked up per pooled problem (<c>BgGame_Lib</c>'s
+/// because stats documents written before the Crawford guard hold such keys
+/// and must keep loading; those keys are inert rather than orphaned — stats
+/// are looked up per pooled problem (<c>BgGame_Lib</c>'s
 /// <c>MixedProblemSetSource</c>), and nothing but the document writer's
 /// ordering walks the whole document.
 /// </para>
+///
+/// <para>
+/// Implements <see cref="IDecisionFilterData"/>: the members every kind has
+/// are forwarded publicly; the checker play's own (the roll and the
+/// after-boards) are public on <see cref="CheckerPlayDecision"/> and read as
+/// <see langword="null"/> through the interface for a cube decision. The view
+/// is a read-side derivation and is excluded from JSON — the stored members
+/// are the wire form (halheinrich/backgammon#14).
+/// </para>
 /// </summary>
-public class BgDecisionData : IDecisionFilterData
+[JsonConverter(typeof(BgDecisionDataJsonConverter))]
+public abstract class BgDecisionData : IDecisionFilterData
 {
-    // Null only until the half is set; `required` guarantees neither is null
-    // once construction ends (see the comment above Position).
+    private readonly DecisionKind _kind;
+
+    // Null only while construction is still setting the member; `required`
+    // guarantees each is set by the time it ends, and each init setter
+    // rejects an explicit null (halheinrich/backgammon#221). The guards below
+    // read an unset member as "nothing to agree with yet".
+    private readonly DecisionId? _id;
     private readonly PositionData? _position;
-    private readonly DecisionData? _decision;
+    private readonly DescriptiveData? _descriptive;
+
+    /// <summary>
+    /// The one constructor, reachable only from the two kinds in this
+    /// library: the kind is fixed here, before any member is set, so every
+    /// init guard can read it.
+    /// </summary>
+    private protected BgDecisionData(DecisionKind kind) => _kind = kind;
+
+    /// <summary>
+    /// The decision's kind — the value form of its type: every
+    /// <see cref="CheckerPlayDecision"/> is <see cref="DecisionKind.CheckerPlay"/>
+    /// and every <see cref="CubeDecision"/> is <see cref="DecisionKind.Cube"/>.
+    /// A real wire member, written first; code never sets it, and a document
+    /// may only state the record's own kind.
+    /// </summary>
+    /// <exception cref="JsonException">
+    /// Thrown on read when the document states the other kind — reachable
+    /// only from JSON (the setter is internal, for the serializer alone).
+    /// </exception>
+    [JsonInclude, JsonRequired, JsonPropertyOrder(-5)]
+    public DecisionKind Kind
+    {
+        get => _kind;
+        internal init
+        {
+            if (value != _kind)
+                throw new JsonException(
+                    $"The document states Kind {value} for a {_kind} decision.");
+        }
+    }
 
     /// <summary>
     /// Stable, persistent identifier for this decision within its source file.
     /// Producer-supplied at the build site (see <c>ConvertXgToJson_Lib</c>) —
     /// required so that uninitialized cases surface at construction rather than
-    /// later as silent null reads. Not part of <see cref="IDecisionFilterData"/>
-    /// (the filter passes records through unchanged and never needs to see the
-    /// ID).
+    /// later as silent null reads. The one stored place of the decision's game
+    /// and move number (<see cref="Game"/>, <see cref="MoveNumber"/>).
     /// </summary>
-    public required DecisionId Id { get; init; }
+    /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when the value is an <see cref="XgDecisionId"/> naming
+    /// the other kind, or when <see cref="Descriptive"/> is already set and its
+    /// <see cref="DescriptiveData.IsStandardStart"/> disagrees with the value
+    /// (<see cref="DecisionRules"/>).
+    /// </exception>
+    [JsonPropertyOrder(-4)]
+    public required DecisionId Id
+    {
+        get => _id!;
+        init
+        {
+            ArgumentNullException.ThrowIfNull(value, nameof(Id));
+            if (!DecisionRules.IdAgrees(value, _kind))
+                throw new ArgumentException(DecisionRules.IdKindMessage, nameof(Id));
+            if (_descriptive is not null && !DecisionRules.StartAgrees(value, _descriptive.IsStandardStart))
+                throw new ArgumentException(DecisionRules.StartMessage, nameof(Id));
+            _id = value;
+        }
+    }
 
     /// <summary>
     /// XGID position string. Lives at the top level rather than inside
@@ -61,102 +157,121 @@ public class BgDecisionData : IDecisionFilterData
     /// property of the minimal derived <see cref="PositionData"/>. Mirrors
     /// <see cref="DecisionRow.Xgid"/>.
     /// </summary>
+    [JsonPropertyOrder(-3)]
     public required string Xgid { get; init; }
-
-    // Both halves keep their non-nullable declaration honest on every path.
-    // They are required, so an absent half is a compile error in an object
-    // initializer and a JsonException on the wire, through the reflection
-    // path and the source-generated context alike
-    // (halheinrich/backgammon#222); and an explicit null — an
-    // initializer's, or a JSON document's `"Position":null` — is rejected
-    // at init with ArgumentNullException (halheinrich/backgammon#221). The
-    // backing fields are therefore null only while construction is still
-    // setting them: the Crawford guard below reads an unset other half as
-    // "not cube, not Crawford", and `required` guarantees both are set by
-    // the time construction ends.
 
     /// <summary>
     /// Board, score context and cube state at the moment of the decision.
     /// </summary>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown on init when the value is <see langword="null"/> — the member
-    /// is declared non-nullable and keeps it; a JSON <c>null</c> for it is
-    /// a malformed document, not a record without a position
-    /// (halheinrich/backgammon#221).
-    /// </exception>
+    /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">
-    /// Thrown on init when the incoming position is Crawford and the
-    /// already-set <see cref="Decision"/> is a cube decision — the Crawford
-    /// rule, see the class summary (<see cref="CrawfordRule"/> is the one
-    /// spelling of the rule).
+    /// Thrown on init when this is a cube decision and the position is
+    /// Crawford (<see cref="DecisionRules.CrawfordMessage"/>), or when this is
+    /// a checker play whose candidates are already set and one of them is
+    /// invalid from the position (see <see cref="CheckerPlayDecision"/>).
     /// </exception>
+    [JsonPropertyOrder(-2)]
     public required PositionData Position
     {
         get => _position!;
         init
         {
             ArgumentNullException.ThrowIfNull(value, nameof(Position));
-            CrawfordRule.ThrowIfCrawfordCube(value.IsCrawford, _decision?.IsCube == true, nameof(Position));
+            if (!DecisionRules.CrawfordAllows(_kind, value.IsCrawford))
+                throw new ArgumentException(DecisionRules.CrawfordMessage, nameof(Position));
+            PositionStated(value);
             _position = value;
         }
     }
 
-    /// <summary>
-    /// The analysis and how the user's choice scored — see
-    /// <see cref="DecisionData"/>.
-    /// </summary>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown on init when the value is <see langword="null"/> — the member
-    /// is declared non-nullable and keeps it; a JSON <c>null</c> for it is
-    /// a malformed document, not a record without a decision
-    /// (halheinrich/backgammon#221).
-    /// </exception>
+    /// <summary>Provenance and metadata: players, source file, the match and its start.</summary>
+    /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">
-    /// Thrown on init when the incoming decision is a cube decision and the
-    /// already-set <see cref="Position"/> is Crawford — the Crawford rule,
-    /// see the class summary (<see cref="CrawfordRule"/> is the one spelling
-    /// of the rule).
+    /// Thrown on init when <see cref="Id"/> is already set and the value's
+    /// <see cref="DescriptiveData.IsStandardStart"/> disagrees with it
+    /// (<see cref="DecisionRules"/>).
     /// </exception>
-    public required DecisionData Decision
+    [JsonPropertyOrder(-1)]
+    public required DescriptiveData Descriptive
     {
-        get => _decision!;
+        get => _descriptive!;
         init
         {
-            ArgumentNullException.ThrowIfNull(value, nameof(Decision));
-            CrawfordRule.ThrowIfCrawfordCube(_position?.IsCrawford == true, value.IsCube, nameof(Decision));
-            _decision = value;
+            ArgumentNullException.ThrowIfNull(value, nameof(Descriptive));
+            if (_id is not null && !DecisionRules.StartAgrees(_id, value.IsStandardStart))
+                throw new ArgumentException(DecisionRules.StartMessage, nameof(Descriptive));
+            _descriptive = value;
         }
     }
 
-    /// <summary>Provenance and metadata: players, source file, position within the match.</summary>
-    public required DescriptiveData Descriptive { get; init; }
+    /// <summary>
+    /// The position as stated so far, for a kind whose own members must agree
+    /// with it: <see langword="null"/> until <see cref="Position"/> is set.
+    /// </summary>
+    private protected PositionData? StatedPosition => _position;
 
     /// <summary>
-    /// After-boards derived from the play choices. Producer contract: both
-    /// boards <see langword="null"/> for cube decisions — not guarded here;
-    /// consumers test each board for <see langword="null"/> (see
-    /// <see cref="PlayOutcomeData"/>).
+    /// Called from <see cref="Position"/>'s init with the incoming position,
+    /// before it is stored, so a kind can hold its own already-set members to
+    /// it and refuse by throwing. The base's own rules have passed.
     /// </summary>
-    public required PlayOutcomeData Outcome { get; init; }
+    private protected abstract void PositionStated(PositionData position);
+
+    // -----------------------------------------------------------------------
+    //  The kind, exhaustively
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The result of the branch for this record's kind — one branch per kind,
+    /// so a match has no fall-through and a new kind breaks every call at
+    /// compile time.
+    /// </summary>
+    /// <typeparam name="TResult">The type both branches return.</typeparam>
+    /// <param name="checkerPlay">The branch for a <see cref="CheckerPlayDecision"/>.</param>
+    /// <param name="cube">The branch for a <see cref="CubeDecision"/>.</param>
+    /// <exception cref="ArgumentNullException">Thrown when either branch is <see langword="null"/>.</exception>
+    public abstract TResult Match<TResult>(
+        Func<CheckerPlayDecision, TResult> checkerPlay, Func<CubeDecision, TResult> cube);
+
+    /// <summary>
+    /// Runs the branch for this record's kind — the statement form of
+    /// <see cref="Match{TResult}"/>, with the same guarantee.
+    /// </summary>
+    /// <param name="checkerPlay">The branch for a <see cref="CheckerPlayDecision"/>.</param>
+    /// <param name="cube">The branch for a <see cref="CubeDecision"/>.</param>
+    /// <exception cref="ArgumentNullException">Thrown when either branch is <see langword="null"/>.</exception>
+    public abstract void Switch(Action<CheckerPlayDecision> checkerPlay, Action<CubeDecision> cube);
+
+    // -----------------------------------------------------------------------
+    //  Where the decision sits (halheinrich/backgammon#124)
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The 1-based number of the game this decision was played in, within
+    /// its source file; <see langword="null"/> for a decision in a standalone
+    /// position (an <c>.xgp</c> file), which belongs to no game — not a
+    /// stamped 1 (halheinrich/backgammon#124). Derived from
+    /// <see cref="Id"/>, the one place it is stored
+    /// (<see cref="XgDecisionId.Game"/>), so it cannot disagree with the
+    /// identifier.
+    /// </summary>
+    [JsonIgnore]
+    public int? Game => Id.GameInFile;
 
     // -----------------------------------------------------------------------
     //  IDecisionFilterData
     //
     //  A derived filter view, not wire data: every member forwards into (or
-    //  derives from) the category members above, which are the JSON wire
-    //  form. The whole block therefore carries [JsonIgnore] — serialized, it
-    //  would write top-level duplicates of the nested category data, with no
-    //  read-back path (the members are get-only) and no reader
-    //  (halheinrich/backgammon#14). Same rule DecisionRow applies to its
-    //  derived members.
+    //  derives from) the stored members, which are the JSON wire form. The
+    //  whole block therefore carries [JsonIgnore] (halheinrich/backgammon#14).
+    //  The checker play's own members — Dice and the after-boards — are the
+    //  explicit implementations at the end, so they are not on a cube
+    //  decision's surface at all.
     // -----------------------------------------------------------------------
 
     /// <inheritdoc/>
     [JsonIgnore]
     public string Player => Descriptive.OnRollName;
-    /// <inheritdoc/>
-    [JsonIgnore]
-    public bool IsCube => Decision.IsCube;
     /// <inheritdoc/>
     [JsonIgnore]
     public int OnRollNeeds => Position.OnRollNeeds;
@@ -172,17 +287,6 @@ public class BgDecisionData : IDecisionFilterData
     /// <inheritdoc/>
     [JsonIgnore]
     public int MatchLength => Descriptive.MatchLength;
-    /// <summary>
-    /// The 1-based number of the game this decision was played in, within
-    /// its source file; <see langword="null"/> for a decision in a standalone
-    /// position (an <c>.xgp</c> file), which belongs to no game — not a
-    /// stamped 1 (halheinrich/backgammon#124). Derived from
-    /// <see cref="Id"/>, the one place it is stored
-    /// (<see cref="XgDecisionId.Game"/>), so it cannot disagree with the
-    /// identifier.
-    /// </summary>
-    [JsonIgnore]
-    public int? Game => Id.GameInFile;
     /// <inheritdoc/>
     /// <remarks>
     /// Derived from <see cref="Id"/>, as <see cref="Game"/> is
@@ -192,139 +296,49 @@ public class BgDecisionData : IDecisionFilterData
     public int? MoveNumber => Id.MoveInGame;
     /// <inheritdoc/>
     [JsonIgnore]
-    public bool IsStandardStart => Descriptive.IsStandardStart;
+    public bool? IsStandardStart => Descriptive.IsStandardStart;
     /// <summary>
-    /// Derived per the <see cref="DecisionRow.AnalysisDepth"/> convention:
-    /// cube decisions report the cube analysis
-    /// (<see cref="DecisionData.CubeAnalysisMode"/>); checker plays report
-    /// the best-play candidate's <see cref="PlayCandidate.AnalysisMode"/>.
-    /// <see cref="AnalysisMode.Unknown"/> when
-    /// <see cref="DecisionData.BestPlayIndex"/> does not identify a candidate
-    /// (empty <see cref="DecisionData.Plays"/>, or an out-of-range index from
-    /// malformed data) — depth-not-recorded rather than a throw, since this
-    /// getter runs on every filter pass and serialization.
+    /// The mode axis of the analysis behind this decision: a checker play's
+    /// best candidate's (<see cref="CheckerPlayDecisionData.BestPlay"/>),
+    /// which always exists; a cube decision's cube analysis
+    /// (<see cref="CubeDecisionData.AnalysisMode"/>). Mirrors the
+    /// <see cref="DecisionRow.AnalysisDepth"/> convention.
     /// </summary>
     [JsonIgnore]
-    public AnalysisMode AnalysisMode => Decision.IsCube
-        ? Decision.CubeAnalysisMode
-        : BestPlayCandidate?.AnalysisMode ?? AnalysisMode.Unknown;
+    public AnalysisMode AnalysisMode => Match(
+        static play => play.Decision.BestPlay.AnalysisMode,
+        static cube => cube.Decision.AnalysisMode);
     /// <summary>
-    /// Derived from the same analysis as <see cref="AnalysisMode"/>: cube
-    /// decisions report <see cref="DecisionData.CubeAnalysisLevel"/>, checker
-    /// plays the best-play candidate's
-    /// <see cref="PlayCandidate.AnalysisLevel"/>.
-    /// <see cref="AnalysisLevel.Unknown"/> when
-    /// <see cref="DecisionData.BestPlayIndex"/> does not identify a
-    /// candidate.
+    /// The level axis of the same analysis <see cref="AnalysisMode"/> reports.
     /// </summary>
     [JsonIgnore]
-    public AnalysisLevel AnalysisLevel => Decision.IsCube
-        ? Decision.CubeAnalysisLevel
-        : BestPlayCandidate?.AnalysisLevel ?? AnalysisLevel.Unknown;
-    /// <summary>
-    /// The candidate <see cref="DecisionData.BestPlayIndex"/> identifies, or
-    /// null when it identifies none — shared by the two depth-axis
-    /// derivations so they always read the same candidate.
-    /// </summary>
-    private PlayCandidate? BestPlayCandidate =>
-        Decision.BestPlayIndex >= 0 && Decision.BestPlayIndex < Decision.Plays.Count
-            ? Decision.Plays[Decision.BestPlayIndex]
-            : null;
-    /// <summary>
-    /// Forwards <see cref="DecisionData.Dice"/> in canonical unordered form
-    /// (<see cref="IDecisionFilterData.Dice"/>): null for cube decisions —
-    /// no dice apply — otherwise the two producer-stamped faces
-    /// canonicalized by <see cref="DiceRoll"/>. Malformed stored dice (faces
-    /// outside 1–6, including a checker play left at the unstamped default)
-    /// fail loud in the <see cref="DiceRoll"/> constructor — so the block's
-    /// <c>[JsonIgnore]</c> is load-bearing here beyond deduplication: it
-    /// keeps that throwing derivation out of serialization (the
-    /// <see cref="DecisionData.BestDoublerAction"/> precedent).
-    /// <see cref="DecisionData.Dice"/> remains the JSON wire form.
-    /// </summary>
-    [JsonIgnore]
-    public DiceRoll? Dice => Decision.IsCube
-        ? null
-        : new DiceRoll(Decision.Dice[0], Decision.Dice[1]);
+    public AnalysisLevel AnalysisLevel => Match(
+        static play => play.Decision.BestPlay.AnalysisLevel,
+        static cube => cube.Decision.AnalysisLevel);
     /// <inheritdoc/>
     /// <remarks>
-    /// Cube decisions route to <see cref="DecisionData.UserDoubleError"/>,
-    /// falling back to <see cref="DecisionData.UserTakeError"/>; checker
-    /// plays to <see cref="DecisionData.UserPlayError"/>.
+    /// A checker play's <see cref="CheckerPlayDecisionData.UserPlayError"/>; a
+    /// cube decision's <see cref="CubeDecisionData.UserDoubleError"/>, falling
+    /// back to <see cref="CubeDecisionData.UserTakeError"/>.
     /// </remarks>
     [JsonIgnore]
-    public double? FilterError => Decision.IsCube
-        ? Decision.UserDoubleError ?? Decision.UserTakeError
-        : Decision.UserPlayError;
+    public double? FilterError => Match(
+        static play => play.Decision.UserPlayError,
+        static cube => cube.Decision.UserDoubleError ?? cube.Decision.UserTakeError);
     /// <inheritdoc/>
     [JsonIgnore]
     public BoardPosition Board => Position.Mop;
-    /// <inheritdoc/>
-    [JsonIgnore]
-    public BoardPosition? AfterBestBoard => Outcome.AfterBestBoard;
-    /// <inheritdoc/>
-    [JsonIgnore]
-    public BoardPosition? AfterPlayerBoard => Outcome.AfterPlayerBoard;
 
-    // -----------------------------------------------------------------------
-    //  Claim-layer facts that need the whole record
-    //
-    //  DecisionData derives the truth claim from equities alone. Whether the
-    //  Too Good verdict can occur at all is a fact of the rules context —
-    //  money, Jacoby, cube owner — which only this composite sees together,
-    //  so it is derived here, once, and read by every consumer. Same
-    //  [JsonIgnore] posture as the forwarding view: a derivation, not wire.
-    // -----------------------------------------------------------------------
-
-    /// <summary>
-    /// Whether the Too Good verdict can occur at this position — the
-    /// offerability fact of SPEC-scoring §3's 2026-09-02 amendment
-    /// (halheinrich/backgammon#187): <see langword="false"/> exactly when the
-    /// session is money (<see cref="IDecisionFilterData.IsMoneyGame"/>), the
-    /// Jacoby rule is known to be in force (<see cref="IsJacoby"/> is
-    /// <see langword="true"/>) and the cube is centred
-    /// (<see cref="PositionData.CubeOwner"/> is
-    /// <see cref="CubeOwner.Centered"/>); <see langword="true"/> otherwise.
-    /// Gammons do not count under Jacoby until the cube turns, so the
-    /// no-double equity never exceeds the cash there and the verdict cannot
-    /// arise; a turned cube re-arms gammons, and Too Good returns.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The one derivation site of this fact in the ecosystem: a consumer
-    /// that offers cube answers reads it to decide whether the Too Good pair
-    /// is in the option set, and never re-derives it from the record's
-    /// rules fields (the same encapsulation rule as
-    /// <see cref="DecisionData.BestDoublerClaim"/>). Money is reached
-    /// through the contract's single spelling of the rule, never a restated
-    /// <c>MatchLength == 0</c>.
-    /// </para>
-    /// <para>
-    /// An unknown rule is not a known Jacoby rule: <see cref="IsJacoby"/>
-    /// <see langword="null"/> (a money record whose rule was never stamped,
-    /// or any match record) leaves this <see langword="true"/> — the
-    /// verdict is withheld only when the position's own facts rule it out,
-    /// the same posture <see cref="IDecisionFilterData.IsJacoby"/> states
-    /// for the filter layer. This is a fact about the position, independent
-    /// of what <see cref="DecisionData.BestClaimPair"/> derives: the
-    /// derivation reads equities only and would still name Too Good if the
-    /// producer's numbers said so.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="IsCube"/> is <see langword="false"/> — the
-    /// same guard as <see cref="DecisionData.BestClaimPair"/>; the question
-    /// has no meaning on a checker play.
-    /// </exception>
-    [JsonIgnore]
-    public bool CanBeTooGood
-    {
-        get
-        {
-            Decision.RequireCube();
-            return !(((IDecisionFilterData)this).IsMoneyGame
-                     && IsJacoby == true
-                     && Position.CubeOwner == CubeOwner.Centered);
-        }
-    }
+    /// <inheritdoc/>
+    DiceRoll? IDecisionFilterData.Dice => Match<DiceRoll?>(
+        static play => play.Dice,
+        static _ => null);
+    /// <inheritdoc/>
+    BoardPosition? IDecisionFilterData.AfterBestBoard => Match<BoardPosition?>(
+        static play => play.AfterBestBoard,
+        static _ => null);
+    /// <inheritdoc/>
+    BoardPosition? IDecisionFilterData.AfterPlayerBoard => Match(
+        static play => play.AfterPlayerBoard,
+        static _ => null);
 }

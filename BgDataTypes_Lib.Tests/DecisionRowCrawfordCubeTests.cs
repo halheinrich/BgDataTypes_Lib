@@ -5,232 +5,140 @@ using BgDataTypes_Lib;
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
-/// The Crawford-cube invariant on the flat row
-/// (halheinrich/backgammon#201): a row whose <see cref="DecisionRow.Roll"/>
-/// is 0 (a cube decision) and whose <see cref="DecisionRow.IsCrawford"/> is
-/// true describes a decision that cannot exist, and the row refuses to be
-/// constructed. The row's trap is that cube is its <em>default</em> kind, so
-/// the guard needs two things the composite record does not:
-/// <see cref="DecisionRow.Roll"/> is <c>required</c>, so every construction
-/// and every document states the kind, and the guard distinguishes a
-/// not-yet-stated roll from a stated 0, so the legal initializer order
-/// <c>{ IsCrawford = true, Roll = 31 }</c> constructs. The
-/// <c>UserDoublerAction</c> rejection tests are the pattern.
+/// The Crawford rule on the flat row (halheinrich/backgammon#201): a cube row
+/// flagged Crawford describes a decision that cannot exist. The row is a
+/// projection of a record now (<see cref="DecisionRow.From"/>), and a Crawford
+/// cube record cannot be built, so no row can be projected from one; a
+/// document holding one is refused on read with a
+/// <see cref="JsonException"/>, on both paths, in any property order. The row
+/// states its kind (<see cref="DecisionRow.Kind"/>), so cube is no longer its
+/// default kind, and the not-yet-stated roll sentinel the old guards needed
+/// is gone.
 /// </summary>
-/// <remarks>
-/// Every stored member of the row is required or nullable
-/// (halheinrich/backgammon#222), so each initializer here states the whole
-/// row; the two members under test come first, in the order under test.
-/// </remarks>
 public class DecisionRowCrawfordCubeTests
 {
-    private static readonly JsonSerializerOptions ContextOptions = new()
-    {
-        TypeInfoResolver = BgDataTypesJsonContext.Default
-    };
+    private static PositionData Crawford() =>
+        TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
 
     // ---------------------------------------------------------------------
-    //  Object initializers — whichever member completes the Crawford cube
-    //  is the one named
+    //  Construction — through the one door, the record
     // ---------------------------------------------------------------------
 
     [Fact]
-    public void CrawfordCube_IsCrawfordSetSecond_ThrowsNamingIsCrawford()
+    public void CrawfordCube_CannotBeProjected_BecauseItsRecordCannotBeBuilt()
     {
-        var ex = Assert.Throws<ArgumentException>(() => new DecisionRow
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Roll = 0,
-            IsCrawford = true,
-            Xgid = "", Error = 0, MatchLength = 5, Player = "",
-            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
-            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
-            Board = BoardPosition.Standard,
-        });
+        // Rewritten from CrawfordCube_IsCrawfordSetSecond_ThrowsNamingIsCrawford
+        // and CrawfordCube_RollSetSecond_ThrowsNamingRoll: a row is built from
+        // a record, and the record refuses the Crawford cube (naming Position),
+        // so there is no row-side initializer order left to guard.
+        var ex = Assert.Throws<ArgumentException>(() => TestRecords.Cube(position: Crawford()));
 
-        Assert.Equal("IsCrawford", ex.ParamName);
-        Assert.Contains("Crawford", ex.Message);
+        Assert.Equal("Position", ex.ParamName);
     }
 
     [Fact]
-    public void CrawfordCube_RollSetSecond_ThrowsNamingRoll()
+    public void CrawfordPlay_Projects()
     {
-        var ex = Assert.Throws<ArgumentException>(() => new DecisionRow
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            IsCrawford = true,
-            Roll = 0,
-            Xgid = "", Error = 0, MatchLength = 5, Player = "",
-            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
-            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
-            Board = BoardPosition.Standard,
-        });
+        // Rewritten from CrawfordPlay_Constructs_InEitherOrder.
+        var row = DecisionRow.From(TestRecords.CheckerPlay(position: Crawford()));
 
-        Assert.Equal("Roll", ex.ParamName);
-        Assert.Contains("Crawford", ex.Message);
+        Assert.True(row.IsCrawford);
+        Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
     }
 
     [Fact]
-    public void CrawfordPlay_Constructs_InEitherOrder()
+    public void NonCrawfordCube_Projects()
     {
-        // The trap order first: IsCrawford is set while Roll is still
-        // unstated, and an unstated roll must not read as a cube.
-        var crawfordFirst = new DecisionRow
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            IsCrawford = true,
-            Roll = 31,
-            Xgid = "", Error = 0, MatchLength = 5, Player = "",
-            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
-            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
-            Board = BoardPosition.Standard,
-        };
-        var rollFirst = new DecisionRow
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Roll = 31,
-            IsCrawford = true,
-            Xgid = "", Error = 0, MatchLength = 5, Player = "",
-            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
-            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
-            Board = BoardPosition.Standard,
-        };
+        // Rewritten from NonCrawfordCube_Constructs_InEitherOrder.
+        var row = DecisionRow.From(TestRecords.Cube(
+            position: TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3)));
 
-        Assert.True(crawfordFirst.IsCrawford);
-        Assert.False(crawfordFirst.IsCube);
-        Assert.Equal(31, crawfordFirst.Roll);
-        Assert.True(rollFirst.IsCrawford);
-        Assert.False(rollFirst.IsCube);
-        Assert.Equal(31, rollFirst.Roll);
-    }
-
-    [Fact]
-    public void NonCrawfordCube_Constructs_InEitherOrder()
-    {
-        var rollFirst = new DecisionRow
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            Roll = 0,
-            IsCrawford = false,
-            Xgid = "", Error = 0, MatchLength = 5, Player = "",
-            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
-            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
-            Board = BoardPosition.Standard,
-        };
-        var crawfordFirst = new DecisionRow
-        {
-            Id = new XgpDecisionId("test.xgp"),
-            IsCrawford = false,
-            Roll = 0,
-            Xgid = "", Error = 0, MatchLength = 5, Player = "",
-            IsStandardStart = false, AnalysisDepth = "", AnalysisMode = AnalysisMode.Unknown,
-            AnalysisLevel = AnalysisLevel.Unknown, Equity = 0, OnRollNeeds = 1, OpponentNeeds = 3,
-            Board = BoardPosition.Standard,
-        };
-
-        Assert.True(rollFirst.IsCube);
-        Assert.False(rollFirst.IsCrawford);
-        Assert.True(crawfordFirst.IsCube);
-        Assert.False(crawfordFirst.IsCrawford);
+        Assert.False(row.IsCrawford);
+        Assert.Equal(DecisionKind.Cube, row.Kind);
     }
 
     // ---------------------------------------------------------------------
-    //  The wire — the same guards run during deserialization, in either
-    //  property order, through the reflection path and the source-generated
-    //  context alike; and a document that never states Roll is refused
-    //  rather than defaulting to a cube
+    //  The wire — read back whole, in any property order, on both paths
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// A full row document with <paramref name="leading"/> first, in the
-    /// order given, and the row's other members after it; a member given
-    /// <see langword="null"/> is left out. Rewritten from literal JSON: every
-    /// other member of the row is required, so the rest of a full row
-    /// travels with the members under test.
+    /// A cube row with its Crawford flag set, the two members first in the
+    /// order given. Rewritten from the Roll-and-IsCrawford-first documents:
+    /// the kind is its own column now.
     /// </summary>
-    private static string RowDocument(params (string Name, JsonNode? Value)[] leading)
+    private static string CrawfordCubeDocument(bool kindFirst)
     {
-        var full = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Row(roll: 31)))!.AsObject();
-        var document = new JsonObject { ["Id"] = "test.xgp" };
-        foreach (var (name, value) in leading)
-            if (value is not null)
-                document[name] = value;
-        foreach (var (name, value) in full)
-            if (name != "Id" && !leading.Any(l => l.Name == name))
-                document[name] = value?.DeepClone();
+        var document = WirePaths.Document(DecisionRow.From(TestRecords.Cube()));
+        var kind = document["Kind"]!.DeepClone();
+        document.Remove("Kind");
+        document.Remove("IsCrawford");
+        JsonNode crawford = true;
+        if (kindFirst)
+        {
+            document.Insert(0, "Kind", kind);
+            document.Insert(1, "IsCrawford", crawford);
+        }
+        else
+        {
+            document.Insert(0, "IsCrawford", crawford);
+            document.Insert(1, "Kind", kind);
+        }
         return document.ToJsonString();
     }
 
-    public static TheoryData<string> CrawfordCubeDocuments =>
-    [
-        RowDocument(("Roll", 0), ("IsCrawford", true)),
-        RowDocument(("IsCrawford", true), ("Roll", 0)),
-    ];
+    public static TheoryData<bool> KindFirst => [true, false];
 
     [Theory]
-    [MemberData(nameof(CrawfordCubeDocuments))]
-    public void Deserialize_CrawfordCube_Throws(string json)
+    [MemberData(nameof(KindFirst))]
+    public void Deserialize_CrawfordCube_IsRefused_BothPaths(bool kindFirst)
     {
-        Assert.Throws<ArgumentException>(
-            () => JsonSerializer.Deserialize<DecisionRow>(json));
-    }
+        // Rewritten from Deserialize_CrawfordCube_Throws and
+        // Deserialize_CrawfordCube_ThroughContext_Throws: the refusal is a
+        // JsonException naming the rule, whatever order the members come in.
+        var ex = WirePaths.AssertRefused<DecisionRow>(CrawfordCubeDocument(kindFirst));
 
-    [Theory]
-    [MemberData(nameof(CrawfordCubeDocuments))]
-    public void Deserialize_CrawfordCube_ThroughContext_Throws(string json)
-    {
-        Assert.Throws<ArgumentException>(
-            () => JsonSerializer.Deserialize<DecisionRow>(json, ContextOptions));
-    }
-
-    public static TheoryData<string> RollAbsentDocuments =>
-    [
-        RowDocument(("Roll", null)),
-        RowDocument(("IsCrawford", true), ("Roll", null)),
-    ];
-
-    [Theory]
-    [MemberData(nameof(RollAbsentDocuments))]
-    public void Deserialize_RollAbsent_Throws(string json)
-    {
-        // Roll is required on the wire too: the second document is exactly
-        // the shape that used to read as a Crawford cube by default.
-        Assert.Throws<JsonException>(
-            () => JsonSerializer.Deserialize<DecisionRow>(json));
-    }
-
-    [Theory]
-    [MemberData(nameof(RollAbsentDocuments))]
-    public void Deserialize_RollAbsent_ThroughContext_Throws(string json)
-    {
-        Assert.Throws<JsonException>(
-            () => JsonSerializer.Deserialize<DecisionRow>(json, ContextOptions));
-    }
-
-    public static TheoryData<string> CrawfordPlayDocuments =>
-    [
-        RowDocument(("IsCrawford", true), ("Roll", 31)),
-        RowDocument(("Roll", 31), ("IsCrawford", true)),
-    ];
-
-    [Theory]
-    [MemberData(nameof(CrawfordPlayDocuments))]
-    public void Deserialize_CrawfordPlay_Loads(string json)
-    {
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json)!;
-
-        Assert.True(restored.IsCrawford);
-        Assert.False(restored.IsCube);
-        Assert.Equal(31, restored.Roll);
+        Assert.Contains("Crawford", ex.Message);
     }
 
     [Fact]
-    public void Deserialize_NonCrawfordCube_Loads()
+    public void Deserialize_KindAbsent_IsRefused_BothPaths()
     {
-        var restored = JsonSerializer.Deserialize<DecisionRow>(
-            RowDocument(("Roll", 0), ("IsCrawford", false)))!;
+        // Rewritten from Deserialize_RollAbsent_Throws and
+        // Deserialize_RollAbsent_ThroughContext_Throws: the kind is the
+        // stated column now, required, so a row without it is refused rather
+        // than read as either kind. (A checker row without its roll is
+        // refused too: DecisionRowSerializationTests.)
+        var document = WirePaths.Document(DecisionRow.From(TestRecords.CheckerPlay(position: Crawford())));
+        document.Remove("Kind");
 
-        Assert.True(restored.IsCube);
-        Assert.False(restored.IsCrawford);
+        WirePaths.AssertRefused<DecisionRow>(document.ToJsonString());
+    }
+
+    [Fact]
+    public void Deserialize_CrawfordPlay_Loads_BothPaths()
+    {
+        // Rewritten from Deserialize_CrawfordPlay_Loads.
+        var row = DecisionRow.From(TestRecords.CheckerPlay(position: Crawford()));
+
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            var restored = JsonSerializer.Deserialize<DecisionRow>(JsonSerializer.Serialize(row, options), options)!;
+            Assert.True(restored.IsCrawford);
+            Assert.Equal(DecisionKind.CheckerPlay, restored.Kind);
+        }
+    }
+
+    [Fact]
+    public void Deserialize_NonCrawfordCube_Loads_BothPaths()
+    {
+        // Rewritten from Deserialize_NonCrawfordCube_Loads.
+        var row = DecisionRow.From(TestRecords.Cube(position: TestRecords.Position(onRollNeeds: 1, opponentNeeds: 1)));
+
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            var restored = JsonSerializer.Deserialize<DecisionRow>(JsonSerializer.Serialize(row, options), options)!;
+            Assert.False(restored.IsCrawford);
+            Assert.Equal(DecisionKind.Cube, restored.Kind);
+        }
     }
 }

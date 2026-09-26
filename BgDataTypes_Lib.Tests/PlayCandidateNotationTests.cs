@@ -63,9 +63,9 @@ public class PlayCandidateNotationTests
         // marks the 8-point checker. One blot, hit once: both candidates read
         // alike, the mark on the carrier 8/3 (07b1395's carrier rule), and the
         // text can no longer disagree with the play it describes.
-        var record = TestRecords.Record(
+        var record = TestRecords.CheckerPlay(
             position: TestRecords.Position(mop: TesterMop),
-            decision: TestRecords.Decision(
+            decision: TestRecords.CheckerPlayData(
                 dice: [5, 4],
                 plays:
                 [

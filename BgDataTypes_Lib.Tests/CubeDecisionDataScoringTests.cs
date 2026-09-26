@@ -3,7 +3,7 @@ using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
 
-public class DecisionDataCubeScoringTests
+public class CubeDecisionDataScoringTests
 {
     // A cube decision is scored as two independent atomic decisions:
     //
@@ -16,9 +16,8 @@ public class DecisionDataCubeScoringTests
     // decision depends on. Equities are chosen off the tie boundaries so the
     // expected action is unambiguous.
 
-    private static DecisionData MakeCube(double noDoubleEquity, double doubleTakeEquity)
-        => TestRecords.Decision(
-            isCube: true,
+    private static CubeDecisionData MakeCube(double noDoubleEquity, double doubleTakeEquity)
+        => TestRecords.CubeData(
             noDoubleEquity: noDoubleEquity,
             doubleTakeEquity: doubleTakeEquity);
 
@@ -102,18 +101,25 @@ public class DecisionDataCubeScoringTests
     }
 
     // ---------------------------------------------------------------------
-    //  IsCube guard — every helper throws when called on a play decision
+    //  A cube decision's members only
     // ---------------------------------------------------------------------
 
     [Fact]
-    public void AtomicHelpers_Throw_WhenNotCube()
+    public void AtomicHelpers_AreNotMembersOfACheckerPlay()
     {
-        var play = TestRecords.Decision();   // IsCube defaults to false
-
-        Assert.Throws<InvalidOperationException>(() => _ = play.BestDoublerAction);
-        Assert.Throws<InvalidOperationException>(() => _ = play.BestTakerAction);
-        Assert.Throws<InvalidOperationException>(() => play.DoublerActionError(CubeAction.Double));
-        Assert.Throws<InvalidOperationException>(() => play.TakerActionError(CubeAction.Take));
+        // Rewritten from AtomicHelpers_Throw_WhenNotCube: the helpers live on
+        // the cube category alone, so calling one on a checker play does not
+        // compile — the runtime guard they needed is gone.
+        foreach (var name in new[]
+                 {
+                     nameof(CubeDecisionData.BestDoublerAction), nameof(CubeDecisionData.BestTakerAction),
+                     nameof(CubeDecisionData.DoublerActionError), nameof(CubeDecisionData.TakerActionError),
+                 })
+        {
+            Assert.NotEmpty(typeof(CubeDecisionData).GetMember(name));
+            Assert.Empty(typeof(CheckerPlayDecisionData).GetMember(name));
+            Assert.Empty(typeof(CheckerPlayDecision).GetMember(name));
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -142,18 +148,15 @@ public class DecisionDataCubeScoringTests
     //  JSON contract — computed cube-scoring properties are NOT serialised
     // ---------------------------------------------------------------------
     //
-    //  Without [JsonIgnore], System.Text.Json would invoke the public
-    //  getters on every DecisionData it serialises, including the play
-    //  decisions where the getters throw. This test pins that contract:
-    //  it would fail both if [JsonIgnore] were removed (property names
-    //  would appear in the JSON) and if a future change accidentally
+    //  The computed members are a derivation, not wire. This test pins that
+    //  contract: it would fail both if [JsonIgnore] were removed (property
+    //  names would appear in the JSON) and if a future change accidentally
     //  re-exposed them via init-only data fields.
 
     [Fact]
     public void ComputedCubeProperties_AreNotSerialised()
     {
-        var d = TestRecords.Decision(
-            isCube: true,
+        var d = TestRecords.CubeData(
             noDoubleEquity: 0.30,
             doubleTakeEquity: 0.60);
 

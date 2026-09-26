@@ -10,7 +10,7 @@ namespace BgDataTypes_Lib;
 /// display forms (<see cref="PlayCandidate.Depth"/> /
 /// <see cref="PlayCandidate.DepthAbbreviation"/> /
 /// <see cref="PlayCandidate.DepthRank"/> and their cube counterparts on
-/// <see cref="DecisionData"/>), and replaces the retired flat
+/// <see cref="CubeDecisionData"/>), and replaces the retired flat
 /// <c>AnalysisDepthClass</c>. Classification is producer-side —
 /// <c>ConvertXgToJson_Lib</c> stamps both axes when building decisions; this
 /// enum owns the category set and the display labels.
@@ -66,7 +66,7 @@ public enum AnalysisMode
     /// <summary>Full rollout recorded in the source file; the paired
     /// <see cref="AnalysisLevel"/> is the inner evaluation level. Trial count
     /// stays in the display label (<see cref="PlayCandidate.Depth"/> /
-    /// <see cref="DecisionData.CubeDepth"/>) — it is not a taxonomy
+    /// <see cref="CubeDecisionData.Depth"/>) — it is not a taxonomy
     /// axis.</summary>
     [Description("Rollout")]
     Rollout,

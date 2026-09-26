@@ -38,12 +38,11 @@ public class BgDataTypesJsonContextTests
     {
         var mop = new int[26];
         mop[1] = 2; mop[6] = -5; mop[13] = 5; mop[24] = -2; mop[25] = 1;
-        var afterBest = new int[26];
-        afterBest[4] = 2; afterBest[6] = -5; afterBest[20] = -2;
-        var afterPlayer = new int[26];
-        afterPlayer[5] = 2; afterPlayer[6] = -5; afterPlayer[19] = -2;
 
-        return TestRecords.Record(
+        // Rewritten for the records leg (halheinrich/backgammon#273): the
+        // candidates are valid from the position — a record cannot hold any
+        // other — and the after-boards are derived, not stated.
+        return TestRecords.CheckerPlay(
             id: new XgDecisionId("match.xg", Game: 4, MoveNumber: 22, IsCube: false),
             xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:64:0:0:0:0:10",
             position: TestRecords.Position(
@@ -55,11 +54,11 @@ public class BgDataTypesJsonContextTests
                 cubeSize: 2,
                 cubeOwner: CubeOwner.OnRoll,
                 isCrawford: true),
-            decision: TestRecords.Decision(
+            decision: TestRecords.CheckerPlayData(
                 dice: [6, 4],
                 plays: [
                     TestRecords.Candidate(
-                        play: [new(24, 18), new(13, 9)],
+                        play: [new(25, 19), new(13, 9)],
                         depth: "Rollout: 1296 trials. 3-ply",
                         depthAbbreviation: "3p1296",
                         depthRank: 7,
@@ -73,19 +72,20 @@ public class BgDataTypesJsonContextTests
                         loseGammonPct: 0.143,
                         loseBgPct: 0.006),
                     TestRecords.Candidate(
-                        play: [new(24, 18), new(24, -20)],
+                        play: [new(25, 21), new(13, 7)],
                         depth: "3-ply",
                         depthAbbreviation: "3-ply",
                         depthRank: 4,
                         analysisMode: AnalysisMode.Evaluation,
                         analysisLevel: AnalysisLevel.Ply3Red,
                         equity: 0.198,
-                        equityLoss: 0.013)
+                        equityLoss: 0.013,
+                        winPct: null, winGammonPct: null, winBgPct: null,
+                        losePct: null, loseGammonPct: null, loseBgPct: null)
                 ],
                 bestPlayIndex: 0,
                 userPlayIndex: 1,
-                userPlayError: 0.013,
-                isCube: false),
+                userPlayError: 0.013),
             descriptive: TestRecords.Descriptive(
                 matchLength: 9,
                 onRollName: "Mochy",
@@ -96,30 +96,27 @@ public class BgDataTypesJsonContextTests
                 sourceFile: "mochy-falafel.xg",
                 isStandardStart: true,
                 comment: "Blitz or prime?",
-                flagged: true),
-            outcome: TestRecords.Outcome(
-                afterBestBoard: new BoardPosition(afterBest),
-                afterPlayerBoard: new BoardPosition(afterPlayer)));
+                flagged: true));
     }
 
-    private static BgDecisionData FullCubeDecision() => TestRecords.Record(
+    private static BgDecisionData FullCubeDecision() => TestRecords.Cube(
         id: new XgDecisionId("session.xg", Game: 2, MoveNumber: 7, IsCube: true),
         xgid: "XGID=-b----E-C---eE---c-e----B-:1:1:1:00:0:0:1:0:10",
         position: TestRecords.Position(
             mop: BoardPosition.Empty,
+            onRollNeeds: 0,
+            opponentNeeds: 0,
             onRollPipCount: 92,
             opponentPipCount: 108,
             cubeSize: 2,
             cubeOwner: CubeOwner.Centered,
             isJacoby: true),
-        decision: TestRecords.Decision(
-            dice: [0, 0],
-            isCube: true,
-            cubeDepth: "Rollout: 1296 trials. 3-ply",
-            cubeDepthAbbreviation: "3p1296",
-            cubeDepthRank: 7,
-            cubeAnalysisMode: AnalysisMode.BookRollout,
-            cubeAnalysisLevel: AnalysisLevel.XgRoller,
+        decision: TestRecords.CubeData(
+            depth: "Rollout: 1296 trials. 3-ply",
+            depthAbbreviation: "3p1296",
+            depthRank: 7,
+            analysisMode: AnalysisMode.BookRollout,
+            analysisLevel: AnalysisLevel.XgRoller,
             noDoubleEquity: 0.312,
             doubleTakeEquity: 0.287,
             cubelessNoDoubleEquity: 0.205,
@@ -145,43 +142,17 @@ public class BgDataTypesJsonContextTests
             matchLength: 0,
             onRollName: "Hal",
             opponentName: "Bot",
-            sourceFile: "hal-bot.xg"),
-        outcome: TestRecords.Outcome());   // a cube decision: both after-boards absent
+            sourceFile: "hal-bot.xg"));
 
-    // Every member at the value it defaulted to before the wire rule
-    // (halheinrich/backgammon#222) — the record that used to be spelled by
-    // its Id alone, now stated in full by the builder.
+    // Rewritten from the record spelled by its Id alone: a standalone
+    // position with every other member at the builders' defaults.
     private static BgDecisionData MinimalDecision() =>
-        TestRecords.Record(id: new XgpDecisionId("minimal.xgp"));
+        TestRecords.CheckerPlay(id: new XgpDecisionId("minimal.xgp"));
 
-    private static DecisionRow FullDecisionRow()
-    {
-        var board = new int[26];
-        board[1] = 2; board[6] = -5;
-        var after = new int[26];
-        after[2] = 2; after[6] = -5;
+    // Rewritten: a row is the projection of a record.
+    private static DecisionRow FullDecisionRow() => DecisionRow.From(FullPlayDecision());
 
-        return TestRecords.Row(
-            id: new XgDecisionId("match.xg", Game: 3, MoveNumber: 14, IsCube: false),
-            xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:52:0:0:0:0:10",
-            error: 0.045,
-            matchLength: 7,
-            player: "Mochy",
-            sourceFile: "match.xg",
-            isStandardStart: true,
-            roll: 52,
-            analysisDepth: "3-ply",
-            analysisMode: AnalysisMode.Evaluation,
-            analysisLevel: AnalysisLevel.Ply3,
-            equity: -0.118,
-            onRollNeeds: 4,
-            opponentNeeds: 2,
-            isCrawford: true,
-            isJacoby: null,
-            board: new BoardPosition(board),
-            afterBestBoard: new BoardPosition(after),
-            afterPlayerBoard: new BoardPosition(after));
-    }
+    private static DecisionRow CubeDecisionRow() => DecisionRow.From(FullCubeDecision());
 
     // A pinned canonical key (ProblemKeyTests' grammar pins own the format;
     // this suite only needs one valid spelling).
@@ -230,6 +201,19 @@ public class BgDataTypesJsonContextTests
         => AssertContextMatchesReflection(FullDecisionRow());
 
     [Fact]
+    public void DecisionRow_Cube_ContextMatchesReflection()
+        => AssertContextMatchesReflection(CubeDecisionRow());
+
+    [Fact]
+    public void DecisionKinds_AsTheirOwnStaticTypes_ContextMatchesReflection()
+    {
+        // Added: a kind serialized as its own type is a wire value too — its
+        // contract writes the kind — and the context agrees with reflection.
+        AssertContextMatchesReflection((CheckerPlayDecision)FullPlayDecision());
+        AssertContextMatchesReflection((CubeDecision)FullCubeDecision());
+    }
+
+    [Fact]
     public void Play_ContextMatchesReflection()
         => AssertContextMatchesReflection<Play>([new(13, 10), new(10, -8), new(25, 24), new(6, 0)]);
 
@@ -272,6 +256,7 @@ public class BgDataTypesJsonContextTests
         AssertContextMatchesReflection(CubeAction.Pass);
         AssertContextMatchesReflection(CubeClaim.TooGood);
         AssertContextMatchesReflection(CubeOwner.Opponent);
+        AssertContextMatchesReflection(DecisionKind.Cube);
     }
 
     // -----------------------------------------------------------------------
@@ -284,8 +269,8 @@ public class BgDataTypesJsonContextTests
     {
         var json = JsonSerializer.Serialize(FullPlayDecision(), ContextOptions);
 
-        Assert.Contains("\"Play\":[{\"FrPt\":24,\"ToPt\":18},{\"FrPt\":13,\"ToPt\":9}]", json);
-        Assert.Contains("\"Play\":[{\"FrPt\":24,\"ToPt\":18},{\"FrPt\":24,\"ToPt\":-20}]", json);
+        Assert.Contains("\"Play\":[{\"FrPt\":25,\"ToPt\":19},{\"FrPt\":13,\"ToPt\":9}]", json);
+        Assert.Contains("\"Play\":[{\"FrPt\":25,\"ToPt\":21},{\"FrPt\":13,\"ToPt\":7}]", json);
     }
 
     [Fact]
@@ -301,9 +286,10 @@ public class BgDataTypesJsonContextTests
     {
         var json = JsonSerializer.Serialize(FullCubeDecision(), ContextOptions);
 
+        Assert.Contains("\"Kind\":\"Cube\"", json);
         Assert.Contains("\"CubeOwner\":\"Centered\"", json);
-        Assert.Contains("\"CubeAnalysisMode\":\"BookRollout\"", json);
-        Assert.Contains("\"CubeAnalysisLevel\":\"XgRoller\"", json);
+        Assert.Contains("\"AnalysisMode\":\"BookRollout\"", json);
+        Assert.Contains("\"AnalysisLevel\":\"XgRoller\"", json);
         Assert.Contains("\"UserDoublerAction\":\"Double\"", json);
         Assert.Contains("\"UserTakerAction\":\"Take\"", json);
     }
@@ -311,12 +297,19 @@ public class BgDataTypesJsonContextTests
     [Fact]
     public void ContextPath_BoardsSerializeAsCountArrays_AndAnAbsentAfterBoardAsNull()
     {
+        // Rewritten: a record writes its board but no after-board (derived,
+        // never stored); the row writes the derived boards as count arrays,
+        // and a cube row its empty ones as null.
         var play = JsonSerializer.Serialize(FullPlayDecision(), ContextOptions);
-        var cube = JsonSerializer.Serialize(FullCubeDecision(), ContextOptions);
+        var playRow = JsonSerializer.Serialize(FullDecisionRow(), ContextOptions);
+        var cubeRow = JsonSerializer.Serialize(CubeDecisionRow(), ContextOptions);
 
         Assert.Contains("\"Mop\":[0,2,0,0,0,0,-5,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,-2,1]", play);
-        Assert.Contains("\"AfterBestBoard\":[0,0,0,0,2,0,-5,0,0,0,0,0,0,0,0,0,0,0,0,0,-2,0,0,0,0,0]", play);
-        Assert.Contains("\"AfterBestBoard\":null,\"AfterPlayerBoard\":null", cube);
+        Assert.DoesNotContain("AfterBestBoard", play);
+        Assert.Contains(
+            $"\"AfterBestBoard\":{JsonSerializer.Serialize(((CheckerPlayDecision)FullPlayDecision()).AfterBestBoard, ContextOptions)}",
+            playRow);
+        Assert.Contains("\"AfterBestBoard\":null,\"AfterPlayerBoard\":null", cubeRow);
         Assert.Equal(
             "[0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0]",
             JsonSerializer.Serialize(BoardPosition.Standard, ContextOptions));
@@ -345,7 +338,10 @@ public class BgDataTypesJsonContextTests
         AssertOnlyTheNumericTokenIsRefused(TestRecords.Candidate(), "AnalysisLevel", 4);
         AssertOnlyTheNumericTokenIsRefused(TestRecords.Position(), "CubeOwner", 1);
         AssertOnlyTheNumericTokenIsRefused(
-            TestRecords.Decision(isCube: true, userDoublerAction: CubeAction.Double), "UserDoublerAction", 1);
+            TestRecords.CubeData(userDoublerAction: CubeAction.Double), "UserDoublerAction", 1);
+        AssertOnlyTheNumericTokenIsRefused(TestRecords.CubeData(), "AnalysisMode", 1);
+        AssertOnlyTheNumericTokenIsRefused<BgDecisionData>(TestRecords.Cube(), "Kind", 1);
+        AssertOnlyTheNumericTokenIsRefused(TestRecords.Row(), "Kind", 1);
 
         // CubeClaim has no embedding document in this library yet (it is a
         // declared root ahead of its first downstream document — the
@@ -391,13 +387,15 @@ public class BgDataTypesJsonContextTests
     private static HashSet<Type> WireClosure()
     {
         // Roots: the wire units — the document roots, and the types that
-        // define their own wire token via a bundled converter. Move is a
-        // root because no property walk can reach it: Play's converter
-        // stops the walk at Play yet emits Move elements by resolving them
-        // through the active options (PlayJsonConverter's contract).
+        // define their own wire token via a bundled converter. Move and the
+        // two decision kinds are roots because no property walk can reach
+        // them: Play's converter stops the walk at Play yet emits Move
+        // elements, and BgDecisionData's stops it at the base yet delegates
+        // to the kinds, each resolving them through the active options.
         Type[] roots =
         [
-            typeof(BgDecisionData), typeof(DecisionRow),
+            typeof(BgDecisionData), typeof(CheckerPlayDecision), typeof(CubeDecision),
+            typeof(DecisionRow), typeof(DecisionKind),
             typeof(Play), typeof(Move), typeof(DecisionId),
             typeof(ProblemKey), typeof(DiceRoll), typeof(BoardPosition),
             typeof(AnalysisMode), typeof(AnalysisLevel),
@@ -468,9 +466,10 @@ public class BgDataTypesJsonContextTests
     // -----------------------------------------------------------------------
     //  The composition pattern — a consumer context combined with this one.
     //  The chain is load-bearing, not ceremonial: the consumer's own
-    //  generator stops at Play (bundled converter) and so never reaches
-    //  Move, exactly as this library's does. Alone, the consumer context
-    //  cannot serialize a populated Play; chained after
+    //  generator stops at BgDecisionData and at Play (bundled converters)
+    //  and so never reaches the two decision kinds or Move, exactly as this
+    //  library's does. Alone, the consumer context cannot serialize a
+    //  record; chained after
     //  BgDataTypesJsonContext it can, byte-identically to reflection. This
     //  is the shape every downstream leg of halheinrich/backgammon#129
     //  repeats.
@@ -486,9 +485,10 @@ public class BgDataTypesJsonContextTests
 
         var document = new ConsumerDocument { Decisions = [FullPlayDecision()] };
 
-        // PlayJsonConverter asks the active options for Move's metadata,
-        // which the consumer's own generator never emitted (Play's bundled
-        // converter stops its graph walk, same as ours).
+        // BgDecisionDataJsonConverter asks the active options for the kind's
+        // metadata (and PlayJsonConverter for Move's), which the consumer's
+        // own generator never emitted (the bundled converters stop its graph
+        // walk, same as ours).
         Assert.Throws<NotSupportedException>(
             () => JsonSerializer.Serialize(document, options));
     }

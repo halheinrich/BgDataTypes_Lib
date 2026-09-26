@@ -5,7 +5,7 @@ namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
 /// Pins the offerability fact of SPEC-scoring §3's 2026-09-02 amendment
-/// (halheinrich/backgammon#187): <see cref="BgDecisionData.CanBeTooGood"/>
+/// (halheinrich/backgammon#187): <see cref="CubeDecision.CanBeTooGood"/>
 /// is <see langword="false"/> exactly for a money position under a known
 /// Jacoby rule with the cube centred, and <see langword="true"/> otherwise —
 /// the one derivation site consumers read to decide whether the Too Good
@@ -15,26 +15,23 @@ namespace BgDataTypes_Lib.Tests;
 /// <see langword="true"/>: match play, an unknown rule, a known non-Jacoby
 /// rule. Fixtures are constructed in code per the TestData rule.
 /// </summary>
-public class BgDecisionDataTooGoodOfferabilityTests
+public class CubeDecisionTooGoodOfferabilityTests
 {
-    // Id is required on BgDecisionData; CanBeTooGood never reads it.
-    private static readonly DecisionId AnyId = new XgpDecisionId("x.xgp");
-
     // Money is MatchLength == 0 by the contract's single spelling
     // (IDecisionFilterData.IsMoneyGame); the fixture states the length and
     // lets the record derive money from it, never the other way round.
-    private static BgDecisionData Make(
-        int matchLength, bool? isJacoby, CubeOwner cubeOwner, bool isCube = true,
+    private static CubeDecision Make(
+        int matchLength, bool? isJacoby, CubeOwner cubeOwner,
         double noDoubleEquity = 0.50, double doubleTakeEquity = 0.70)
-        => TestRecords.Record(
-            id: AnyId,
+        => TestRecords.Cube(
             position: TestRecords.Position(
+                onRollNeeds: matchLength == 0 ? 0 : 7,
+                opponentNeeds: matchLength == 0 ? 0 : 7,
                 isJacoby: isJacoby,
                 cubeSize: cubeOwner == CubeOwner.Centered ? 1 : 2,
                 cubeOwner: cubeOwner),
             descriptive: TestRecords.Descriptive(matchLength: matchLength),
-            decision: TestRecords.Decision(
-                isCube: isCube,
+            decision: TestRecords.CubeData(
                 noDoubleEquity: noDoubleEquity,
                 doubleTakeEquity: doubleTakeEquity));
 
@@ -116,30 +113,31 @@ public class BgDecisionDataTooGoodOfferabilityTests
     }
 
     // ---------------------------------------------------------------------
-    //  IsCube guard and serialization posture — parity with BestClaimPair
+    //  A cube decision's member only, and serialization posture
     // ---------------------------------------------------------------------
 
     [Fact]
-    public void CanBeTooGood_Throws_WhenNotCube()
+    public void CanBeTooGood_IsNotAMemberOfACheckerPlay()
     {
-        var play = Make(0, true, CubeOwner.Centered, isCube: false);
-
-        var ex = Assert.Throws<InvalidOperationException>(() => _ = play.CanBeTooGood);
-        var sibling = Assert.Throws<InvalidOperationException>(() => _ = play.Decision.BestClaimPair);
-        Assert.Equal(sibling.Message, ex.Message);
+        // Rewritten from CanBeTooGood_Throws_WhenNotCube: the question has no
+        // meaning on a checker play, and asking it no longer compiles, so
+        // there is no guard to throw — nor on the claim it sits beside.
+        Assert.NotNull(typeof(CubeDecision).GetProperty(nameof(CubeDecision.CanBeTooGood)));
+        Assert.Null(typeof(CheckerPlayDecision).GetProperty(nameof(CubeDecision.CanBeTooGood)));
+        Assert.Null(typeof(BgDecisionData).GetProperty(nameof(CubeDecision.CanBeTooGood)));
+        Assert.Null(typeof(CheckerPlayDecisionData).GetProperty(nameof(CubeDecisionData.BestClaimPair)));
     }
 
-    // A derivation, not wire: the top level of the JSON stays the six stored
-    // members (halheinrich/backgammon#14), and the throwing getter must not
-    // run when a checker play is serialised.
+    // A derivation, not wire (halheinrich/backgammon#14).
     [Fact]
-    public void CanBeTooGood_IsNotSerialised()
+    public void CanBeTooGood_IsNotSerialised_BothPaths()
     {
-        string cubeJson = JsonSerializer.Serialize(Make(0, true, CubeOwner.Centered));
-        Assert.DoesNotContain("CanBeTooGood", cubeJson, StringComparison.OrdinalIgnoreCase);
-
-        var play = Make(7, null, CubeOwner.Centered, isCube: false);
-        string playJson = JsonSerializer.Serialize(play);   // must not throw
-        Assert.DoesNotContain("CanBeTooGood", playJson, StringComparison.OrdinalIgnoreCase);
+        // Rewritten from CanBeTooGood_IsNotSerialised: no checker-play half
+        // to guard any more; both paths now.
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            string json = JsonSerializer.Serialize<BgDecisionData>(Make(0, true, CubeOwner.Centered), options);
+            Assert.DoesNotContain("CanBeTooGood", json, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

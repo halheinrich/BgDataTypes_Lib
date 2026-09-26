@@ -4,9 +4,9 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// One analysed candidate play of a checker-play decision — one row of the
-/// producing analyser's move list, carried in <see cref="DecisionData.Plays"/>.
+/// producing analyser's move list, carried in <see cref="CheckerPlayDecisionData.Plays"/>.
 /// Which candidate is the best or the user's play is recorded on the parent
-/// (<see cref="DecisionData.BestPlayIndex"/> / <see cref="DecisionData.UserPlayIndex"/>),
+/// (<see cref="CheckerPlayDecisionData.BestPlayIndex"/> / <see cref="CheckerPlayDecisionData.UserPlayIndex"/>),
 /// not flagged per-candidate. The nullable probabilities'
 /// <see langword="null"/> means the candidate was not evaluated; every other
 /// member is <c>required</c>, per the wire rule stated on
@@ -79,7 +79,7 @@ public class PlayCandidate
     /// Equity loss vs. best-equity play, in match-equity units. <c>0.0</c> means
     /// this candidate is itself a best play — multiple candidates may share zero
     /// loss when they produce structurally equivalent (or tied-equity) positions.
-    /// <see cref="DecisionData.BestPlayIndex"/> names a canonical single best
+    /// <see cref="CheckerPlayDecisionData.BestPlayIndex"/> names a canonical single best
     /// when one representative is needed; <c>EquityLoss == 0.0</c> is the valid
     /// test for "is this a best play" / membership in the best-equity equivalence
     /// class.

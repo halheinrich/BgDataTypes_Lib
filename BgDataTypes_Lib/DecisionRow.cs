@@ -1,54 +1,129 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// A single analysed checker-play or cube decision, ready for CSV/JSON export.
+/// A single analysed decision as one flat row, for CSV and JSON export: one
+/// row per decision, one column per field, of either kind.
 ///
 /// <para>
-/// <b>The Crawford rule binds the row</b> (halheinrich/backgammon#201).
-/// Doubling is prohibited in the Crawford game, so a cube decision
-/// (<see cref="Roll"/> of 0) flagged <see cref="IsCrawford"/> cannot exist,
-/// and the row cannot be constructed: the <see cref="Roll"/> and
-/// <see cref="IsCrawford"/> init setters each check the other, so whichever
-/// is set second throws <see cref="ArgumentException"/> naming itself —
-/// from an object initializer in either member order and from a JSON
-/// document in either property order alike. Cube is the row's
-/// <em>default</em> kind, which is why <see cref="Roll"/> is
-/// <c>required</c> and why its guard distinguishes a not-yet-stated roll
-/// from a stated 0 — see <see cref="Roll"/>. The same rule on the composite
-/// record is <see cref="BgDecisionData"/>; <see cref="CrawfordRule"/> is
-/// the one spelling of both.
+/// <b>A projection of the record, built one way.</b> A row is made by
+/// <see cref="From"/> from a <see cref="BgDecisionData"/>, and every column is
+/// taken from the record — the after-boards from the record's own derivation
+/// (<see cref="CheckerPlayDecision.AfterBestBoard"/>), never computed a second
+/// way — so a row and its record cannot disagree on anything the two share,
+/// <see cref="IDecisionFilterData"/> above all. The constructor is internal:
+/// outside this library a row comes from <see cref="From"/> or from JSON.
 /// </para>
 ///
 /// <para>
-/// Every member but the nullable ones is <c>required</c>, per the wire rule
-/// stated on <see cref="BgDataTypesJsonContext"/>; each nullable member's
-/// documentation says what <see langword="null"/> means.
+/// <b>It carries the kind</b> (<see cref="Kind"/>), and the other kind's
+/// columns are empty, never zero (halheinrich/backgammon#273): a cube row's
+/// <see cref="Roll"/> and after-boards are <see langword="null"/> — empty
+/// cells in CSV. A standalone position's <see cref="Game"/>,
+/// <see cref="MoveNumber"/> and <see cref="IsStandardStart"/> are
+/// <see langword="null"/> likewise (halheinrich/backgammon#124).
+/// </para>
+///
+/// <para>
+/// <b>Read back whole.</b> A row read from JSON is held, once every column is
+/// read, to what a projection of a record guarantees — the kind's columns
+/// present and the other kind's empty, the roll two die faces, the rules of
+/// <see cref="DecisionRules"/> — and a document breaking any of them is
+/// refused with a <see cref="JsonException"/>, on the reflection path and
+/// through <see cref="BgDataTypesJsonContext"/> alike. Every column but the
+/// nullable ones is <c>required</c>, per the wire rule stated on
+/// <see cref="BgDataTypesJsonContext"/>; each nullable column's documentation
+/// says what <see langword="null"/> means.
 /// </para>
 /// </summary>
-public sealed class DecisionRow : IDecisionFilterData
+public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 {
-    // Null until Roll is stated — Roll's doc comment owns the why.
-    private readonly int? _roll;
-    private readonly bool _isCrawford;
+    /// <summary>The serializer's and <see cref="From"/>'s constructor; there is no other.</summary>
+    [JsonConstructor]
+    internal DecisionRow()
+    {
+    }
 
     /// <summary>
-    /// Stable, persistent identifier for this decision within its source file.
-    /// Producer-supplied at the build site (see <c>ConvertXgToJson_Lib</c>) —
-    /// required so that uninitialized cases surface at construction rather than
-    /// later as silent null reads. Serialized to JSON via
+    /// The row of <paramref name="record"/>: every column taken from it, the
+    /// shared ones through its <see cref="IDecisionFilterData"/> view, so row
+    /// and record agree on all of them by construction.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="record"/> is <see langword="null"/>.</exception>
+    public static DecisionRow From(BgDecisionData record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        // The kind's own columns: the checker play's roll, best-play depth and
+        // equity, and after-boards; the cube decision's depth and no-double
+        // equity, with the checker columns empty.
+        var (roll, depth, equity, afterBest, afterPlayer) = record.Match(
+            static play => (
+                (int?)(play.Decision.Dice[0] * 10 + play.Decision.Dice[1]),
+                play.Decision.BestPlay.Depth,
+                play.Decision.BestPlay.Equity,
+                (BoardPosition?)play.AfterBestBoard,
+                play.AfterPlayerBoard),
+            static cube => (
+                (int?)null,
+                cube.Decision.Depth,
+                cube.Decision.NoDoubleEquity,
+                (BoardPosition?)null,
+                (BoardPosition?)null));
+
+        return new DecisionRow
+        {
+            Kind = record.Kind,
+            Id = record.Id,
+            Xgid = record.Xgid,
+            Error = record.FilterError,
+            MatchLength = record.MatchLength,
+            Player = record.Player,
+            SourceFile = record.Descriptive.SourceFile,
+            IsStandardStart = record.IsStandardStart,
+            Roll = roll,
+            AnalysisDepth = depth,
+            AnalysisMode = record.AnalysisMode,
+            AnalysisLevel = record.AnalysisLevel,
+            Equity = equity,
+            OnRollNeeds = record.OnRollNeeds,
+            OpponentNeeds = record.OpponentNeeds,
+            IsCrawford = record.IsCrawford,
+            IsJacoby = record.IsJacoby,
+            Board = record.Board,
+            AfterBestBoard = afterBest,
+            AfterPlayerBoard = afterPlayer,
+        };
+    }
+
+    /// <summary>
+    /// The decision's kind (<see cref="IDecisionFilterData.Kind"/>), stated as a
+    /// column and written first. It decides which kind's columns are present.
+    /// </summary>
+    [JsonPropertyOrder(-1)]
+    public required DecisionKind Kind { get; init; }
+
+    /// <summary>
+    /// Stable, persistent identifier for this decision within its source file
+    /// (<see cref="BgDecisionData.Id"/>). Serialized to JSON via
     /// <see cref="DecisionIdJsonConverter"/>; excluded from CSV (the column set
-    /// is explicit and the ID derives from existing CSV columns at read time
-    /// if a consumer wants it).
+    /// is explicit). The one stored place of <see cref="Game"/> and
+    /// <see cref="MoveNumber"/>.
     /// </summary>
     public required DecisionId Id { get; init; }
 
     /// <summary>XGID position string.</summary>
     public required string Xgid { get; init; }
 
-    /// <summary>Absolute error (positive = worse than best).</summary>
-    public required double Error { get; init; }
+    /// <summary>
+    /// The user's error (≥ 0) — the record's <see cref="IDecisionFilterData.FilterError"/>:
+    /// a checker play's equity loss against the best play, a cube decision's
+    /// doubling error or, failing that, its take error. <see langword="null"/>
+    /// when no user decision is recorded — an empty CSV cell, never 0.
+    /// </summary>
+    public double? Error { get; init; }
 
     /// <summary>Match length (0 = unlimited/money).</summary>
     public required int MatchLength { get; init; }
@@ -59,9 +134,8 @@ public sealed class DecisionRow : IDecisionFilterData
     /// over the interface default so the predicate is visible on the type
     /// itself — <see cref="MatchScore"/> and other concrete-typed consumers
     /// read it here; the type's single spelling of the rule. Derived from
-    /// <see cref="MatchLength"/>, so excluded from JSON like
-    /// <see cref="IsCube"/>; <see cref="MatchLength"/> remains the CSV and
-    /// JSON wire form.
+    /// <see cref="MatchLength"/>, so excluded from JSON;
+    /// <see cref="MatchLength"/> remains the CSV and JSON wire form.
     /// </summary>
     [JsonIgnore]
     public bool IsMoneyGame => MatchLength == 0;
@@ -92,63 +166,37 @@ public sealed class DecisionRow : IDecisionFilterData
     [JsonIgnore]
     public int? MoveNumber => Id.MoveInGame;
 
-    /// <summary>True if the game started from the canonical opening position.</summary>
-    public required bool IsStandardStart { get; init; }
+    /// <summary>
+    /// Whether the game started from the canonical opening position
+    /// (<see cref="DescriptiveData.IsStandardStart"/>); <see langword="null"/>
+    /// for a decision in a standalone position.
+    /// </summary>
+    public bool? IsStandardStart { get; init; }
 
     /// <summary>
-    /// Dice roll as a two-digit integer, e.g. 63, 11. 0 for cube decisions.
-    /// The row's decision-kind discriminator (<see cref="IsCube"/> reads it),
-    /// and <c>required</c> because the kind must be stated, never defaulted:
-    /// with 0 — a cube — as the default, a row that set
-    /// <see cref="IsCrawford"/> and omitted the roll would be a Crawford cube
-    /// by accident, and no guard could tell "not yet stated" from "cube".
-    /// Every construction therefore names it, and a JSON document without
-    /// it is refused (<see cref="System.Text.Json.JsonException"/>) rather
-    /// than read as a cube.
+    /// A checker play's dice as rolled, as a two-digit integer in rolled order
+    /// (e.g. 63, 11); <see langword="null"/> for a cube decision — an empty CSV
+    /// cell, never 0. <see cref="Dice"/> is its canonical form.
     /// </summary>
-    /// <remarks>
-    /// The one place the sentinel is explained. The property is backed by a
-    /// nullable field whose null means "not yet stated", and the
-    /// <see cref="IsCrawford"/> guard reads that field rather than this
-    /// property: in the legal initializer order
-    /// <c>{ IsCrawford = true, Roll = 31 }</c> the <see cref="IsCrawford"/>
-    /// setter runs while the roll is still unstated, and a plain
-    /// <see langword="int"/> field would hand it a 0 — a cube — and throw
-    /// on a legal Crawford play. <c>required</c> guarantees the null never
-    /// survives construction, so this setter always runs, sees every stated
-    /// 0, and carries the guard for that order; the two guards are
-    /// order-independent only together with the sentinel.
-    /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// Thrown on init when the value is 0 and the already-set
-    /// <see cref="IsCrawford"/> is <see langword="true"/> — the Crawford
-    /// rule, see the class summary.
-    /// </exception>
-    public required int Roll
-    {
-        get => _roll ?? 0;
-        init
-        {
-            CrawfordRule.ThrowIfCrawfordCube(_isCrawford, value == 0, nameof(Roll));
-            _roll = value;
-        }
-    }
+    public int? Roll { get; init; }
 
     /// <summary>
     /// <see cref="Roll"/> in canonical unordered form
-    /// (<see cref="IDecisionFilterData.Dice"/>): null when <see cref="Roll"/>
-    /// is 0 (a cube decision), otherwise the roll's two digits canonicalized
-    /// by <see cref="DiceRoll"/> ("13" and "31" both yield high 3, low 1). A
-    /// malformed <see cref="Roll"/> whose digits are not both die faces
-    /// (e.g. 70) throws <see cref="ArgumentOutOfRangeException"/> — corrupt
-    /// data fails loud rather than silently filtering wrong. Derived, so
-    /// excluded from JSON like <see cref="IsCube"/>; <see cref="Roll"/>
-    /// remains the CSV and JSON wire form.
+    /// (<see cref="IDecisionFilterData.Dice"/>): <see langword="null"/> for a
+    /// cube decision, otherwise the roll's two digits canonicalized by
+    /// <see cref="DiceRoll"/> ("13" and "31" both yield high 3, low 1).
+    /// Derived, so excluded from JSON; <see cref="Roll"/> remains the CSV and
+    /// JSON wire form.
     /// </summary>
     [JsonIgnore]
-    public DiceRoll? Dice => Roll == 0 ? null : new DiceRoll(Roll / 10, Roll % 10);
+    public DiceRoll? Dice => Roll is int roll ? new DiceRoll(roll / 10, roll % 10) : null;
 
-    /// <summary>Human-readable analysis depth label, e.g. "3-ply", "Rollout: 1296 trials. 3-ply".</summary>
+    /// <summary>
+    /// Human-readable analysis depth label, e.g. "3-ply", "Rollout: 1296
+    /// trials. 3-ply": a checker play's best candidate's
+    /// (<see cref="PlayCandidate.Depth"/>), a cube decision's cube analysis's
+    /// (<see cref="CubeDecisionData.Depth"/>).
+    /// </summary>
     public required string AnalysisDepth { get; init; }
 
     /// <summary>How the analysis behind this decision was produced — the mode
@@ -156,27 +204,25 @@ public sealed class DecisionRow : IDecisionFilterData
     /// (<see cref="IDecisionFilterData.AnalysisMode"/>); together with
     /// <see cref="AnalysisLevel"/> it is the taxonomy form of
     /// <see cref="AnalysisDepth"/>, used for depth filtering.
-    /// Producer-stamped; <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/>
-    /// when the producer did not record it. Serializes to JSON; excluded
-    /// from CSV output (<see cref="AnalysisDepth"/> remains the CSV depth
-    /// column).</summary>
+    /// <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/> when the producer
+    /// did not record it. Serializes to JSON; excluded from CSV output
+    /// (<see cref="AnalysisDepth"/> remains the CSV depth column).</summary>
     public required AnalysisMode AnalysisMode { get; init; }
 
     /// <summary>Evaluation level of the analysis behind this decision — the
     /// level axis paired with <see cref="AnalysisMode"/>
-    /// (<see cref="IDecisionFilterData.AnalysisLevel"/>); for rollout-family
-    /// modes, the inner level of the row's decision kind. Producer-stamped;
+    /// (<see cref="IDecisionFilterData.AnalysisLevel"/>).
     /// <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when the producer
     /// did not record it. Serializes to JSON; excluded from CSV
     /// output.</summary>
     public required AnalysisLevel AnalysisLevel { get; init; }
 
-    /// <summary>Best equity value from the analysis.</summary>
+    /// <summary>
+    /// The equity of the analysis's best line: a checker play's best
+    /// candidate's (<see cref="PlayCandidate.Equity"/>), a cube decision's
+    /// no-double equity (<see cref="CubeDecisionData.NoDoubleEquity"/>).
+    /// </summary>
     public required double Equity { get; init; }
-
-    /// <summary>True if this is a cube decision (Roll == 0); false if a checker play.</summary>
-    [JsonIgnore]
-    public bool IsCube => Roll == 0;
 
     /// <summary>Away score for the player on roll. 0 for money games.</summary>
     public required int OnRollNeeds { get; init; }
@@ -184,23 +230,8 @@ public sealed class DecisionRow : IDecisionFilterData
     /// <summary>Away score for the opponent. 0 for money games.</summary>
     public required int OpponentNeeds { get; init; }
 
-    /// <summary>True if this is the Crawford game.</summary>
-    /// <exception cref="ArgumentException">
-    /// Thrown on init when the value is <see langword="true"/> and
-    /// <see cref="Roll"/> has already been stated as 0 — the Crawford rule,
-    /// see the class summary. A roll not yet stated does not trip it: the
-    /// <see cref="Roll"/> setter, which <c>required</c> guarantees will run,
-    /// carries the guard for that order.
-    /// </exception>
-    public required bool IsCrawford
-    {
-        get => _isCrawford;
-        init
-        {
-            CrawfordRule.ThrowIfCrawfordCube(value, _roll == 0, nameof(IsCrawford));
-            _isCrawford = value;
-        }
-    }
+    /// <summary>True if this is the Crawford game; never for a cube decision (<see cref="DecisionRules.CrawfordMessage"/>).</summary>
+    public required bool IsCrawford { get; init; }
 
     /// <summary>
     /// Whether the Jacoby rule was in force
@@ -253,36 +284,65 @@ public sealed class DecisionRow : IDecisionFilterData
     public required BoardPosition Board { get; init; }
 
     /// <summary>
-    /// The board after the best play. <b>Frame: the next mover's</b>, as
-    /// <see cref="PlayOutcomeData.AfterBestBoard"/>: the position the play
-    /// reaches, flipped as <see cref="BoardState.ApplyPlay"/> leaves it, so
-    /// the decision-maker's checkers are negative and the opponent's
-    /// positive. <see langword="null"/> when absent — always for a cube
-    /// decision, and on a checker play whose boards the producer could not
-    /// compute. Not included in CSV output.
+    /// The board a checker play's best play leaves, in the next mover's frame
+    /// — the record's <see cref="CheckerPlayDecision.AfterBestBoard"/>, taken
+    /// from it when the row is built. Always present on a checker-play row;
+    /// <see langword="null"/> on a cube row. Not included in CSV output.
     /// </summary>
-    [JsonConverter(typeof(NullableBoardPositionJsonConverter))]
     public BoardPosition? AfterBestBoard { get; init; }
 
     /// <summary>
-    /// The board after the player's actual play, in the same frame as
-    /// <see cref="AfterBestBoard"/> — the next mover's.
-    /// <see langword="null"/> when absent, as for <see cref="AfterBestBoard"/>.
-    /// Not included in CSV output.
+    /// The board the user's checker play leaves, in the same frame — the
+    /// record's <see cref="CheckerPlayDecision.AfterPlayerBoard"/>.
+    /// <see langword="null"/> when the user's play is not among the
+    /// candidates, and on a cube row. Not included in CSV output.
     /// </summary>
-    [JsonConverter(typeof(NullableBoardPositionJsonConverter))]
     public BoardPosition? AfterPlayerBoard { get; init; }
 
     // -----------------------------------------------------------------------
     //  IDecisionFilterData
     // -----------------------------------------------------------------------
 
-    /// <summary>
-    /// Equity loss for this decision (≥ 0). Maps from <see cref="Error"/>.
-    /// Never null on <see cref="DecisionRow"/> — <see cref="Error"/> is always recorded.
-    /// </summary>
+    /// <summary>The user's error (≥ 0), or <see langword="null"/> when none is recorded; <see cref="Error"/>.</summary>
     [JsonIgnore]
     public double? FilterError => Error;
+
+    // -----------------------------------------------------------------------
+    //  Read back whole
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Holds a row read from JSON to what <see cref="From"/> guarantees; see
+    /// the class summary.
+    /// </summary>
+    /// <exception cref="JsonException">The row breaks one of those guarantees; the message names it.</exception>
+    void IJsonOnDeserialized.OnDeserialized()
+    {
+        string? fault = Kind switch
+        {
+            // The identifier converter reads a JSON null as null; the member
+            // is present, so `required` does not catch it.
+            _ when Id is null =>
+                "A row states its Id.",
+            DecisionKind.CheckerPlay when Roll is null =>
+                "A checker-play row states its Roll.",
+            DecisionKind.CheckerPlay when !IsTwoFaces(Roll.Value) =>
+                $"Roll {Roll} is not two die faces.",
+            DecisionKind.CheckerPlay when AfterBestBoard is null =>
+                "A checker-play row states the board its best play leaves.",
+            DecisionKind.Cube when Roll is not null || AfterBestBoard is not null || AfterPlayerBoard is not null =>
+                "A cube row's checker-play columns are empty: Roll, AfterBestBoard and AfterPlayerBoard.",
+            _ when !DecisionRules.CrawfordAllows(Kind, IsCrawford) => DecisionRules.CrawfordMessage,
+            _ when !DecisionRules.IdAgrees(Id, Kind) => DecisionRules.IdKindMessage,
+            _ when !DecisionRules.StartAgrees(Id, IsStandardStart) => DecisionRules.StartMessage,
+            _ => null,
+        };
+        if (fault is not null)
+            throw new JsonException(fault);
+    }
+
+    private static bool IsTwoFaces(int roll) =>
+        roll / 10 is >= 1 and <= 6 && roll % 10 is >= 1 and <= 6;
 
     // -----------------------------------------------------------------------
     //  CSV support
@@ -290,20 +350,25 @@ public sealed class DecisionRow : IDecisionFilterData
 
     /// <summary>CSV header row matching the column order of <see cref="ToCsvLine"/>.</summary>
     public static string CsvHeader =>
-        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Roll,AnalysisDepth,Equity";
+        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity";
 
-    /// <summary>Formats this row as a CSV line (no trailing newline).</summary>
+    /// <summary>
+    /// Formats this row as a CSV line (no trailing newline). A
+    /// <see langword="null"/> column — the other kind's, or a fact that does
+    /// not apply — is an empty cell.
+    /// </summary>
     public string ToCsvLine()
     {
         return string.Join(",",
             CsvEscape(Xgid),
-            Error.ToString("G6"),
+            Error?.ToString("G6"),
             CsvEscape(MatchScore),
             MatchLength,
             CsvEscape(Player),
             CsvEscape(SourceFile ?? string.Empty),
             Game,
             MoveNumber,
+            Kind,
             Roll,
             CsvEscape(AnalysisDepth),
             Equity.ToString("G6"));

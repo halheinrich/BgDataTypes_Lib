@@ -180,9 +180,10 @@ public sealed class ProblemKey :
     /// a money record whose <see cref="PositionData.IsJacoby"/> is
     /// <see langword="null"/> (the fact the money grammar spells is not
     /// supplied — guessing "off" is exactly what this rung forbids); a cube
-    /// size that is not a positive power of two; an undefined
-    /// <see cref="CubeOwner"/> value; or a checker play whose dice are
-    /// unstamped or outside 1–6. Otherwise <see langword="true"/>.
+    /// size that is not a positive power of two; or an undefined
+    /// <see cref="CubeOwner"/> value. Otherwise <see langword="true"/>. (A
+    /// checker play's dice are no rung: they are two faces 1–6 by
+    /// construction, <see cref="CheckerPlayDecisionData.Dice"/>.)
     /// A <see cref="PositionData.IsJacoby"/> stamp on a <em>match</em>
     /// record is not a rejection rung: the fact is meaningless off money,
     /// so it is ignored and the match key is unaffected.
@@ -200,20 +201,10 @@ public sealed class ProblemKey :
         key = null;
 
         var position = data.Position;
-        var decision = data.Decision;
 
-        DiceRoll? dice = null;
-        if (!decision.IsCube)
-        {
-            // Read the raw stored faces, not BgDecisionData.Dice — that
-            // derivation throws on malformed faces, and derivation that
-            // would guess (or blow up) is exactly what this rung forbids.
-            var faces = decision.Dice;
-            if (faces is null || faces.Count != 2
-                || faces[0] is < 1 or > 6 || faces[1] is < 1 or > 6)
-                return false;
-            dice = new DiceRoll(faces[0], faces[1]);
-        }
+        // The decision kind rides on the dice field: a checker play's roll,
+        // none for a cube decision.
+        DiceRoll? dice = data.Match<DiceRoll?>(static play => play.Dice, static _ => null);
 
         if (!AreValidFacts(
                 position.Mop,
@@ -226,7 +217,7 @@ public sealed class ProblemKey :
                 position.Mop,
                 position.OnRollNeeds, position.OpponentNeeds, position.IsCrawford,
                 position.CubeSize, position.CubeOwner, position.IsJacoby, dice),
-            isCubeDecision: decision.IsCube);
+            isCubeDecision: data.Kind == DecisionKind.Cube);
         return true;
     }
 

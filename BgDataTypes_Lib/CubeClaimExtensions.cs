@@ -5,11 +5,11 @@ namespace BgDataTypes_Lib;
 /// halheinrich/backgammon#86): both no-double claims perform the identical
 /// board action, and this is the one place that says so. Consumers needing
 /// the board action behind a claim (e.g. feeding
-/// <see cref="DecisionData.DoublerActionError"/> with a claimed answer's
+/// <see cref="CubeDecisionData.DoublerActionError"/> with a claimed answer's
 /// action) call <see cref="ToCubeAction"/> rather than re-encoding the
 /// mapping. The reverse mapping is deliberately absent — a claim is
 /// underdetermined by the action alone; the only action-and-equities-to-claim
-/// door is <see cref="DecisionData.BestDoublerClaim"/>.
+/// door is <see cref="CubeDecisionData.BestDoublerClaim"/>.
 /// </summary>
 public static class CubeClaimExtensions
 {

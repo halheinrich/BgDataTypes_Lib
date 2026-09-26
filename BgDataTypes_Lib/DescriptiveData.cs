@@ -4,16 +4,19 @@ namespace BgDataTypes_Lib;
 /// The provenance-and-metadata category of a <see cref="BgDecisionData"/>:
 /// who was playing, where the decision came from, and the match it belongs
 /// to. Producer-supplied from the source file's headers (see
-/// <c>ConvertXgToJson_Lib</c>). The nullable members' <see langword="null"/>
-/// means none was recorded; every other member is <c>required</c>, per the
-/// wire rule stated on <see cref="BgDataTypesJsonContext"/>.
+/// <c>ConvertXgToJson_Lib</c>). Every member but the nullable ones is
+/// <c>required</c>, per the wire rule stated on
+/// <see cref="BgDataTypesJsonContext"/>, and each nullable member's
+/// documentation says what <see langword="null"/> means.
 ///
 /// <para>
 /// The decision's game and move number are not here: the record's
 /// <see cref="BgDecisionData.Id"/> carries them, and the record derives
 /// <see cref="BgDecisionData.Game"/> and <see cref="BgDecisionData.MoveNumber"/>
 /// from it — <see langword="null"/> for a standalone position, never a
-/// stamped 1 (halheinrich/backgammon#124).
+/// stamped 1 (halheinrich/backgammon#124). The one game fact that is here,
+/// <see cref="IsStandardStart"/>, is likewise <see langword="null"/> for a
+/// standalone position.
 /// </para>
 /// </summary>
 public class DescriptiveData
@@ -43,9 +46,17 @@ public class DescriptiveData
     /// <summary>Originating file name including extension (e.g. "match.xg", "session.xgp"). No directory.</summary>
     public string? SourceFile { get; init; }
 
-    /// <summary>True if the game started from the canonical opening position.
-    /// False for non-standard starts (custom positions, problem setups, Bg960 variants).</summary>
-    public required bool IsStandardStart { get; init; }
+    /// <summary>
+    /// Whether the decision's game started from the canonical opening
+    /// position: true if it did, false for a non-standard start (custom
+    /// positions, problem setups, Bg960 variants). <see langword="null"/> for a
+    /// decision in a standalone position, which belongs to no game, so has no
+    /// start (halheinrich/backgammon#124) — never a false standing for "not
+    /// applicable". The record holds it to its <see cref="BgDecisionData.Id"/>:
+    /// <see langword="null"/> exactly when the Id is an
+    /// <see cref="XgpDecisionId"/> (<see cref="DecisionRules.StartMessage"/>).
+    /// </summary>
+    public bool? IsStandardStart { get; init; }
 
     /// <summary>XG's per-decision comment text. Empty when none was recorded.</summary>
     public required string Comment { get; init; }

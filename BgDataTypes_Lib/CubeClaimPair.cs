@@ -8,7 +8,7 @@ namespace BgDataTypes_Lib;
 /// the correct response <em>if doubled</em>, answered explicitly even when
 /// the claim is a no-double. One type serves both roles the spec scores
 /// against each other: a user's submitted answer and the derived truth
-/// (<see cref="DecisionData.BestClaimPair"/>).
+/// (<see cref="CubeDecisionData.BestClaimPair"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -120,7 +120,7 @@ public readonly record struct CubeClaimPair(CubeClaim Claim, CubeAction Taker)
     /// the cell halheinrich/backgammon#86 originally introduced the claim
     /// layer to represent. <b>Retired as a verdict on 2026-09-02</b>
     /// (halheinrich/backgammon#187): Too Good requires the pass, so
-    /// <see cref="DecisionData.BestClaimPair"/> never derives this cell as
+    /// <see cref="CubeDecisionData.BestClaimPair"/> never derives this cell as
     /// truth — such a position is <see cref="NoDoubleTake"/> by ruling — and
     /// consumers do not offer it. Kept representable because a data-types
     /// library does not hide cells of a closed 3×2.

@@ -34,7 +34,7 @@ public class TooGoodCorpusExerciseTests
 
     // The corpus documents are per-match sample bundles: three arrays of
     // decision records, each embedding a "decision" object carrying the
-    // DecisionData fields the predicate reads.
+    // cube-decision fields the predicate reads.
     private static readonly string[] SampleArrays =
         ["playErrorSamples", "doubleErrorSamples", "takeErrorSamples"];
 
@@ -99,7 +99,7 @@ public class TooGoodCorpusExerciseTests
             "too-good position (e.g. FixtureFiles/TooGoodAndTake.xgp) into the corpus");
     }
 
-    private static IEnumerable<DecisionData> CubeDecisionsOf(JsonDocument document)
+    private static IEnumerable<CubeDecisionData> CubeDecisionsOf(JsonDocument document)
     {
         if (document.RootElement.ValueKind != JsonValueKind.Object)
             yield break;
@@ -125,8 +125,7 @@ public class TooGoodCorpusExerciseTests
                     || !TryGetDouble(decision, "doubleTakeEquity", out var doubleTakeEquity))
                     continue;
 
-                yield return TestRecords.Decision(
-                    isCube: true,
+                yield return TestRecords.CubeData(
                     noDoubleEquity: noDoubleEquity,
                     doubleTakeEquity: doubleTakeEquity);
             }

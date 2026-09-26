@@ -439,6 +439,21 @@ public sealed class BoardState
     /// <see cref="IndexOfSamePlay"/> is the list match built on it. This
     /// position is only read.
     /// </para>
+    /// <para>
+    /// <b>Stored plays are held to it too.</b> Every candidate of a
+    /// <see cref="CheckerPlayDecision"/> is valid from the decision's own
+    /// position: a record holding a play that cannot be played from its
+    /// position is corrupt (Hal's ruling on invalid plays, applied to stored
+    /// candidates, halheinrich/backgammon#273). The record cannot be built
+    /// with one — its construction refuses it with an
+    /// <see cref="ArgumentException"/> naming the candidate and the fault,
+    /// and a document holding one is a
+    /// <see cref="System.Text.Json.JsonException"/> read as a
+    /// <see cref="BgDecisionData"/>, on both serialization paths — so the
+    /// after-boards the record derives through this rule
+    /// (<see cref="CheckerPlayDecision.AfterBestBoard"/>) can never fail to
+    /// exist. This is the one statement of that invariant.
+    /// </para>
     /// </remarks>
     public bool IsSamePlay(Play first, Play second)
     {

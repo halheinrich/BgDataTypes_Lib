@@ -9,8 +9,8 @@ namespace BgDataTypes_Lib;
 /// <remarks>
 /// <para>
 /// Each half is validated on construction, paralleling the half-guards on
-/// <see cref="DecisionData.DoublerActionError"/> and
-/// <see cref="DecisionData.TakerActionError"/>: <see cref="Doubler"/> must be
+/// <see cref="CubeDecisionData.DoublerActionError"/> and
+/// <see cref="CubeDecisionData.TakerActionError"/>: <see cref="Doubler"/> must be
 /// <see cref="CubeAction.NoDouble"/> or <see cref="CubeAction.Double"/>, and
 /// <see cref="Taker"/> must be <see cref="CubeAction.Take"/> or
 /// <see cref="CubeAction.Pass"/>. A cross-half value

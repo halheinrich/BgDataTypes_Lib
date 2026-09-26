@@ -4,6 +4,13 @@ using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
 
+/// <summary>
+/// The flat row: built only by projecting a record (<see cref="DecisionRow.From"/>),
+/// round-tripped through JSON, and written to CSV. Rewritten for the records
+/// leg of halheinrich/backgammon#273: a row is no longer hand-built, so each
+/// fixture states the record facts its columns come from, through
+/// <see cref="PlayRow"/> and <see cref="CubeRow"/> below.
+/// </summary>
 public class DecisionRowSerializationTests
 {
     private static readonly JsonSerializerOptions Options = new()
@@ -12,8 +19,98 @@ public class DecisionRowSerializationTests
     };
 
     // -----------------------------------------------------------------------
-    //  Absence (halheinrich/backgammon#222): the "defaults to" pins below
-    //  were rewritten into these two shapes — see
+    //  Fixtures: a row of each kind, from the record facts its columns take
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// A checker-play row, built as every row is — from a record. Each
+    /// argument is named for the column it lands in and states the record
+    /// fact that column is taken from: <paramref name="error"/> is the user's
+    /// play error, <paramref name="player"/> the player on roll,
+    /// <paramref name="dice"/> the roll, and the depth, mode, level and equity
+    /// the best candidate's. On the standard start the one candidate plays
+    /// 8/5 6/5; on any other <paramref name="board"/> it passes, which is valid
+    /// from every position. <paramref name="isStandardStart"/> left
+    /// <see langword="null"/> follows the id: stated for a game, none for a
+    /// standalone position.
+    /// </summary>
+    private static DecisionRow PlayRow(
+        DecisionId? id = null,
+        string xgid = "XGID=x",
+        double? error = 0.0,
+        int matchLength = 7,
+        string player = "Alice",
+        string? sourceFile = "match.xg",
+        bool? isStandardStart = null,
+        int[]? dice = null,
+        string analysisDepth = "3-ply",
+        AnalysisMode analysisMode = AnalysisMode.Evaluation,
+        AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
+        double equity = 0.1604,
+        int onRollNeeds = 7,
+        int opponentNeeds = 7,
+        bool isCrawford = false,
+        bool? isJacoby = null,
+        BoardPosition? board = null,
+        int? userPlayIndex = 0)
+    {
+        id ??= new XgDecisionId("match.xg", 1, 1, IsCube: false);
+        var mop = board ?? BoardPosition.Standard;
+        Play play = mop == BoardPosition.Standard ? [new(8, 5), new(6, 5)] : [];
+        return DecisionRow.From(TestRecords.CheckerPlay(
+            id: id,
+            xgid: xgid,
+            position: TestRecords.Position(
+                mop: mop, onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds,
+                isCrawford: isCrawford, isJacoby: isJacoby),
+            decision: TestRecords.CheckerPlayData(
+                dice: dice ?? [3, 1],
+                plays: [TestRecords.Candidate(
+                    play: play, depth: analysisDepth, analysisMode: analysisMode,
+                    analysisLevel: analysisLevel, equity: equity)],
+                userPlayIndex: userPlayIndex,
+                userPlayError: error),
+            descriptive: TestRecords.Descriptive(
+                matchLength: matchLength, onRollName: player, sourceFile: sourceFile,
+                isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))));
+    }
+
+    /// <summary>
+    /// A cube row, from a record as <see cref="PlayRow"/> is:
+    /// <paramref name="error"/> is the user's doubling error, and the depth,
+    /// mode, level and equity (the no-double equity) the cube analysis's.
+    /// </summary>
+    private static DecisionRow CubeRow(
+        DecisionId? id = null,
+        string xgid = "XGID=x",
+        double? error = 0.0,
+        int matchLength = 7,
+        string player = "Alice",
+        string? sourceFile = "match.xg",
+        bool? isStandardStart = null,
+        string analysisDepth = "3-ply",
+        AnalysisMode analysisMode = AnalysisMode.Evaluation,
+        AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
+        double equity = 0.512,
+        int onRollNeeds = 7,
+        int opponentNeeds = 7,
+        bool? isJacoby = null)
+    {
+        id ??= new XgDecisionId("match.xg", 1, 2, IsCube: true);
+        return DecisionRow.From(TestRecords.Cube(
+            id: id,
+            xgid: xgid,
+            position: TestRecords.Position(onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isJacoby: isJacoby),
+            decision: TestRecords.CubeData(
+                depth: analysisDepth, analysisMode: analysisMode, analysisLevel: analysisLevel,
+                noDoubleEquity: equity, userDoubleError: error, userTakeError: null),
+            descriptive: TestRecords.Descriptive(
+                matchLength: matchLength, onRollName: player, sourceFile: sourceFile,
+                isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))));
+    }
+
+    // -----------------------------------------------------------------------
+    //  Absence (halheinrich/backgammon#222): see
     //  BgDecisionDataSerializationTests for the pattern; WireAbsenceTests
     //  walks every member on both paths.
     // -----------------------------------------------------------------------
@@ -44,6 +141,9 @@ public class DecisionRowSerializationTests
         return JsonSerializer.Deserialize<DecisionRow>(document.ToJsonString(), Options)!;
     }
 
+    private static DecisionRow RoundTrip(DecisionRow row, JsonSerializerOptions? options = null) =>
+        JsonSerializer.Deserialize<DecisionRow>(JsonSerializer.Serialize(row, options ?? Options), options ?? Options)!;
+
     // -----------------------------------------------------------------------
     //  JSON round-trip
     // -----------------------------------------------------------------------
@@ -51,7 +151,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_RoundTrip_CheckerPlay()
     {
-        var original = TestRecords.Row(
+        var original = PlayRow(
             id: new XgDecisionId("mochy-falafel.xg", Game: 2, MoveNumber: 7, IsCube: false),
             xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:63:0:0:3:0:10",
             error: 0.023,
@@ -62,14 +162,14 @@ public class DecisionRowSerializationTests
             isJacoby: null,
             player: "Mochy",
             sourceFile: "mochy-falafel.xg",
-            roll: 63,
+            dice: [6, 3],
             analysisDepth: "3-ply",
             equity: -0.142,
             board: new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]));
 
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        var restored = RoundTrip(original);
 
+        Assert.Equal(DecisionKind.CheckerPlay, restored.Kind);
         Assert.Equal(original.Xgid, restored.Xgid);
         Assert.Equal(original.Error, restored.Error);
         Assert.Equal(original.MatchLength, restored.MatchLength);
@@ -81,19 +181,19 @@ public class DecisionRowSerializationTests
         Assert.Equal(original.SourceFile, restored.SourceFile);
         Assert.Equal(2, restored.Game);
         Assert.Equal(7, restored.MoveNumber);
-        Assert.Equal(original.Roll, restored.Roll);
+        Assert.Equal(63, restored.Roll);
         Assert.Equal(original.AnalysisDepth, restored.AnalysisDepth);
         Assert.Equal(original.Equity, restored.Equity);
         Assert.Equal(original.Board, restored.Board);
-        Assert.False(restored.IsCube);
+        Assert.Equal(original.AfterBestBoard, restored.AfterBestBoard);
     }
 
     [Fact]
     public void DecisionRow_RoundTrip_CubeDecision()
     {
-        var original = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 0,
+        // Rewritten: the cube row's roll is empty now — null, never 0 — and
+        // its kind is stated.
+        var original = CubeRow(
             equity: 0.312,
             player: "Falafel",
             sourceFile: "mochy-falafel.xg",
@@ -102,11 +202,10 @@ public class DecisionRowSerializationTests
             onRollNeeds: 1,
             opponentNeeds: 1);
 
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        var restored = RoundTrip(original);
 
-        Assert.Equal(0, restored.Roll);
-        Assert.True(restored.IsCube);
+        Assert.Equal(DecisionKind.Cube, restored.Kind);
+        Assert.Null(restored.Roll);
         Assert.Equal(original.Equity, restored.Equity);
         Assert.Equal(original.AnalysisDepth, restored.AnalysisDepth);
         Assert.False(restored.IsCrawford);
@@ -116,21 +215,13 @@ public class DecisionRowSerializationTests
     public void DecisionRow_RoundTrip_IsCrawford()
     {
         // The flag's true round trip rides a Crawford checker play: a
-        // Crawford cube cannot be constructed (DecisionRowCrawfordCubeTests),
-        // so the cube round trip above is a post-Crawford 1-away/1-away game.
-        var original = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 52,
-            matchLength: 9,
-            onRollNeeds: 1,
-            opponentNeeds: 3,
-            isCrawford: true);
+        // Crawford cube cannot be constructed (DecisionRowCrawfordCubeTests).
+        var original = PlayRow(dice: [5, 2], matchLength: 9, onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
 
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        var restored = RoundTrip(original);
 
         Assert.True(restored.IsCrawford);
-        Assert.False(restored.IsCube);
+        Assert.Equal(DecisionKind.CheckerPlay, restored.Kind);
         Assert.Equal("1a3aC", restored.MatchScore);
     }
 
@@ -138,13 +229,9 @@ public class DecisionRowSerializationTests
     public void DecisionRow_RoundTrip_EmptyStringsAndNullSourceFile()
     {
         // Rewritten from DecisionRow_RoundTrip_StringDefaults: the empty
-        // strings are stated values now, and round-trip as such; the
-        // nullable SourceFile's null round-trips too.
-        var original = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"), roll: 31,
-            xgid: "", player: "", analysisDepth: "", sourceFile: null);
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        // strings are stated values, and round-trip as such; the nullable
+        // SourceFile's null round-trips too.
+        var restored = RoundTrip(PlayRow(xgid: "", player: "", analysisDepth: "", sourceFile: null));
 
         Assert.Equal(string.Empty, restored.Xgid);
         Assert.Equal(string.Empty, restored.Player);
@@ -158,17 +245,15 @@ public class DecisionRowSerializationTests
         var board = new int[26];
         board[1] = 2; board[6] = -5; board[24] = -2; board[25] = 1;
 
-        var original = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, board: new BoardPosition(board));
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        var original = PlayRow(board: new BoardPosition(board));
 
-        Assert.Equal(original.Board, restored.Board);
+        Assert.Equal(original.Board, RoundTrip(original).Board);
     }
 
     [Fact]
     public void DecisionRow_RoundTrip_MatchScoreNotSerialized()
     {
-        var original = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
+        var original = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
         var json = JsonSerializer.Serialize(original, Options);
 
         Assert.DoesNotContain("MatchScore", json);
@@ -178,15 +263,175 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
+    //  The projection (halheinrich/backgammon#273, the records leg)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void DecisionRow_From_TakesEveryColumnFromTheRecord_CheckerPlay()
+    {
+        // Added: the row is the record's, column by column — the shared view
+        // through IDecisionFilterData, the kind's own from the kind.
+        var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 2, userPlayError: 0.1813));
+        var row = DecisionRow.From(record);
+
+        Assert.Equal(record.Kind, row.Kind);
+        Assert.Equal(record.Id, row.Id);
+        Assert.Equal(record.Xgid, row.Xgid);
+        Assert.Equal(0.1813, row.Error);
+        Assert.Equal(record.MatchLength, row.MatchLength);
+        Assert.Equal(record.Player, row.Player);
+        Assert.Equal(record.Descriptive.SourceFile, row.SourceFile);
+        Assert.Equal(record.IsStandardStart, row.IsStandardStart);
+        Assert.Equal(31, row.Roll);
+        Assert.Equal(record.Decision.BestPlay.Depth, row.AnalysisDepth);
+        Assert.Equal(record.AnalysisMode, row.AnalysisMode);
+        Assert.Equal(record.AnalysisLevel, row.AnalysisLevel);
+        Assert.Equal(record.Decision.BestPlay.Equity, row.Equity);
+        Assert.Equal(record.OnRollNeeds, row.OnRollNeeds);
+        Assert.Equal(record.OpponentNeeds, row.OpponentNeeds);
+        Assert.Equal(record.IsCrawford, row.IsCrawford);
+        Assert.Equal(record.IsJacoby, row.IsJacoby);
+        Assert.Equal(record.Board, row.Board);
+        Assert.Equal(record.AfterBestBoard, row.AfterBestBoard);
+        Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void DecisionRow_From_TakesEveryColumnFromTheRecord_Cube()
+    {
+        // Added: the cube's own columns, and the checker play's empty.
+        var record = TestRecords.Cube(decision: TestRecords.CubeData(userDoubleError: null, userTakeError: 0.04));
+        var row = DecisionRow.From(record);
+
+        Assert.Equal(DecisionKind.Cube, row.Kind);
+        Assert.Equal(0.04, row.Error);
+        Assert.Equal(record.Decision.Depth, row.AnalysisDepth);
+        Assert.Equal(record.Decision.NoDoubleEquity, row.Equity);
+        Assert.Null(row.Roll);
+        Assert.Null(row.AfterBestBoard);
+        Assert.Null(row.AfterPlayerBoard);
+    }
+
+    [Fact]
+    public void DecisionRow_From_AgreesWithTheRecord_OnEveryFilterMember_EachKind()
+    {
+        // Added: the IDecisionFilterData contract, member by member, read off
+        // the record and off its row — the agreement the converter used to
+        // test after building the two separately is structural now.
+        foreach (BgDecisionData record in new BgDecisionData[]
+                 {
+                     TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(dice: [1, 3], userPlayIndex: 1)),
+                     TestRecords.CheckerPlay(id: new XgpDecisionId("p.xgp"), decision: TestRecords.CheckerPlayData(userPlayIndex: null, userPlayError: null)),
+                     TestRecords.Cube(),
+                     TestRecords.Cube(position: TestRecords.Position(onRollNeeds: 0, opponentNeeds: 0, isJacoby: true),
+                         descriptive: TestRecords.Descriptive(matchLength: 0)),
+                 })
+        {
+            IDecisionFilterData fromRecord = record;
+            IDecisionFilterData fromRow = DecisionRow.From(record);
+
+            foreach (var property in typeof(IDecisionFilterData).GetProperties())
+                Assert.Equal(property.GetValue(fromRecord), property.GetValue(fromRow));
+            Assert.Equal(fromRecord.IsMoneyGame, fromRow.IsMoneyGame);
+        }
+    }
+
+    [Fact]
+    public void DecisionRow_HasNoPublicConstructor()
+    {
+        // Added: the projection is the one way a row is made outside this
+        // library, so its after-boards are never computed a second way.
+        Assert.Empty(typeof(DecisionRow).GetConstructors());
+    }
+
+    [Fact]
+    public void DecisionRow_OtherKindsColumns_AreEmpty_EachKind()
+    {
+        // Added: a cube row's checker-play columns are empty — null, never
+        // zero — in JSON and in CSV; a checker row has no cube-only column.
+        var cube = CubeRow(player: "Mochy");
+        var json = JsonSerializer.Serialize(cube, Options);
+
+        Assert.Null(cube.Roll);
+        Assert.Null(cube.Dice);
+        Assert.Null(cube.AfterBestBoard);
+        Assert.Null(cube.AfterPlayerBoard);
+        Assert.Contains("\"Roll\":null", json);
+        Assert.Contains("\"AfterBestBoard\":null", json);
+        Assert.Contains(",Cube,,", cube.ToCsvLine());
+
+        var play = PlayRow();
+        Assert.NotNull(play.Roll);
+        Assert.NotNull(play.AfterBestBoard);
+    }
+
+    // -----------------------------------------------------------------------
+    //  Read back whole — a row read from JSON is held to what the
+    //  projection guarantees, refused with a JsonException on both paths
+    // -----------------------------------------------------------------------
+
+    public static TheoryData<string, string> MalformedRows => new()
+    {
+        // (a fixture's mutation, what it breaks)
+        { "cube-roll", "A cube row's checker-play columns are empty" },
+        { "cube-afterbest", "A cube row's checker-play columns are empty" },
+        { "cube-crawford", "Crawford" },
+        { "play-no-roll", "states its Roll" },
+        { "play-bad-roll", "not two die faces" },
+        { "play-no-afterbest", "the board its best play leaves" },
+        { "play-id-names-cube", "identifier names the other kind" },
+        { "standalone-with-start", "IsStandardStart is a fact about a game" },
+        { "game-without-start", "IsStandardStart is a fact about a game" },
+        { "null-id", "states its Id" },
+    };
+
+    private static string Malformed(string name)
+    {
+        var play = WirePaths.Document(PlayRow());
+        var cube = WirePaths.Document(CubeRow());
+        switch (name)
+        {
+            case "cube-roll": cube["Roll"] = 31; return cube.ToJsonString();
+            case "cube-afterbest": cube["AfterBestBoard"] = play["AfterBestBoard"]!.DeepClone(); return cube.ToJsonString();
+            case "cube-crawford": cube["IsCrawford"] = true; return cube.ToJsonString();
+            case "play-no-roll": play.Remove("Roll"); return play.ToJsonString();
+            case "play-bad-roll": play["Roll"] = 70; return play.ToJsonString();
+            case "play-no-afterbest": play["AfterBestBoard"] = null; return play.ToJsonString();
+            case "play-id-names-cube": play["Id"] = "match.xg:g1:m1:cube"; return play.ToJsonString();
+            case "standalone-with-start": play["Id"] = "p.xgp"; return play.ToJsonString();
+            case "game-without-start": play["IsStandardStart"] = null; return play.ToJsonString();
+            case "null-id": play["Id"] = null; return play.ToJsonString();
+            default: throw new ArgumentOutOfRangeException(nameof(name), name, null);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(MalformedRows))]
+    public void DecisionRow_Read_BreakingAGuarantee_IsRefused_BothPaths(string mutation, string reason)
+    {
+        // Added.
+        var ex = WirePaths.AssertRefused<DecisionRow>(Malformed(mutation));
+
+        Assert.Contains(reason, ex.Message);
+    }
+
+    [Fact]
+    public void DecisionRow_Read_WellFormedRows_Load_BothPaths()
+    {
+        // The control for every refusal above.
+        foreach (var row in new[] { PlayRow(), CubeRow(), PlayRow(id: new XgpDecisionId("p.xgp")) })
+            foreach (var (_, options) in WirePaths.Both)
+                Assert.NotNull(RoundTrip(row, options));
+    }
+
+    // -----------------------------------------------------------------------
     //  AnalysisMode / AnalysisLevel — JSON only, excluded from CSV
     // -----------------------------------------------------------------------
 
     [Fact]
     public void DecisionRow_AnalysisModeAndLevel_RoundTrip()
     {
-        var original = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
+        var original = PlayRow(
             analysisDepth: "XG Roller++",
             analysisMode: AnalysisMode.Evaluation,
             analysisLevel: AnalysisLevel.XgRollerPlusPlus);
@@ -205,53 +450,46 @@ public class DecisionRowSerializationTests
     public void DecisionRow_AnalysisModeAndLevel_AbsentIsRefused()
     {
         // Rewritten from DecisionRow_AnalysisModeAndLevel_DefaultToUnknown.
-        AssertAbsentIsRefused(TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31),
-            "AnalysisMode", "AnalysisLevel");
+        AssertAbsentIsRefused(PlayRow(), "AnalysisMode", "AnalysisLevel");
     }
 
     [Fact]
     public void DecisionRow_LegacyAnalysisDepthClassJson_IsRefused_TheRetiredPropertyStillIgnored()
     {
         // Rewritten from DecisionRow_LegacyAnalysisDepthClassJson_DeserializesToUnknownPair.
-        // JSON written before the two-axis pair existed lacks it; the pair is
-        // required now (halheinrich/backgammon#222), so such a document is
-        // refused rather than read as "depth not recorded". The retired flat
-        // "AnalysisDepthClass" property is still ignored beside a full row.
+        // JSON written before the two-axis pair existed lacks it and is
+        // refused. The retired flat "AnalysisDepthClass" property is still
+        // ignored beside a full row: every column of either kind is a member
+        // of the one flat row, so a member it does not know cannot be another
+        // kind's.
         var legacy = "{\"Id\":\"test.xgp\",\"AnalysisDepth\":\"3-ply\",\"AnalysisDepthClass\":\"Ply3\",\"Roll\":63}";
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DecisionRow>(legacy, Options));
 
-        var full = JsonNode.Parse(JsonSerializer.Serialize(
-            TestRecords.Row(roll: 63, analysisDepth: "3-ply"), Options))!.AsObject();
+        var row = PlayRow(analysisDepth: "3-ply");
+        var full = JsonNode.Parse(JsonSerializer.Serialize(row, Options))!.AsObject();
         full["AnalysisDepthClass"] = "Ply3";
         var restored = JsonSerializer.Deserialize<DecisionRow>(full.ToJsonString(), Options)!;
 
-        Assert.Equal(AnalysisMode.Unknown, restored.AnalysisMode);
-        Assert.Equal(AnalysisLevel.Unknown, restored.AnalysisLevel);
+        Assert.Equal(row.AnalysisMode, restored.AnalysisMode);
+        Assert.Equal(row.AnalysisLevel, restored.AnalysisLevel);
         Assert.Equal("3-ply", restored.AnalysisDepth);
     }
 
     [Fact]
     public void DecisionRow_AnalysisModeAndLevel_NotInCsvOutput()
     {
-        var row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
-            analysisDepth: "3-ply",
-            analysisMode: AnalysisMode.Evaluation,
-            analysisLevel: AnalysisLevel.Ply3);
+        var row = PlayRow(analysisDepth: "3-ply", analysisMode: AnalysisMode.Evaluation, analysisLevel: AnalysisLevel.Ply3);
 
         Assert.DoesNotContain("AnalysisMode", DecisionRow.CsvHeader);
         Assert.DoesNotContain("AnalysisLevel", DecisionRow.CsvHeader);
-        // Column count unchanged: 11 columns → 10 commas.
-        Assert.Equal(10, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 12 columns with the Kind column → 11 commas.
+        Assert.Equal(11, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
     public void DecisionRow_IDecisionFilterData_AnalysisModeAndLevel()
     {
-        IDecisionFilterData row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
+        IDecisionFilterData row = CubeRow(
             analysisMode: AnalysisMode.BookRollout,
             analysisLevel: AnalysisLevel.XgRoller);
 
@@ -266,7 +504,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsMoneyGame_MoneyRow()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 0, onRollNeeds: 0, opponentNeeds: 0);
+        var row = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0);
 
         Assert.True(row.IsMoneyGame);
         // IsJacoby unset, so the bare (rule-unknown) money token.
@@ -277,7 +515,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_IsMoneyGame_OnePointMatch()
     {
         // The shortest possible match — the boundary case next to money's 0.
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 1, onRollNeeds: 1, opponentNeeds: 1);
+        var row = PlayRow(matchLength: 1, onRollNeeds: 1, opponentNeeds: 1);
 
         Assert.False(row.IsMoneyGame);
         Assert.Equal("1a1a", row.MatchScore);
@@ -286,7 +524,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsMoneyGame_StandardMatch()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
+        var row = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
 
         Assert.False(row.IsMoneyGame);
         Assert.Equal("3a5a", row.MatchScore);
@@ -295,7 +533,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire()
     {
-        var original = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 0);
+        var original = PlayRow(matchLength: 0);
         var json = JsonSerializer.Serialize(original, Options);
 
         Assert.DoesNotContain("IsMoneyGame", json);
@@ -308,18 +546,18 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsMoneyGame_NotInCsvOutput()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 0);
+        var row = PlayRow(matchLength: 0);
 
         Assert.DoesNotContain("IsMoneyGame", DecisionRow.CsvHeader);
-        // Column count unchanged: 11 columns → 10 commas.
-        Assert.Equal(10, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 12 columns with the Kind column → 11 commas.
+        Assert.Equal(11, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
     public void DecisionRow_IDecisionFilterData_IsMoneyGame()
     {
-        IDecisionFilterData money = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 0);
-        IDecisionFilterData match = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 9);
+        IDecisionFilterData money = PlayRow(matchLength: 0);
+        IDecisionFilterData match = PlayRow(matchLength: 9);
 
         Assert.True(money.IsMoneyGame);
         Assert.False(match.IsMoneyGame);
@@ -333,21 +571,21 @@ public class DecisionRowSerializationTests
     public void DecisionRow_MatchScore_Money_JacobyUnknown()
     {
         // No IsJacoby stamp — the bare token, which is neither moneyJ nor moneyNJ.
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 0, onRollNeeds: 0, opponentNeeds: 0);
+        var row = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0);
         Assert.Equal("money", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Money_Jacoby()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: true);
+        var row = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: true);
         Assert.Equal("moneyJ", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Money_NoJacoby()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: false);
+        var row = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: false);
         Assert.Equal("moneyNJ", row.MatchScore);
     }
 
@@ -359,27 +597,21 @@ public class DecisionRowSerializationTests
     {
         // The suffix is money-only: a match score is unchanged by the stamp,
         // stray or otherwise, exactly as PositionData.IsJacoby's contract says.
-        var row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
-            matchLength: 9,
-            onRollNeeds: 3,
-            opponentNeeds: 5,
-            isJacoby: isJacoby);
+        var row = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5, isJacoby: isJacoby);
         Assert.Equal("3a5a", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Standard()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
+        var row = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
         Assert.Equal("3a5a", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Crawford()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 9, onRollNeeds: 1, opponentNeeds: 1, isCrawford: true);
+        var row = PlayRow(matchLength: 9, onRollNeeds: 1, opponentNeeds: 1, isCrawford: true);
         Assert.Equal("1a1aC", row.MatchScore);
     }
 
@@ -390,15 +622,25 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_CsvHeader_ContainsExpectedColumns()
     {
+        // Rewritten: the row carries its kind, so the CSV does — a column of
+        // its own beside the roll, never inferred from an empty roll.
         Assert.Equal(
-            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Roll,AnalysisDepth,Equity",
+            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity",
             DecisionRow.CsvHeader);
+    }
+
+    [Fact]
+    public void DecisionRow_ToCsvLine_KindAndRoll_EachKind()
+    {
+        // Added: the kind's token, then the roll — empty for a cube.
+        Assert.Contains(",CheckerPlay,63,", PlayRow(dice: [6, 3]).ToCsvLine());
+        Assert.Contains(",Cube,,", CubeRow().ToCsvLine());
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_EscapesCommas()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 9, onRollNeeds: 3, opponentNeeds: 5, player: "Last, First");
+        var row = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5, player: "Last, First");
         var line = row.ToCsvLine();
         Assert.Contains("\"Last, First\"", line);
     }
@@ -406,7 +648,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_EscapesQuotes()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, player: "say \"hello\"");
+        var row = PlayRow(player: "say \"hello\"");
         var line = row.ToCsvLine();
         Assert.Contains("\"say \"\"hello\"\"\"", line);
     }
@@ -414,21 +656,30 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_DoublesFormattedG6()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, error: 0.12345678, equity: -0.98765432);
+        var row = PlayRow(error: 0.12345678, equity: -0.98765432);
         var line = row.ToCsvLine();
         Assert.Contains("0.123457", line);
         Assert.Contains("-0.987654", line);
     }
 
     [Fact]
+    public void DecisionRow_ToCsvLine_NoErrorRecorded_IsAnEmptyCell()
+    {
+        // Added: "no user decision recorded" is null, an empty cell — the
+        // 0 the producer used to write in its place was a stand-in.
+        var row = PlayRow(xgid: "XGID=x", error: null, userPlayIndex: null);
+
+        Assert.Null(row.Error);
+        Assert.StartsWith("XGID=x,,", row.ToCsvLine());
+    }
+
+    [Fact]
     public void DecisionRow_ToCsvLine_BoardNotInCsv()
     {
-        var row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
-            board: new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]));
+        var row = PlayRow(board: new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]));
         var line = row.ToCsvLine();
-        Assert.Equal(10, line.Count(c => c == ','));
+        // Rewritten: 12 columns with the Kind column → 11 commas.
+        Assert.Equal(11, line.Count(c => c == ','));
     }
 
     // -----------------------------------------------------------------------
@@ -440,18 +691,17 @@ public class DecisionRowSerializationTests
     {
         // Rewritten from DecisionRow_SourceFile_DefaultsToNull: nullable (none
         // recorded), so its absence reads as null.
-        var row = ReadWithout(
-            TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, sourceFile: "m.xg"), "SourceFile");
+        var row = ReadWithout(PlayRow(sourceFile: "m.xg"), "SourceFile");
         Assert.Null(row.SourceFile);
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_EmptyCellWhenNull()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, player: "Mochy", sourceFile: null);
+        var row = PlayRow(player: "Mochy", sourceFile: null);
         var line = row.ToCsvLine();
 
-        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Roll,AnalysisDepth,Equity
+        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity
         // SourceFile is column index 5 (0-based). Between Player and Game it must appear
         // as ",," — an empty cell — not the literal "null".
         Assert.Contains(",Mochy,,", line);
@@ -461,16 +711,14 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_PlainFilename()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, sourceFile: "mochy-falafel.xg");
-        var line = row.ToCsvLine();
+        var line = PlayRow(sourceFile: "mochy-falafel.xg").ToCsvLine();
         Assert.Contains(",mochy-falafel.xg,", line);
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_FilenameWithSpaces_Unquoted()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, sourceFile: "Mochy vs Falafel.xgp");
-        var line = row.ToCsvLine();
+        var line = PlayRow(sourceFile: "Mochy vs Falafel.xgp").ToCsvLine();
         // RFC 4180 does not require quoting on spaces; value passes through literally.
         Assert.Contains(",Mochy vs Falafel.xgp,", line);
     }
@@ -478,18 +726,14 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_FilenameWithComma_Quoted()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, sourceFile: "file,with,commas.xg");
-        var line = row.ToCsvLine();
+        var line = PlayRow(sourceFile: "file,with,commas.xg").ToCsvLine();
         Assert.Contains("\"file,with,commas.xg\"", line);
     }
 
     [Fact]
     public void DecisionRow_RoundTrip_SourceFile()
     {
-        var original = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, sourceFile: "mochy-falafel.xg");
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
-        Assert.Equal("mochy-falafel.xg", restored.SourceFile);
+        Assert.Equal("mochy-falafel.xg", RoundTrip(PlayRow(sourceFile: "mochy-falafel.xg")).SourceFile);
     }
 
     // -----------------------------------------------------------------------
@@ -500,10 +744,9 @@ public class DecisionRowSerializationTests
     public void DecisionRow_IDecisionFilterData_CheckerPlay()
     {
         var board = new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]);
-        IDecisionFilterData row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
+        IDecisionFilterData row = PlayRow(
             player: "Mochy",
-            roll: 63,
+            dice: [6, 3],
             matchLength: 9,
             onRollNeeds: 3,
             opponentNeeds: 5,
@@ -511,29 +754,25 @@ public class DecisionRowSerializationTests
             board: board);
 
         Assert.Equal("Mochy", row.Player);
-        Assert.False(row.IsCube);
+        Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
         Assert.Equal(3, row.OnRollNeeds);
         Assert.Equal(5, row.OpponentNeeds);
         Assert.False(row.IsCrawford);
         Assert.Equal(0.023, row.FilterError);
-        // Rewritten from a 26-element count check: the layout is the type's
-        // now, so the view forwards the board itself.
         Assert.Equal(board, row.Board);
     }
 
     [Fact]
     public void DecisionRow_IDecisionFilterData_CubeDecision()
     {
-        IDecisionFilterData row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
+        IDecisionFilterData row = CubeRow(
             player: "Falafel",
-            roll: 0,
             matchLength: 9,
             onRollNeeds: 1,
             opponentNeeds: 1,
             error: 0.011);
 
-        Assert.True(row.IsCube);
+        Assert.Equal(DecisionKind.Cube, row.Kind);
         Assert.False(row.IsCrawford);
         Assert.Equal(0.011, row.FilterError);
     }
@@ -543,25 +782,22 @@ public class DecisionRowSerializationTests
     {
         // The flag forwards from a record that can exist — a Crawford
         // checker play; the cube case above is post-Crawford by necessity.
-        IDecisionFilterData row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 52,
-            matchLength: 9,
-            onRollNeeds: 1,
-            opponentNeeds: 3,
-            isCrawford: true);
+        IDecisionFilterData row = PlayRow(dice: [5, 2], matchLength: 9, onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
 
-        Assert.False(row.IsCube);
+        Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
         Assert.True(row.IsCrawford);
     }
 
     [Fact]
     public void DecisionRow_IDecisionFilterData_FilterError_IsNullableDouble()
     {
-        IDecisionFilterData row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, error: 0.045);
+        // Rewritten: the error is nullable on the row as on the record —
+        // present here, none when no user decision is recorded.
+        IDecisionFilterData row = PlayRow(error: 0.045);
         double? fe = row.FilterError;
         Assert.NotNull(fe);
         Assert.Equal(0.045, fe!.Value);
+        Assert.Null(((IDecisionFilterData)PlayRow(error: null)).FilterError);
     }
 
     // -----------------------------------------------------------------------
@@ -571,9 +807,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_Dice_CheckerPlay_DerivedFromRoll()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 63);
-
-        Assert.Equal(new DiceRoll(6, 3), row.Dice);
+        Assert.Equal(new DiceRoll(6, 3), PlayRow(dice: [6, 3]).Dice);
     }
 
     [Fact]
@@ -581,8 +815,9 @@ public class DecisionRowSerializationTests
     {
         // The XG parser stamps dice in rolled order, so Roll carries both
         // spellings of a 3-1 (31 and 13); Dice canonicalizes high-first.
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 13);
+        var row = PlayRow(dice: [1, 3]);
 
+        Assert.Equal(13, row.Roll);
         Assert.Equal(new DiceRoll(3, 1), row.Dice);
         Assert.Equal(3, row.Dice!.Value.High);
         Assert.Equal(1, row.Dice!.Value.Low);
@@ -591,9 +826,9 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_Dice_CubeDecision_IsNull()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 0);
+        var row = CubeRow();
 
-        Assert.True(row.IsCube);
+        Assert.Equal(DecisionKind.Cube, row.Kind);
         Assert.Null(row.Dice);
     }
 
@@ -603,17 +838,21 @@ public class DecisionRowSerializationTests
     [InlineData(7)]
     [InlineData(-13)]
     [InlineData(315)]
-    public void DecisionRow_Dice_MalformedRoll_Throws(int badRoll)
+    public void DecisionRow_Dice_MalformedRoll_IsRefusedOnRead(int badRoll)
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: badRoll);
+        // Rewritten from DecisionRow_Dice_MalformedRoll_Throws: a projection
+        // cannot hold a malformed roll, and a document holding one is refused
+        // at read, so the Dice derivation never meets it.
+        var document = WirePaths.Document(PlayRow());
+        document["Roll"] = badRoll;
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => row.Dice);
+        WirePaths.AssertRefused<DecisionRow>(document.ToJsonString());
     }
 
     [Fact]
     public void DecisionRow_Dice_NotSerialized_RollRemainsTheWire()
     {
-        var original = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 63);
+        var original = PlayRow(dice: [6, 3]);
         var json = JsonSerializer.Serialize(original, Options);
 
         Assert.DoesNotContain("\"Dice\"", json);
@@ -626,77 +865,63 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_Dice_NotInCsvOutput()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 63);
+        var row = PlayRow(dice: [6, 3]);
 
         Assert.DoesNotContain("Dice", DecisionRow.CsvHeader);
-        // Column count unchanged: 11 columns → 10 commas.
-        Assert.Equal(10, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 12 columns with the Kind column → 11 commas.
+        Assert.Equal(11, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
     public void DecisionRow_IDecisionFilterData_Dice()
     {
-        IDecisionFilterData play = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 52);
-        IDecisionFilterData cube = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 0);
+        IDecisionFilterData play = PlayRow(dice: [5, 2]);
+        IDecisionFilterData cube = CubeRow();
 
         Assert.Equal(new DiceRoll(5, 2), play.Dice);
         Assert.Null(cube.Dice);
     }
 
     // -----------------------------------------------------------------------
-    //  After-boards — JSON only, excluded from CSV (matches Board)
+    //  After-boards — the record's derivation, JSON only, excluded from CSV
     // -----------------------------------------------------------------------
 
     [Fact]
     public void DecisionRow_AfterBoards_AbsentAreNull()
     {
-        // Rewritten from DecisionRow_AfterBoards_DefaultToEmpty: an absent
-        // after-board is null, never an empty list (halheinrich/backgammon#15).
-        var row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31);
-        Assert.Null(row.AfterBestBoard);
-        Assert.Null(row.AfterPlayerBoard);
+        // Rewritten: a cube row's after-boards are empty (null); a checker
+        // row's player board is null exactly when the user's play is not
+        // among the candidates, and reads null when absent.
+        var cube = CubeRow();
+        Assert.Null(cube.AfterBestBoard);
+        Assert.Null(cube.AfterPlayerBoard);
+
+        Assert.Null(PlayRow(userPlayIndex: null).AfterPlayerBoard);
+        Assert.Null(ReadWithout(PlayRow(), "AfterPlayerBoard").AfterPlayerBoard);
     }
 
     [Fact]
     public void DecisionRow_RoundTrip_AfterBoards()
     {
-        var best = new int[26];
-        best[1] = 2; best[6] = -5; best[20] = -2;
-        var player = new int[26];
-        player[1] = 2; player[6] = -5; player[19] = -2;
+        // Rewritten: the boards are the record's derivation, taken when the
+        // row is built, and round-trip as the row's columns.
+        var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 1));
+        var original = DecisionRow.From(record);
 
-        var original = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:63:0:0:3:0:10",
-            error: 0.018,
-            roll: 63,
-            player: "Mochy",
-            afterBestBoard: new BoardPosition(best),
-            afterPlayerBoard: new BoardPosition(player));
-
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
-
-        Assert.Equal(original.AfterBestBoard, restored.AfterBestBoard);
-        Assert.Equal(original.AfterPlayerBoard, restored.AfterPlayerBoard);
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            var restored = RoundTrip(original, options);
+            Assert.Equal(record.AfterBestBoard, restored.AfterBestBoard);
+            Assert.Equal(record.AfterPlayerBoard, restored.AfterPlayerBoard);
+        }
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_AfterBoardsNotInCsv()
     {
-        var best = new int[26];
-        best[1] = 2; best[6] = -5;
-
-        var row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
-            board: new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]),
-            afterBestBoard: new BoardPosition(best),
-            afterPlayerBoard: new BoardPosition(best));
-
-        var line = row.ToCsvLine();
-        // Column count unchanged: 11 columns → 10 commas.
-        Assert.Equal(10, line.Count(c => c == ','));
+        var line = PlayRow().ToCsvLine();
+        // Rewritten: 12 columns with the Kind column → 11 commas.
+        Assert.Equal(11, line.Count(c => c == ','));
     }
 
     [Fact]
@@ -709,20 +934,13 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IDecisionFilterData_AfterBoards_CheckerPlay()
     {
-        var best = new int[26];
-        best[1] = 2; best[20] = -2;
-        var player = new int[26];
-        player[1] = 2; player[19] = -2;
+        // Rewritten: the row forwards the boards it took from the record.
+        var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 2));
+        IDecisionFilterData row = DecisionRow.From(record);
 
-        IDecisionFilterData row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 63,
-            afterBestBoard: new BoardPosition(best),
-            afterPlayerBoard: new BoardPosition(player));
-
-        Assert.False(row.IsCube);
-        Assert.Equal(new BoardPosition(best), row.AfterBestBoard);
-        Assert.Equal(new BoardPosition(player), row.AfterPlayerBoard);
+        Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
+        Assert.Equal(record.AfterBestBoard, row.AfterBestBoard);
+        Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
     }
 
     [Fact]
@@ -730,9 +948,9 @@ public class DecisionRowSerializationTests
     {
         // Rewritten from ..._AfterBoards_EmptyByDefault_CubeDecision: a cube
         // row's after-boards are absent, which is null.
-        IDecisionFilterData row = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 0, error: 0.025);
+        IDecisionFilterData row = CubeRow(error: 0.025);
 
-        Assert.True(row.IsCube);
+        Assert.Equal(DecisionKind.Cube, row.Kind);
         Assert.Null(row.AfterBestBoard);
         Assert.Null(row.AfterPlayerBoard);
     }
@@ -747,10 +965,8 @@ public class DecisionRowSerializationTests
     {
         // Rewritten from DecisionRow_MoveNumber_RoundTrip: the numbers are the
         // Id's, and round-trip with it.
-        var original = TestRecords.Row(
-            id: new XgDecisionId("m.xg", Game: 2, MoveNumber: 17, IsCube: false), roll: 31);
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        var restored = RoundTrip(PlayRow(id: new XgDecisionId("m.xg", Game: 2, MoveNumber: 17, IsCube: false)));
+
         Assert.Equal(2, restored.Game);
         Assert.Equal(17, restored.MoveNumber);
     }
@@ -761,9 +977,10 @@ public class DecisionRowSerializationTests
         // Rewritten from DecisionRow_MoveNumber_AbsentIsRefused: a standalone
         // position has no game or move number, and the row stores no copy of
         // either (halheinrich/backgammon#124).
-        var original = TestRecords.Row(id: new XgpDecisionId("position.xgp"), roll: 31);
+        var original = PlayRow(id: new XgpDecisionId("position.xgp"));
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+
         Assert.Null(restored.Game);
         Assert.Null(restored.MoveNumber);
         Assert.DoesNotContain("\"Game\"", json);
@@ -773,48 +990,50 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsStandardStart_RoundTrip()
     {
-        var original = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, isStandardStart: true);
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
-        Assert.True(restored.IsStandardStart);
+        Assert.True(RoundTrip(PlayRow(isStandardStart: true)).IsStandardStart);
     }
 
     [Fact]
-    public void DecisionRow_IsStandardStart_AbsentIsRefused()
+    public void DecisionRow_IsStandardStart_StandalonePosition_IsNone()
     {
-        // Rewritten from DecisionRow_IsStandardStart_DefaultsToFalse.
-        AssertAbsentIsRefused(TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, isStandardStart: true),
-            "IsStandardStart");
+        // Rewritten from DecisionRow_IsStandardStart_AbsentIsRefused: the
+        // column is nullable now — none for a standalone position, which has
+        // no game to start (halheinrich/backgammon#124) — and a document
+        // that drops it from a game's row is refused as that rule, not as an
+        // absent member (DecisionRow_Read_BreakingAGuarantee_IsRefused_BothPaths).
+        var standalone = RoundTrip(PlayRow(id: new XgpDecisionId("p.xgp")));
+
+        Assert.Null(standalone.IsStandardStart);
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_MoveNumberInColumnOrder()
     {
-        var row = TestRecords.Row(
+        var row = PlayRow(
             id: new XgDecisionId("m.xg", Game: 2, MoveNumber: 17, IsCube: false),
             player: "Mochy",
-            roll: 63);
+            sourceFile: null,
+            dice: [6, 3]);
         var line = row.ToCsvLine();
-        // CSV header is: ...Player,SourceFile,Game,MoveNumber,Roll,...
-        // SourceFile is null → empty cell. Expect "Mochy,,2,17,63,"
-        Assert.Contains(",Mochy,,2,17,63,", line);
+        // CSV header is: ...Player,SourceFile,Game,MoveNumber,Kind,Roll,...
+        // SourceFile is null → empty cell.
+        Assert.Contains(",Mochy,,2,17,CheckerPlay,63,", line);
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_StandalonePosition_GameAndMoveNumberAreEmptyCells()
     {
-        var row = TestRecords.Row(id: new XgpDecisionId("position.xgp"), player: "Mochy", roll: 63);
+        var row = PlayRow(id: new XgpDecisionId("position.xgp"), player: "Mochy", sourceFile: null, dice: [6, 3]);
 
         // Neither a 1 nor a 0: no game applies (halheinrich/backgammon#124).
-        Assert.Contains(",Mochy,,,,63,", row.ToCsvLine());
+        Assert.Contains(",Mochy,,,,CheckerPlay,63,", row.ToCsvLine());
     }
 
     [Fact]
     public void DecisionRow_IDecisionFilterData_MoveNumberAndIsStandardStart()
     {
-        IDecisionFilterData row = TestRecords.Row(
+        IDecisionFilterData row = PlayRow(
             id: new XgDecisionId("m.xg", Game: 1, MoveNumber: 12, IsCube: false),
-            roll: 31,
             isStandardStart: true);
 
         Assert.Equal(12, row.MoveNumber);
@@ -825,12 +1044,12 @@ public class DecisionRowSerializationTests
     public void DecisionRow_IDecisionFilterData_MoveNumber_StandalonePosition_IsNone()
     {
         // Rewritten from ..._MoveNumberAndIsStandardStart_ForwardZeroAndFalse:
-        // a standalone position has no move number (halheinrich/backgammon#124).
-        IDecisionFilterData row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"), roll: 31, isStandardStart: false);
+        // a standalone position has no move number and no start
+        // (halheinrich/backgammon#124).
+        IDecisionFilterData row = PlayRow(id: new XgpDecisionId("test.xgp"));
 
         Assert.Null(row.MoveNumber);
-        Assert.False(row.IsStandardStart);
+        Assert.Null(row.IsStandardStart);
     }
 
     // -----------------------------------------------------------------------
@@ -840,7 +1059,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_Id_RoundTrip_Xgp()
     {
-        var original = TestRecords.Row(id: new XgpDecisionId("match.xgp"), roll: 31);
+        var original = PlayRow(id: new XgpDecisionId("match.xgp"));
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
@@ -852,9 +1071,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_Id_RoundTrip_Xg()
     {
-        var original = TestRecords.Row(
-            id: new XgDecisionId("match.xg", Game: 2, MoveNumber: 17, IsCube: false),
-            roll: 31);
+        var original = PlayRow(id: new XgDecisionId("match.xg", Game: 2, MoveNumber: 17, IsCube: false));
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
@@ -867,10 +1084,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_Id_NotInCsvOutput()
     {
-        var row = TestRecords.Row(
-            id: new XgDecisionId("match.xg", 2, 17, IsCube: true),
-            roll: 0,
-            player: "Mochy");
+        var row = CubeRow(id: new XgDecisionId("match.xg", 2, 17, IsCube: true), player: "Mochy");
 
         Assert.DoesNotContain("Id", DecisionRow.CsvHeader);
         Assert.DoesNotContain("match.xg:g2:m17:cube", row.ToCsvLine());
@@ -886,8 +1100,7 @@ public class DecisionRowSerializationTests
         // Rewritten from DecisionRow_IsJacoby_DefaultsToNull: the unknown rule
         // is the null a producer states, and it round-trips (the absent case
         // is DecisionRow_IsJacoby_AbsentFromJson_ReadsAsNotSupplied).
-        var json = JsonSerializer.Serialize(
-            TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, isJacoby: null), Options);
+        var json = JsonSerializer.Serialize(PlayRow(isJacoby: null), Options);
         var row = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
         Assert.Contains("\"IsJacoby\":null", json);
@@ -900,14 +1113,9 @@ public class DecisionRowSerializationTests
     [InlineData(null)]
     public void DecisionRow_RoundTrip_IsJacoby(bool? isJacoby)
     {
-        var original = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
-            matchLength: 0,
-            isJacoby: isJacoby);
+        var original = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby);
 
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        var restored = RoundTrip(original);
 
         Assert.Equal(isJacoby, restored.IsJacoby);
         Assert.Equal(original.MatchScore, restored.MatchScore);
@@ -916,12 +1124,9 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IsJacoby_AbsentFromJson_ReadsAsNotSupplied()
     {
-        // A row written before the fact existed still reads — as unknown.
-        // Rewritten onto a full money row without the member: every other
-        // member is required now.
+        // A money row without the fact reads as unknown.
         var restored = ReadWithout(
-            TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 0, isJacoby: true),
-            "IsJacoby");
+            PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: true), "IsJacoby");
 
         Assert.Null(restored.IsJacoby);
         Assert.Equal("money", restored.MatchScore);
@@ -933,11 +1138,7 @@ public class DecisionRowSerializationTests
     [InlineData(null, "money")]
     public void DecisionRow_IDecisionFilterData_IsJacoby(bool? isJacoby, string expectedScore)
     {
-        IDecisionFilterData data = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
-            matchLength: 0,
-            isJacoby: isJacoby);
+        IDecisionFilterData data = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby);
 
         Assert.True(data.IsMoneyGame);
         Assert.Equal(isJacoby, data.IsJacoby);
@@ -947,7 +1148,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_IDecisionFilterData_IsJacoby_MatchRow_IsNull()
     {
-        IDecisionFilterData data = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, matchLength: 9);
+        IDecisionFilterData data = PlayRow(matchLength: 9);
 
         Assert.False(data.IsMoneyGame);
         Assert.Null(data.IsJacoby);
@@ -959,19 +1160,15 @@ public class DecisionRowSerializationTests
     [InlineData(null, "money")]
     public void DecisionRow_ToCsvLine_IsJacoby_RidesTheMatchScoreColumn(bool? isJacoby, string expectedToken)
     {
-        var row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
-            roll: 31,
-            xgid: "XGID=x",
-            matchLength: 0,
-            isJacoby: isJacoby);
+        var row = PlayRow(xgid: "XGID=x", matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby);
         var line = row.ToCsvLine();
 
         // Header: Xgid,Error,MatchScore,MatchLength,... — MatchScore is column
-        // index 2 (0-based). No column is added; the token carries the fact.
+        // index 2 (0-based). No column is added for it; the token carries the
+        // fact.
         Assert.Equal(expectedToken, line.Split(',')[2]);
         Assert.DoesNotContain("IsJacoby", DecisionRow.CsvHeader);
-        Assert.Equal(10, line.Count(c => c == ','));
+        Assert.Equal(11, line.Count(c => c == ','));
         Assert.DoesNotContain("null", line);
     }
 }

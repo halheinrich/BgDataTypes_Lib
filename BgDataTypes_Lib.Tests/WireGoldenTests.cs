@@ -4,36 +4,27 @@ using BgDataTypes_Lib;
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
-/// The bytes of a full record and a full row, on both the reflection path and
-/// the source-generated context. A full record is a checker play with every
-/// member present and every nullable member non-null, so every member and
-/// both after-boards are on the wire.
+/// The bytes of a full record of each kind and of each kind's row, on both
+/// the reflection path and the source-generated context. A full record has
+/// every member present and every nullable member non-null, so every member
+/// is on the wire.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The stored boards changed type (halheinrich/backgammon#15) and every wire
-/// member became required or nullable (halheinrich/backgammon#222) without
-/// changing these bytes: the goldens were captured at 5a967cc, before either
-/// change, from both paths (identical then). A cube record's absent
-/// after-boards are that arc's one intended byte change (<c>[]</c> becomes
-/// <c>null</c>), pinned in <see cref="BoardWireTests"/>.
+/// <b>The records leg of halheinrich/backgammon#273 changed the shape
+/// deliberately.</b> A decision is one of two types, each carrying only its
+/// own members, with its kind written first; the after-boards are derived and
+/// leave the record's wire; a standalone position's game facts are none
+/// (halheinrich/backgammon#124). The previous shapes are kept below as
+/// documents the library must now refuse — as a
+/// <see cref="JsonException"/>, on both paths — and the delta from the last of
+/// them is pinned member by member.
 /// </para>
 /// <para>
-/// The candidates then stopped storing their notation
-/// (halheinrich/backgammon#273): <see cref="PlayCandidate.Notation"/> is
-/// derived from the play and never written. That is a deliberate byte change
-/// to the record, and the only one: the record golden is
-/// <see cref="RecordGoldenAtA5eca85"/> with each candidate's
-/// <c>"MoveNotation"</c> member removed and nothing else touched, pinned
-/// below. The row carries no candidates, and its bytes are unchanged.
-/// </para>
-/// <para>
-/// Then the stored game and move number left both documents
-/// (halheinrich/backgammon#124): the record's <see cref="BgDecisionData.Id"/>
-/// and the row's <see cref="DecisionRow.Id"/> carry them, and
-/// <see cref="BgDecisionData.Game"/> and <see cref="DecisionRow.Game"/> derive
-/// from it. The record's <c>Descriptive</c> and the row lose
-/// <c>"Game":3,"MoveNumber":17,</c> and nothing else, pinned below.
+/// The row's after-boards are the record's derivation through the one play
+/// rule; they are byte-identical to the boards the previous golden stored,
+/// which the previous fixture computed with <see cref="BoardState.ApplyPlay"/>
+/// — the derivation changed where the boards come from, not what they are.
 /// </para>
 /// </remarks>
 public class WireGoldenTests
@@ -52,21 +43,13 @@ public class WireGoldenTests
     private static readonly Play Best = [new(8, -3), new(7, 3)];
     private static readonly Play User = [new(11, 6), new(7, -3)];
 
-    /// <summary>The position <paramref name="play"/> reaches, in the next mover's frame.</summary>
-    private static BoardPosition After(Play play)
-    {
-        var board = new BoardState(Mop);
-        board.ApplyPlay(play);
-        return board.ToPosition();
-    }
-
-    internal static BgDecisionData FullRecord() => TestRecords.Record(
+    internal static CheckerPlayDecision FullRecord() => TestRecords.CheckerPlay(
         id: new XgDecisionId("golden.xg", 3, 17, false),
         xgid: "XGID=golden",
         position: TestRecords.Position(
             mop: Mop, onRollNeeds: 3, opponentNeeds: 5, onRollPipCount: 130, opponentPipCount: 145,
             cubeSize: 2, cubeOwner: CubeOwner.Opponent, isCrawford: false, isJacoby: false),
-        decision: TestRecords.Decision(
+        decision: TestRecords.CheckerPlayData(
             dice: [5, 4],
             plays:
             [
@@ -81,9 +64,26 @@ public class WireGoldenTests
                     equity: 0.125, equityLoss: 0.125, winPct: 0.58, winGammonPct: 0.19, winBgPct: 0.015,
                     losePct: 0.42, loseGammonPct: 0.12, loseBgPct: 0.025),
             ],
-            bestPlayIndex: 0, userPlayError: 0.125, userPlayIndex: 1, isCube: false,
-            cubeDepth: "cd", cubeDepthAbbreviation: "cda", cubeDepthRank: 4,
-            cubeAnalysisMode: AnalysisMode.BookRollout, cubeAnalysisLevel: AnalysisLevel.Ply4,
+            bestPlayIndex: 0, userPlayIndex: 1, userPlayError: 0.125),
+        descriptive: TestRecords.Descriptive(
+            matchLength: 7, onRollName: "Alice", opponentName: "Bob", title: "Golden",
+            date: new DateOnly(2026, 9, 25), @event: "Club", sourceFile: "golden.xg",
+            isStandardStart: true, comment: "note", flagged: true));
+
+    /// <summary>
+    /// The cube half the previous golden carried on its checker play, now a
+    /// cube decision of its own at the same score (not Crawford), every member
+    /// stated.
+    /// </summary>
+    internal static CubeDecision FullCubeRecord() => TestRecords.Cube(
+        id: new XgDecisionId("golden.xg", 3, 18, true),
+        xgid: "XGID=golden-cube",
+        position: TestRecords.Position(
+            mop: Mop, onRollNeeds: 3, opponentNeeds: 5, onRollPipCount: 130, opponentPipCount: 145,
+            cubeSize: 2, cubeOwner: CubeOwner.OnRoll, isCrawford: false, isJacoby: false),
+        decision: TestRecords.CubeData(
+            depth: "cd", depthAbbreviation: "cda", depthRank: 4,
+            analysisMode: AnalysisMode.BookRollout, analysisLevel: AnalysisLevel.Ply4,
             noDoubleEquity: 0.5, doubleTakeEquity: 0.75, cubelessNoDoubleEquity: 0.375,
             cubelessDoubleTakeEquity: 0.625,
             winPctAfterNoDouble: 0.51, gammonPctAfterNoDouble: 0.12, bgPctAfterNoDouble: 0.013,
@@ -91,122 +91,228 @@ public class WireGoldenTests
             winPctAfterDoubleTake: 0.52, gammonPctAfterDoubleTake: 0.16, bgPctAfterDoubleTake: 0.017,
             losePctAfterDoubleTake: 0.48, loseGammonPctAfterDoubleTake: 0.18, loseBgPctAfterDoubleTake: 0.019,
             probOfOpponentErrorJustifyingDouble: 0.2, userDoubleError: 0.03, userTakeError: 0.04,
-            userDoublerAction: CubeAction.NoDouble, userTakerAction: CubeAction.Take),
+            userDoublerAction: CubeAction.Double, userTakerAction: CubeAction.Take),
         descriptive: TestRecords.Descriptive(
             matchLength: 7, onRollName: "Alice", opponentName: "Bob", title: "Golden",
             date: new DateOnly(2026, 9, 25), @event: "Club", sourceFile: "golden.xg",
-            isStandardStart: true, comment: "note", flagged: true),
-        outcome: TestRecords.Outcome(afterBestBoard: After(Best), afterPlayerBoard: After(User)));
+            isStandardStart: true, comment: "note", flagged: true));
 
-    internal static DecisionRow FullRow() => TestRecords.Row(
-        id: new XgDecisionId("golden.xg", 3, 17, false),
-        xgid: "XGID=golden", error: 0.125, matchLength: 7, player: "Alice", sourceFile: "golden.xg",
-        isStandardStart: true, roll: 54, analysisDepth: "3-ply",
-        analysisMode: AnalysisMode.Evaluation, analysisLevel: AnalysisLevel.Ply3, equity: 0.25,
-        onRollNeeds: 3, opponentNeeds: 5, isCrawford: false, isJacoby: false,
-        board: Mop, afterBestBoard: After(Best), afterPlayerBoard: After(User));
+    internal static DecisionRow FullRow() => DecisionRow.From(FullRecord());
+
+    internal static DecisionRow FullCubeRow() => DecisionRow.From(FullCubeRecord());
+
+    // -----------------------------------------------------------------------
+    //  The previous shapes — documents the library must refuse
+    // -----------------------------------------------------------------------
 
     /// <summary>
     /// The full record as a5eca85 wrote it, each candidate carrying its stored
-    /// <c>MoveNotation</c>: the reference the current golden is pinned against,
-    /// and an old document the current library must still read.
+    /// <c>MoveNotation</c> and the record its stored game and move number.
     /// </summary>
     private const string RecordGoldenAtA5eca85 =
         """{"Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"OnRollNeeds":3,"OpponentNeeds":5,"OnRollPipCount":130,"OpponentPipCount":145,"CubeSize":2,"CubeOwner":"Opponent","IsCrawford":false,"IsJacoby":false},"Decision":{"Dice":[5,4],"Plays":[{"MoveNotation":"8/3* 7/3","Play":[{"FrPt":8,"ToPt":-3},{"FrPt":7,"ToPt":3}],"Depth":"3-ply","DepthAbbreviation":"3p","DepthRank":7,"AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"EquityLoss":0,"WinPct":0.61,"WinGammonPct":0.21,"WinBgPct":0.01,"LosePct":0.39,"LoseGammonPct":0.11,"LoseBgPct":0.02},{"MoveNotation":"11/6 7/3*","Play":[{"FrPt":11,"ToPt":6},{"FrPt":7,"ToPt":-3}],"Depth":"Rollout","DepthAbbreviation":"R","DepthRank":9,"AnalysisMode":"Rollout","AnalysisLevel":"XgRoller","Equity":0.125,"EquityLoss":0.125,"WinPct":0.58,"WinGammonPct":0.19,"WinBgPct":0.015,"LosePct":0.42,"LoseGammonPct":0.12,"LoseBgPct":0.025}],"BestPlayIndex":0,"UserPlayError":0.125,"UserPlayIndex":1,"IsCube":false,"CubeDepth":"cd","CubeDepthAbbreviation":"cda","CubeDepthRank":4,"CubeAnalysisMode":"BookRollout","CubeAnalysisLevel":"Ply4","NoDoubleEquity":0.5,"DoubleTakeEquity":0.75,"CubelessNoDoubleEquity":0.375,"CubelessDoubleTakeEquity":0.625,"WinPctAfterNoDouble":0.51,"GammonPctAfterNoDouble":0.12,"BgPctAfterNoDouble":0.013,"LosePctAfterNoDouble":0.49,"LoseGammonPctAfterNoDouble":0.14,"LoseBgPctAfterNoDouble":0.015,"WinPctAfterDoubleTake":0.52,"GammonPctAfterDoubleTake":0.16,"BgPctAfterDoubleTake":0.017,"LosePctAfterDoubleTake":0.48,"LoseGammonPctAfterDoubleTake":0.18,"LoseBgPctAfterDoubleTake":0.019,"ProbOfOpponentErrorJustifyingDouble":0.2,"UserDoubleError":0.03,"UserTakeError":0.04,"UserDoublerAction":"NoDouble","UserTakerAction":"Take"},"Descriptive":{"MatchLength":7,"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","SourceFile":"golden.xg","Game":3,"MoveNumber":17,"IsStandardStart":true,"Comment":"note","Flagged":true},"Outcome":{"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}}""";
 
-    private const string RecordGolden =
+    /// <summary>
+    /// The full record in the one-class shape this leg retired (a25f4cf): an
+    /// <c>IsCube</c> switch, the inactive cube half at stated stand-in values,
+    /// and the after-boards stored in an <c>Outcome</c>.
+    /// </summary>
+    private const string RecordGoldenBeforeKinds =
         """{"Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"OnRollNeeds":3,"OpponentNeeds":5,"OnRollPipCount":130,"OpponentPipCount":145,"CubeSize":2,"CubeOwner":"Opponent","IsCrawford":false,"IsJacoby":false},"Decision":{"Dice":[5,4],"Plays":[{"Play":[{"FrPt":8,"ToPt":-3},{"FrPt":7,"ToPt":3}],"Depth":"3-ply","DepthAbbreviation":"3p","DepthRank":7,"AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"EquityLoss":0,"WinPct":0.61,"WinGammonPct":0.21,"WinBgPct":0.01,"LosePct":0.39,"LoseGammonPct":0.11,"LoseBgPct":0.02},{"Play":[{"FrPt":11,"ToPt":6},{"FrPt":7,"ToPt":-3}],"Depth":"Rollout","DepthAbbreviation":"R","DepthRank":9,"AnalysisMode":"Rollout","AnalysisLevel":"XgRoller","Equity":0.125,"EquityLoss":0.125,"WinPct":0.58,"WinGammonPct":0.19,"WinBgPct":0.015,"LosePct":0.42,"LoseGammonPct":0.12,"LoseBgPct":0.025}],"BestPlayIndex":0,"UserPlayError":0.125,"UserPlayIndex":1,"IsCube":false,"CubeDepth":"cd","CubeDepthAbbreviation":"cda","CubeDepthRank":4,"CubeAnalysisMode":"BookRollout","CubeAnalysisLevel":"Ply4","NoDoubleEquity":0.5,"DoubleTakeEquity":0.75,"CubelessNoDoubleEquity":0.375,"CubelessDoubleTakeEquity":0.625,"WinPctAfterNoDouble":0.51,"GammonPctAfterNoDouble":0.12,"BgPctAfterNoDouble":0.013,"LosePctAfterNoDouble":0.49,"LoseGammonPctAfterNoDouble":0.14,"LoseBgPctAfterNoDouble":0.015,"WinPctAfterDoubleTake":0.52,"GammonPctAfterDoubleTake":0.16,"BgPctAfterDoubleTake":0.017,"LosePctAfterDoubleTake":0.48,"LoseGammonPctAfterDoubleTake":0.18,"LoseBgPctAfterDoubleTake":0.019,"ProbOfOpponentErrorJustifyingDouble":0.2,"UserDoubleError":0.03,"UserTakeError":0.04,"UserDoublerAction":"NoDouble","UserTakerAction":"Take"},"Descriptive":{"MatchLength":7,"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","SourceFile":"golden.xg","IsStandardStart":true,"Comment":"note","Flagged":true},"Outcome":{"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}}""";
 
-    private const string RowGolden =
+    /// <summary>The row in the shape this leg retired: no kind, the roll as the kind.</summary>
+    private const string RowGoldenBeforeKinds =
         """{"Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Error":0.125,"MatchLength":7,"Player":"Alice","SourceFile":"golden.xg","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
 
-    [Fact]
-    public void FullRecord_Bytes_BothPaths()
+    // -----------------------------------------------------------------------
+    //  Today's shape
+    // -----------------------------------------------------------------------
+
+    private const string CheckerPlayGolden =
+        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"OnRollNeeds":3,"OpponentNeeds":5,"OnRollPipCount":130,"OpponentPipCount":145,"CubeSize":2,"CubeOwner":"Opponent","IsCrawford":false,"IsJacoby":false},"Descriptive":{"MatchLength":7,"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","SourceFile":"golden.xg","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"Dice":[5,4],"Plays":[{"Play":[{"FrPt":8,"ToPt":-3},{"FrPt":7,"ToPt":3}],"Depth":"3-ply","DepthAbbreviation":"3p","DepthRank":7,"AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"EquityLoss":0,"WinPct":0.61,"WinGammonPct":0.21,"WinBgPct":0.01,"LosePct":0.39,"LoseGammonPct":0.11,"LoseBgPct":0.02},{"Play":[{"FrPt":11,"ToPt":6},{"FrPt":7,"ToPt":-3}],"Depth":"Rollout","DepthAbbreviation":"R","DepthRank":9,"AnalysisMode":"Rollout","AnalysisLevel":"XgRoller","Equity":0.125,"EquityLoss":0.125,"WinPct":0.58,"WinGammonPct":0.19,"WinBgPct":0.015,"LosePct":0.42,"LoseGammonPct":0.12,"LoseBgPct":0.025}],"BestPlayIndex":0,"UserPlayIndex":1,"UserPlayError":0.125}}""";
+
+    private const string CubeGolden =
+        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"OnRollNeeds":3,"OpponentNeeds":5,"OnRollPipCount":130,"OpponentPipCount":145,"CubeSize":2,"CubeOwner":"OnRoll","IsCrawford":false,"IsJacoby":false},"Descriptive":{"MatchLength":7,"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","SourceFile":"golden.xg","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"Depth":"cd","DepthAbbreviation":"cda","DepthRank":4,"AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","NoDoubleEquity":0.5,"DoubleTakeEquity":0.75,"CubelessNoDoubleEquity":0.375,"CubelessDoubleTakeEquity":0.625,"WinPctAfterNoDouble":0.51,"GammonPctAfterNoDouble":0.12,"BgPctAfterNoDouble":0.013,"LosePctAfterNoDouble":0.49,"LoseGammonPctAfterNoDouble":0.14,"LoseBgPctAfterNoDouble":0.015,"WinPctAfterDoubleTake":0.52,"GammonPctAfterDoubleTake":0.16,"BgPctAfterDoubleTake":0.017,"LosePctAfterDoubleTake":0.48,"LoseGammonPctAfterDoubleTake":0.18,"LoseBgPctAfterDoubleTake":0.019,"ProbOfOpponentErrorJustifyingDouble":0.2,"UserDoubleError":0.03,"UserTakeError":0.04,"UserDoublerAction":"Double","UserTakerAction":"Take"}}""";
+
+    private const string CheckerPlayRowGolden =
+        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Error":0.125,"MatchLength":7,"Player":"Alice","SourceFile":"golden.xg","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
+
+    private const string CubeRowGolden =
+        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Error":0.03,"MatchLength":7,"Player":"Alice","SourceFile":"golden.xg","IsStandardStart":true,"Roll":null,"AnalysisDepth":"cd","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.5,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
+
+    public static TheoryData<string> Kinds => ["CheckerPlay", "Cube"];
+
+    private static (BgDecisionData Record, string RecordGolden, DecisionRow Row, string RowGolden) Golden(string kind) =>
+        kind == "Cube"
+            ? (FullCubeRecord(), CubeGolden, FullCubeRow(), CubeRowGolden)
+            : (FullRecord(), CheckerPlayGolden, FullRow(), CheckerPlayRowGolden);
+
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void FullRecord_Bytes_BothPaths(string kind)
     {
-        // Rewritten from FullRecord_BytesUnchanged_BothPaths: the record's
-        // bytes changed deliberately (halheinrich/backgammon#273), by exactly
-        // what the next test pins.
-        Assert.Equal(RecordGolden, JsonSerializer.Serialize(FullRecord(), ReflectionOptions));
-        Assert.Equal(RecordGolden, JsonSerializer.Serialize(FullRecord(), ContextOptions));
+        // Rewritten from FullRecord_Bytes_BothPaths for each kind: the
+        // record's bytes changed deliberately (halheinrich/backgammon#273, the
+        // records leg), to exactly these.
+        var (record, golden, _, _) = Golden(kind);
+
+        Assert.Equal(golden, JsonSerializer.Serialize(record, ReflectionOptions));
+        Assert.Equal(golden, JsonSerializer.Serialize(record, ContextOptions));
     }
 
-    [Fact]
-    public void FullRecord_DiffersFromA5eca85_OnlyByTheAbsentMoveNotationAndGameAndMove()
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void FullRecord_AsItsOwnType_WritesTheSameBytes_BothPaths(string kind)
     {
-        // The two candidates' stored notations, as a5eca85 wrote them, and the
-        // stored game and move number (halheinrich/backgammon#124); removing
-        // them, and nothing else, gives today's bytes.
-        const string best = "\"MoveNotation\":\"8/3* 7/3\",";
-        const string user = "\"MoveNotation\":\"11/6 7/3*\",";
-        const string gameAndMove = "\"Game\":3,\"MoveNumber\":17,";
-        Assert.Equal(1, Occurrences(RecordGoldenAtA5eca85, best));
-        Assert.Equal(1, Occurrences(RecordGoldenAtA5eca85, user));
-        Assert.Equal(2, Occurrences(RecordGoldenAtA5eca85, "MoveNotation"));
-        Assert.Equal(1, Occurrences(RecordGoldenAtA5eca85, gameAndMove));
+        // Added: the kind is a member of each kind's contract, so a record
+        // serialized as its own static type writes the same document — the
+        // kind included — as one serialized as the wire unit.
+        var (record, golden, _, _) = Golden(kind);
 
-        Assert.Equal(
-            RecordGolden,
-            RecordGoldenAtA5eca85.Replace(best, "").Replace(user, "").Replace(gameAndMove, ""));
-        Assert.DoesNotContain("MoveNotation", RecordGolden);
-        Assert.DoesNotContain("Notation", RecordGolden);
-        Assert.DoesNotContain("\"Game\"", RecordGolden);
-        Assert.DoesNotContain("\"MoveNumber\"", RecordGolden);
-    }
-
-    [Fact]
-    public void A5eca85Record_CarryingMoveNotation_ReadsOnBothPaths_TheRetiredMemberIgnored()
-    {
-        // An old document still carrying the member reads, as a retired
-        // property does in this library (the ..._TheRetiredPropertyStillIgnored
-        // precedent): ignored on read, never written back. Each candidate's
-        // notation is its play's, and the document writes itself as today's.
         foreach (var options in new[] { ReflectionOptions, ContextOptions })
-        {
-            var record = JsonSerializer.Deserialize<BgDecisionData>(RecordGoldenAtA5eca85, options)!;
-
-            Assert.Equal("8/3* 7/3", record.Decision.Plays[0].Notation);
-            Assert.Equal("11/6 7/3*", record.Decision.Plays[1].Notation);
-            Assert.Equal(RecordGolden, JsonSerializer.Serialize(record, options));
-        }
+            Assert.Equal(golden, JsonSerializer.Serialize(record, record.GetType(), options));
     }
 
-    private static int Occurrences(string text, string value)
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void FullRow_Bytes_BothPaths(string kind)
     {
-        int count = 0;
-        for (int at = text.IndexOf(value, StringComparison.Ordinal); at >= 0;
-             at = text.IndexOf(value, at + value.Length, StringComparison.Ordinal))
-            count++;
-        return count;
-    }
+        // Rewritten from FullRow_Bytes_BothPaths for each kind.
+        var (_, _, row, golden) = Golden(kind);
 
-    [Fact]
-    public void FullRow_Bytes_BothPaths()
-    {
-        // Rewritten from FullRow_BytesUnchanged_BothPaths: the row lost its
-        // stored game and move number (halheinrich/backgammon#124) and changed
-        // by nothing else; its Id still carries both.
-        Assert.DoesNotContain("\"Game\"", RowGolden);
-        Assert.DoesNotContain("\"MoveNumber\"", RowGolden);
-        Assert.Contains("\"Id\":\"golden.xg:g3:m17:play\"", RowGolden);
-
-        Assert.Equal(RowGolden, JsonSerializer.Serialize(FullRow(), ReflectionOptions));
-        Assert.Equal(RowGolden, JsonSerializer.Serialize(FullRow(), ContextOptions));
+        Assert.Equal(golden, JsonSerializer.Serialize(row, ReflectionOptions));
+        Assert.Equal(golden, JsonSerializer.Serialize(row, ContextOptions));
     }
 
     [Fact]
     public void Goldens_ReadBackToTheSameBytes_BothPaths()
     {
         // The read side of the same contract: a document in today's form
-        // loads, and writes itself back unchanged.
+        // loads as its kind, and writes itself back unchanged.
         foreach (var options in new[] { ReflectionOptions, ContextOptions })
         {
-            var record = JsonSerializer.Deserialize<BgDecisionData>(RecordGolden, options)!;
-            var row = JsonSerializer.Deserialize<DecisionRow>(RowGolden, options)!;
+            var play = JsonSerializer.Deserialize<BgDecisionData>(CheckerPlayGolden, options)!;
+            var cube = JsonSerializer.Deserialize<BgDecisionData>(CubeGolden, options)!;
+            var playRow = JsonSerializer.Deserialize<DecisionRow>(CheckerPlayRowGolden, options)!;
+            var cubeRow = JsonSerializer.Deserialize<DecisionRow>(CubeRowGolden, options)!;
 
-            Assert.Equal(RecordGolden, JsonSerializer.Serialize(record, options));
-            Assert.Equal(RowGolden, JsonSerializer.Serialize(row, options));
-            Assert.Equal(Mop, record.Position.Mop);
-            Assert.Equal(After(Best), record.Outcome.AfterBestBoard);
+            Assert.IsType<CheckerPlayDecision>(play);
+            Assert.IsType<CubeDecision>(cube);
+            Assert.Equal(CheckerPlayGolden, JsonSerializer.Serialize(play, options));
+            Assert.Equal(CubeGolden, JsonSerializer.Serialize(cube, options));
+            Assert.Equal(CheckerPlayRowGolden, JsonSerializer.Serialize(playRow, options));
+            Assert.Equal(CubeRowGolden, JsonSerializer.Serialize(cubeRow, options));
+            Assert.Equal(Mop, play.Position.Mop);
+        }
+    }
+
+    [Fact]
+    public void Goldens_KindIsWrittenFirst()
+    {
+        // Added: the kind is the first member of every decision document.
+        Assert.StartsWith("{\"Kind\":\"CheckerPlay\",", CheckerPlayGolden);
+        Assert.StartsWith("{\"Kind\":\"Cube\",", CubeGolden);
+        Assert.StartsWith("{\"Kind\":\"CheckerPlay\",", CheckerPlayRowGolden);
+        Assert.StartsWith("{\"Kind\":\"Cube\",", CubeRowGolden);
+    }
+
+    [Fact]
+    public void RowAfterBoards_AreTheBoardsThePreviousGoldenStored()
+    {
+        // Added: the derivation changed where the boards come from, not what
+        // they are — the row's boards, taken from the record's derivation,
+        // are the previous golden's stored boards byte for byte.
+        using var previous = JsonDocument.Parse(RowGoldenBeforeKinds);
+        using var today = JsonDocument.Parse(CheckerPlayRowGolden);
+
+        foreach (var board in new[] { "AfterBestBoard", "AfterPlayerBoard" })
+            Assert.Equal(
+                previous.RootElement.GetProperty(board).GetRawText(),
+                today.RootElement.GetProperty(board).GetRawText());
+    }
+
+    [Fact]
+    public void FullRecord_DropsEveryStandInAndStoredCopy_OfThePreviousShape()
+    {
+        // Rewritten from FullRecord_DiffersFromA5eca85_OnlyByTheAbsentMoveNotationAndGameAndMove:
+        // the delta from the previous shape is no longer one member, so it is
+        // pinned member by member. Gone from the checker play: the kind
+        // switch, every cube member (they held stand-ins on a checker play),
+        // and the stored after-boards and their category. Gone from both
+        // kinds: the other kind's members. Kept: every checker-play value.
+        string[] retired =
+        [
+            "\"IsCube\"", "\"CubeDepth\"", "\"CubeAnalysisMode\"", "\"NoDoubleEquity\"", "\"UserDoubleError\"",
+            "\"UserDoublerAction\"", "\"Outcome\"", "\"AfterBestBoard\"", "\"MoveNotation\"", "\"Game\"", "\"MoveNumber\"",
+        ];
+        foreach (var member in retired)
+        {
+            Assert.Contains(member, RecordGoldenAtA5eca85);
+            Assert.DoesNotContain(member, CheckerPlayGolden);
+        }
+        foreach (var member in new[] { "\"Dice\"", "\"Plays\"", "\"BestPlayIndex\"", "\"UserPlayIndex\"", "\"UserPlayError\"" })
+            Assert.DoesNotContain(member, CubeGolden);
+
+        using var previous = JsonDocument.Parse(RecordGoldenBeforeKinds);
+        using var today = JsonDocument.Parse(CheckerPlayGolden);
+        foreach (var category in new[] { "Id", "Xgid", "Position", "Descriptive" })
+            Assert.Equal(
+                previous.RootElement.GetProperty(category).GetRawText(),
+                today.RootElement.GetProperty(category).GetRawText());
+        foreach (var member in new[] { "Dice", "Plays", "BestPlayIndex", "UserPlayIndex", "UserPlayError" })
+            Assert.Equal(
+                previous.RootElement.GetProperty("Decision").GetProperty(member).GetRawText(),
+                today.RootElement.GetProperty("Decision").GetProperty(member).GetRawText());
+    }
+
+    public static TheoryData<string, string> OldShapeRecords => new()
+    {
+        { "a5eca85", RecordGoldenAtA5eca85 },
+        { "before the kinds", RecordGoldenBeforeKinds },
+    };
+
+    [Theory]
+    [MemberData(nameof(OldShapeRecords))]
+    public void OldShapeRecord_IsRefused_AsAJsonException_BothPaths(string name, string json)
+    {
+        // Rewritten from A5eca85Record_CarryingMoveNotation_ReadsOnBothPaths_TheRetiredMemberIgnored:
+        // a document without a kind is not a decision of this shape, and it
+        // is refused as malformed — a JsonException, absorbed wherever the
+        // library absorbs malformed input — never read as a guessed kind.
+        foreach (var options in new[] { ReflectionOptions, ContextOptions })
+        {
+            var ex = Record.Exception(() => JsonSerializer.Deserialize<BgDecisionData>(json, options));
+            Assert.True(ex is JsonException, $"{name}: {ex?.GetType().Name ?? "loaded"}");
+            Assert.Contains("Kind", ex!.Message);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(OldShapeRecords))]
+    public void OldShapeRecord_WithAKindAdded_IsStillRefused_BothPaths(string name, string json)
+    {
+        // Added: a kind prepended does not make an old document readable —
+        // its members contradict the kind (a checker play has no IsCube, no
+        // cube member, no Outcome) and are refused as members of no decision.
+        var withKind = "{\"Kind\":\"CheckerPlay\"," + json[1..];
+
+        foreach (var options in new[] { ReflectionOptions, ContextOptions })
+        {
+            var ex = Record.Exception(() => JsonSerializer.Deserialize<BgDecisionData>(withKind, options));
+            Assert.True(ex is JsonException, $"{name}: {ex?.GetType().Name ?? "loaded"}");
+        }
+    }
+
+    [Fact]
+    public void OldShapeRow_IsRefused_AsAJsonException_BothPaths()
+    {
+        // Added: the retired row shape states no kind, and the kind is a
+        // required column — never read off an empty or zero roll.
+        foreach (var options in new[] { ReflectionOptions, ContextOptions })
+        {
+            var ex = Record.Exception(() => JsonSerializer.Deserialize<DecisionRow>(RowGoldenBeforeKinds, options));
+            Assert.True(ex is JsonException, ex?.GetType().Name ?? "loaded");
+            Assert.Contains("Kind", ex!.Message);
         }
     }
 }
