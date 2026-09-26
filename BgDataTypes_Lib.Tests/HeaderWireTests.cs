@@ -103,6 +103,27 @@ public class HeaderWireTests
             }
     }
 
+    [Fact]
+    public void AProducersHeader_RoundTrips_UnderItsNamingPolicy()
+    {
+        // The converter writes its header types camelCase; the dispatch finds
+        // the kind as the kinds' contracts name it, under the policy.
+        var camel = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        foreach (var terms in BothTerms())
+            foreach (var standing in BothStandings().Where(s => s.Kind == terms.Kind))
+            {
+                var header = new ConsumerHeader { Player1 = "Mochy", Player2 = "Falafel", Terms = terms, IsStandardStart = true, Standing = standing };
+
+                var json = JsonSerializer.Serialize(header, camel);
+                Assert.Contains($"\"terms\":{{\"kind\":\"{terms.Kind}\",", json);
+                Assert.Contains($"\"standing\":{{\"kind\":\"{standing.Kind}\",", json);
+
+                var restored = JsonSerializer.Deserialize<ConsumerHeader>(json, camel)!;
+                Assert.Equal(terms, restored.Terms);
+                Assert.Equal(standing, restored.Standing);
+            }
+    }
+
     // ── The kind is explicit ──────────────────────────────────────
 
     [Fact]

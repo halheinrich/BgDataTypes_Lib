@@ -160,6 +160,33 @@ public class SessionKindTests
         }
     }
 
+    [Fact]
+    public void TheDispatch_MatchesNamesAsTheContractsDo_UnderANamingPolicy_AndCaseInsensitively()
+    {
+        // Added: the dispatch finds the terms and their kind — and a
+        // record's kind — under the options' naming policy, and
+        // case-insensitively when the options say so, as the kinds'
+        // contracts match their members. A producer writes camelCase (the
+        // converter's options do); a reader may match names in any case.
+        var camel = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var insensitive = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        foreach (var session in BothKinds())
+            foreach (var record in RecordsIn(session))
+            {
+                var json = JsonSerializer.Serialize<BgDecisionData>(record, camel);
+                Assert.Contains($"\"session\":{{\"terms\":{{\"kind\":\"{session.Kind}\",", json);
+
+                Assert.Equal(session, JsonSerializer.Deserialize<BgDecisionData>(json, camel)!.Session);
+                Assert.Equal(session, JsonSerializer.Deserialize<BgDecisionData>(json, insensitive)!.Session);
+
+                // Under the policy, the default spelling is not the member's
+                // name: a session stating "Terms" states no terms there.
+                var pascal = JsonSerializer.Serialize(session);
+                Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Session>(pascal, camel));
+            }
+    }
+
     public static TheoryData<string, string> BadKinds => new()
     {
         { "missing", "" },

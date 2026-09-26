@@ -100,20 +100,24 @@ public class MatchSessionTests
         }
     }
 
-    [Fact]
-    public void AnAwayScorePastTheLength_IsRefused_NamingWhicheverMemberCompletesIt()
+    [Theory]
+    [InlineData(6, 5)]      // the player on roll's away score past the length
+    [InlineData(5, 6)]      // the opponent's
+    public void AnAwayScorePastTheLength_IsRefused_NamingWhicheverMemberCompletesIt(int onRollNeeds, int opponentNeeds)
     {
         // The terms set first: the away score completes the contradiction.
         var needsSecond = Assert.Throws<ArgumentOutOfRangeException>(() => new MatchSession
         {
-            Terms = Terms(5), OnRollNeeds = 6, OpponentNeeds = 5, IsCrawford = false,
+            Terms = Terms(5), OnRollNeeds = onRollNeeds, OpponentNeeds = opponentNeeds, IsCrawford = false,
         });
-        Assert.Equal("OnRollNeeds", needsSecond.ParamName);
+        Assert.Equal(onRollNeeds > 5 ? "OnRollNeeds" : "OpponentNeeds", needsSecond.ParamName);
 
-        // The away scores set first: the terms complete it.
+        // The away scores set first: the terms complete it, whichever side
+        // is past the length (rewritten from a fact breaching the opponent's
+        // side alone, which a mutation check showed left the other unpinned).
         var termsSecond = Assert.Throws<ArgumentOutOfRangeException>(() => new MatchSession
         {
-            OnRollNeeds = 5, OpponentNeeds = 6, IsCrawford = false, Terms = Terms(5),
+            OnRollNeeds = onRollNeeds, OpponentNeeds = opponentNeeds, IsCrawford = false, Terms = Terms(5),
         });
         Assert.Equal("Terms", termsSecond.ParamName);
         Assert.Contains(SessionRules.NeedsMessage, termsSecond.Message);
