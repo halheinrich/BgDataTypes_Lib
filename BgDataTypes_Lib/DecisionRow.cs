@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -260,6 +261,11 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// filter surface it fails loud rather than quietly matching, <c>money</c>
     /// being the retired token there.
     /// </para>
+    /// <para>
+    /// A token, so culture-invariant: the away scores are written with the
+    /// invariant culture whatever the ambient one, as every number in
+    /// <see cref="ToCsvLine"/> is.
+    /// </para>
     /// </summary>
     [JsonIgnore]
     public string MatchScore => IsMoneyGame
@@ -270,8 +276,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             null  => "money"
         }
         : IsCrawford
-            ? $"{OnRollNeeds}a{OpponentNeeds}aC"
-            : $"{OnRollNeeds}a{OpponentNeeds}a";
+            ? string.Create(CultureInfo.InvariantCulture, $"{OnRollNeeds}a{OpponentNeeds}aC")
+            : string.Create(CultureInfo.InvariantCulture, $"{OnRollNeeds}a{OpponentNeeds}a");
 
     /// <summary>
     /// The board at the moment of the decision. <b>Frame: the player on
@@ -355,23 +361,27 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <summary>
     /// Formats this row as a CSV line (no trailing newline). A
     /// <see langword="null"/> column — the other kind's, or a fact that does
-    /// not apply — is an empty cell.
+    /// not apply — is an empty cell. Every number is written with the
+    /// invariant culture, whatever the ambient one: a decimal comma would
+    /// split a cell in two, and the file must read the same wherever it was
+    /// written.
     /// </summary>
     public string ToCsvLine()
     {
+        var invariant = CultureInfo.InvariantCulture;
         return string.Join(",",
             CsvEscape(Xgid),
-            Error?.ToString("G6"),
+            Error?.ToString("G6", invariant),
             CsvEscape(MatchScore),
-            MatchLength,
+            MatchLength.ToString(invariant),
             CsvEscape(Player),
             CsvEscape(SourceFile ?? string.Empty),
-            Game,
-            MoveNumber,
+            Game?.ToString(invariant),
+            MoveNumber?.ToString(invariant),
             Kind,
-            Roll,
+            Roll?.ToString(invariant),
             CsvEscape(AnalysisDepth),
-            Equity.ToString("G6"));
+            Equity.ToString("G6", invariant));
     }
 
     private static string CsvEscape(string value)

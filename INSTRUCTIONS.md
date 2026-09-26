@@ -1018,6 +1018,13 @@ The CSV header is
 `Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity`:
 the `Kind` column is new with the kinds, beside the roll it governs.
 
+**Culture-invariant.** `ToCsvLine` writes every number with the invariant
+culture, whatever the ambient one — `Error` and `Equity` as `G6` with a
+decimal point and an ASCII minus, the integers as plain digits — and
+`MatchScore` spells its away scores the same way. A comma-decimal culture
+would otherwise split a cell in two. Pinned under `de-DE` and `sv-SE`
+(`DecisionRow_ToCsvLine_IsCultureInvariant`).
+
 `IsJacoby` (`bool?`) is stored, not derived — the tri-state fact
 `PositionData.IsJacoby` owns, carried here because the CSV shape spells it
 (`halheinrich/backgammon#121`). It reaches CSV the way `IsCrawford` does:
@@ -1355,7 +1362,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     [JsonIgnore] public DiceRoll? Dice { get; }               // canonical Roll
     [JsonIgnore] public string MatchScore { get; }            // computed from needs/Crawford/length/Jacoby
     public static string CsvHeader { get; }                   // …,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity
-    public string ToCsvLine();                                // null → empty cell
+    public string ToCsvLine();                                // null → empty cell; numbers invariant-culture
     // Read from JSON, a row is checked whole (OnDeserialized): the kind's
     // columns present and the other's empty, the roll two faces, and
     // DecisionRules; a breach is a JsonException. The three boards and

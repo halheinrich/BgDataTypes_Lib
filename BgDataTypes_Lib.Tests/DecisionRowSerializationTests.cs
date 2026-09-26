@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using BgDataTypes_Lib;
@@ -660,6 +661,36 @@ public class DecisionRowSerializationTests
         var line = row.ToCsvLine();
         Assert.Contains("0.123457", line);
         Assert.Contains("-0.987654", line);
+    }
+
+    [Theory]
+    [InlineData("de-DE")]
+    [InlineData("sv-SE")]
+    public void DecisionRow_ToCsvLine_IsCultureInvariant(string cultureName)
+    {
+        // Added: every number in a CSV line is written with the invariant
+        // culture, whatever the ambient one. Pinned under two comma-decimal
+        // cultures — sv-SE also writes its minus sign as U+2212 under ICU — so
+        // a number formatted with the ambient culture would split its cell in
+        // two or change its sign.
+        var row = PlayRow(
+            error: 0.12345678, equity: -0.98765432, dice: [6, 3],
+            matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
+        const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654";
+
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            var culture = new CultureInfo(cultureName);
+            CultureInfo.CurrentCulture = culture;
+            Assert.Equal(",", culture.NumberFormat.NumberDecimalSeparator);  // the pin is live
+
+            Assert.Equal(expected, row.ToCsvLine());
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
     [Fact]
