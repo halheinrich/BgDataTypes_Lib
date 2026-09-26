@@ -65,7 +65,7 @@ public class AfterBoardDerivationTests
         var record = Tester(best, user);
 
         foreach (var ranking in Enum.GetValues<PlayRanking>())
-            Assert.Equal(Applied(TesterMop, TesterPlays[best]), record.AfterBestBoard(ranking));
+            Assert.Equal(Applied(TesterMop, TesterPlays[best]), record.AfterBoardOfBest(ranking));
         Assert.Equal(user is int u ? Applied(TesterMop, TesterPlays[u]) : null, record.AfterPlayerBoard);
     }
 
@@ -76,6 +76,21 @@ public class AfterBoardDerivationTests
 
         for (int i = 0; i < TesterPlays.Length; i++)
             Assert.Equal(Applied(TesterMop, TesterPlays[i]), record.AfterBoardOf(i));
+    }
+
+    [Fact]
+    public void TheRecordHasNoMemberNamedAfterBestBoard_SoAStaleUseCannotCompile()
+    {
+        // The record's best board became a method taking a ranking. Under
+        // the old property's name, a stale use such as
+        // Assert.NotNull(record.AfterBestBoard) would still compile, binding
+        // the method group as a delegate, and pass or fail silently; under a
+        // new name it cannot compile (the umbrella's third-round ruling). The
+        // view and the row, each built for one ranking, keep the property.
+        Assert.Empty(typeof(CheckerPlayDecision).GetMember("AfterBestBoard"));
+        Assert.Empty(typeof(BgDecisionData).GetMember("AfterBestBoard"));
+        Assert.NotNull(typeof(IDecisionFilterData).GetProperty("AfterBestBoard"));
+        Assert.NotNull(typeof(DecisionRow).GetProperty("AfterBestBoard"));
     }
 
     [Theory]
@@ -97,8 +112,8 @@ public class AfterBoardDerivationTests
         // the bar, which is the next mover's own bar, slot 25.
         var record = Tester(0, null);
 
-        Assert.Equal(-2, record.AfterBestBoard(PlayRanking.Equity)[22]);
-        Assert.Equal(2, record.AfterBestBoard(PlayRanking.Equity)[25]);
+        Assert.Equal(-2, record.AfterBoardOfBest(PlayRanking.Equity)[22]);
+        Assert.Equal(2, record.AfterBoardOfBest(PlayRanking.Equity)[25]);
     }
 
     [Fact]
@@ -119,9 +134,9 @@ public class AfterBoardDerivationTests
             Decision = decision, Position = position, Descriptive = TestRecords.Descriptive(),
         };
 
-        Assert.Equal(positionFirst.AfterBestBoard(PlayRanking.Equity), decisionFirst.AfterBestBoard(PlayRanking.Equity));
+        Assert.Equal(positionFirst.AfterBoardOfBest(PlayRanking.Equity), decisionFirst.AfterBoardOfBest(PlayRanking.Equity));
         Assert.Equal(positionFirst.AfterPlayerBoard, decisionFirst.AfterPlayerBoard);
-        Assert.Equal(Applied(TesterMop, TesterPlays[2]), decisionFirst.AfterBestBoard(PlayRanking.Equity));
+        Assert.Equal(Applied(TesterMop, TesterPlays[2]), decisionFirst.AfterBoardOfBest(PlayRanking.Equity));
     }
 
     [Fact]
@@ -148,14 +163,14 @@ public class AfterBoardDerivationTests
         // warm-up reads every door once.
         var record = Tester(0, 1);
         var view = record.ViewFor(PlayRanking.DepthFirst);
-        int sink = record.AfterBestBoard(PlayRanking.Equity)[22] + record.AfterBestBoard(PlayRanking.DepthFirst)[22]
+        int sink = record.AfterBoardOfBest(PlayRanking.Equity)[22] + record.AfterBoardOfBest(PlayRanking.DepthFirst)[22]
             + view.AfterBestBoard!.Value[1];
 
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 1000; i++)
         {
-            sink += record.AfterBestBoard(PlayRanking.Equity)[22] + record.AfterPlayerBoard!.Value[3];
-            sink += record.AfterBestBoard(PlayRanking.DepthFirst)[22] + record.AfterBoardOf(2)[4];
+            sink += record.AfterBoardOfBest(PlayRanking.Equity)[22] + record.AfterPlayerBoard!.Value[3];
+            sink += record.AfterBoardOfBest(PlayRanking.DepthFirst)[22] + record.AfterBoardOf(2)[4];
             sink += view.AfterBestBoard!.Value[1];
         }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -232,7 +247,7 @@ public class AfterBoardDerivationTests
             position: TestRecords.Position(mop: TesterMop),
             decision: TestRecords.CheckerPlayData(plays: [TestRecords.Candidate(play: [])]));
 
-        Assert.Equal(TesterMop.Flipped(), record.AfterBestBoard(PlayRanking.Equity));
+        Assert.Equal(TesterMop.Flipped(), record.AfterBoardOfBest(PlayRanking.Equity));
     }
 
     [Fact]
@@ -245,7 +260,7 @@ public class AfterBoardDerivationTests
         {
             var row = DecisionRow.From(record, ranking);
 
-            Assert.Equal(record.AfterBestBoard(ranking), row.AfterBestBoard);
+            Assert.Equal(record.AfterBoardOfBest(ranking), row.AfterBestBoard);
             Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
         }
     }

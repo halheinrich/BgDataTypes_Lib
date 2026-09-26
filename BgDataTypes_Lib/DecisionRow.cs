@@ -12,7 +12,7 @@ namespace BgDataTypes_Lib;
 /// <b>A projection of the record, built one way.</b> A row is made by
 /// <see cref="From"/> from a <see cref="BgDecisionData"/>, and every column is
 /// taken from the record — the after-boards from the record's own derivation
-/// (<see cref="CheckerPlayDecision.AfterBestBoard"/>), never computed a second
+/// (<see cref="CheckerPlayDecision.AfterBoardOfBest"/>), never computed a second
 /// way — so a row and its record cannot disagree on anything the two share,
 /// <see cref="IDecisionFilterData"/> above all. The constructor is internal:
 /// outside this library a row comes from <see cref="From"/> or from JSON.
@@ -325,7 +325,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <summary>
     /// The board a checker play's best play under <see cref="Ranking"/> leaves,
     /// in the next mover's frame — the record's
-    /// <see cref="CheckerPlayDecision.AfterBestBoard"/>, taken from it when the
+    /// <see cref="CheckerPlayDecision.AfterBoardOfBest"/>, taken from it when the
     /// row is built. Always present on a checker-play row;
     /// <see langword="null"/> on a cube row. Not included in CSV output.
     /// </summary>

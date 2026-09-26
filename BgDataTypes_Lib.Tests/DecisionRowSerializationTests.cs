@@ -315,7 +315,7 @@ public class DecisionRowSerializationTests
             Assert.Equal(record.IsCrawford, row.IsCrawford);
             Assert.Equal(record.IsJacoby, row.IsJacoby);
             Assert.Equal(record.Board, row.Board);
-            Assert.Equal(record.AfterBestBoard(ranking), row.AfterBestBoard);
+            Assert.Equal(record.AfterBoardOfBest(ranking), row.AfterBestBoard);
             Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
         }
     }
@@ -1000,7 +1000,7 @@ public class DecisionRowSerializationTests
             foreach (var (_, options) in WirePaths.Both)
             {
                 var restored = RoundTrip(original, options);
-                Assert.Equal(record.AfterBestBoard(ranking), restored.AfterBestBoard);
+                Assert.Equal(record.AfterBoardOfBest(ranking), restored.AfterBestBoard);
                 Assert.Equal(record.AfterPlayerBoard, restored.AfterPlayerBoard);
             }
         }
@@ -1032,7 +1032,7 @@ public class DecisionRowSerializationTests
             IDecisionFilterData row = DecisionRow.From(record, ranking);
 
             Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
-            Assert.Equal(record.AfterBestBoard(ranking), row.AfterBestBoard);
+            Assert.Equal(record.AfterBoardOfBest(ranking), row.AfterBestBoard);
             Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
         }
     }

@@ -357,7 +357,7 @@ public class PlayRankingTests
         Assert.Equal(mode, view.AnalysisMode);
         Assert.Equal(level, view.AnalysisLevel);
         Assert.Equal(record.AfterBoardOf(best), view.AfterBestBoard);
-        Assert.Equal(record.AfterBestBoard(ranking), view.AfterBestBoard);
+        Assert.Equal(record.AfterBoardOfBest(ranking), view.AfterBestBoard);
         Assert.Equal(record.AfterBoardOf(4), view.AfterPlayerBoard);
     }
 
@@ -373,7 +373,7 @@ public class PlayRankingTests
         Assert.Equal(error, row.Error!.Value, 12);
         Assert.Equal(depth, row.AnalysisDepth);
         Assert.Equal(equity, row.Equity);
-        Assert.Equal(record.AfterBestBoard(ranking), row.AfterBestBoard);
+        Assert.Equal(record.AfterBoardOfBest(ranking), row.AfterBestBoard);
         Assert.EndsWith($",{ranking}", row.ToCsvLine());
     }
 
@@ -479,7 +479,7 @@ public class PlayRankingTests
 
         Assert.Equal("ranking", Assert.Throws<ArgumentOutOfRangeException>(() => record.Decision.RankedBy(undefined)).ParamName);
         Assert.Equal("ranking", Assert.Throws<ArgumentOutOfRangeException>(() => record.ViewFor(undefined)).ParamName);
-        Assert.Throws<ArgumentOutOfRangeException>(() => record.AfterBestBoard(undefined));
+        Assert.Throws<ArgumentOutOfRangeException>(() => record.AfterBoardOfBest(undefined));
         Assert.Throws<ArgumentOutOfRangeException>(() => DecisionRow.From(record, undefined));
         Assert.Throws<ArgumentOutOfRangeException>(() => cube.ViewFor(undefined));
         Assert.Throws<ArgumentOutOfRangeException>(() => DecisionRow.From(cube, undefined));

@@ -161,7 +161,7 @@ public interface IDecisionFilterData
     /// opponent is on roll, so slot 25 is the opponent's bar and their
     /// checkers are positive, while the decision-maker's checkers are negative
     /// and slot 0 is the decision-maker's bar. Never null for a checker play
-    /// (<see cref="CheckerPlayDecision.AfterBestBoard"/>);
+    /// (<see cref="CheckerPlayDecision.AfterBoardOfBest"/>);
     /// <see langword="null"/> for a cube decision, where no play is made.
     /// </summary>
     BoardPosition? AfterBestBoard { get; }

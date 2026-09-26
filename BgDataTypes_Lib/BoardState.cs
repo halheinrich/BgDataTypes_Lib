@@ -451,7 +451,7 @@ public sealed class BoardState
     /// <see cref="System.Text.Json.JsonException"/> read as a
     /// <see cref="BgDecisionData"/>, on both serialization paths — so the
     /// after-boards the record derives through this rule
-    /// (<see cref="CheckerPlayDecision.AfterBestBoard"/>) can never fail to
+    /// (<see cref="CheckerPlayDecision.AfterBoardOfBest"/>) can never fail to
     /// exist. This is the one statement of that invariant.
     /// </para>
     /// </remarks>

@@ -1306,7 +1306,7 @@ public class BgDecisionDataSerializationTests
         {
             var restored = Assert.IsType<CheckerPlayDecision>(RoundTrip(original, options));
             foreach (var ranking in Enum.GetValues<PlayRanking>())
-                Assert.Equal(original.AfterBestBoard(ranking), restored.AfterBestBoard(ranking));
+                Assert.Equal(original.AfterBoardOfBest(ranking), restored.AfterBoardOfBest(ranking));
             Assert.Equal(original.AfterPlayerBoard, restored.AfterPlayerBoard);
         }
     }
@@ -1320,7 +1320,7 @@ public class BgDecisionDataSerializationTests
         var play = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: null));
 
         Assert.Null(play.AfterPlayerBoard);
-        Assert.NotEqual(BoardPosition.Empty, play.AfterBestBoard(PlayRanking.Equity));
+        Assert.NotEqual(BoardPosition.Empty, play.AfterBoardOfBest(PlayRanking.Equity));
     }
 
     [Fact]
@@ -1344,7 +1344,7 @@ public class BgDecisionDataSerializationTests
         foreach (var ranking in Enum.GetValues<PlayRanking>())
         {
             var data = play.ViewFor(ranking);
-            Assert.Equal(play.AfterBestBoard(ranking), data.AfterBestBoard);
+            Assert.Equal(play.AfterBoardOfBest(ranking), data.AfterBestBoard);
             Assert.Equal(play.AfterPlayerBoard, data.AfterPlayerBoard);
             Assert.NotNull(data.AfterPlayerBoard);
         }

@@ -97,7 +97,7 @@ public class TestRecordsTests
 
         var candidate = Assert.Single(play.Decision.Plays);
         Assert.Equal(0, candidate.Play.Count);
-        Assert.Equal(board.Flipped(), play.AfterBestBoard(PlayRanking.Equity));
+        Assert.Equal(board.Flipped(), play.AfterBoardOfBest(PlayRanking.Equity));
 
         // A stated decision is taken as stated: the opening's candidates are
         // not valid from this board, so the record cannot be built.

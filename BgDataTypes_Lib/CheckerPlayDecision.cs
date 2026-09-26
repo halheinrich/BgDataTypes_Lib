@@ -29,7 +29,7 @@ namespace BgDataTypes_Lib;
 /// — is computed once while the record is built, in the same pass that
 /// checks the candidates, and read thereafter at no cost:
 /// <see cref="AfterBoardOf"/> for any candidate, <see cref="AfterPlayerBoard"/>
-/// for the user's, and <see cref="AfterBestBoard"/> for the best play under a
+/// for the user's, and <see cref="AfterBoardOfBest"/> for the best play under a
 /// ranking — which play is best is a ranking's (<see cref="PlayRanking"/>).
 /// They are not on the wire, and a derivation can never fail on a record
 /// that exists.
@@ -121,7 +121,7 @@ public sealed class CheckerPlayDecision : BgDecisionData
     /// Always exists. No allocation once the ranking has been asked for.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="ranking"/> is not a defined ranking.</exception>
-    public BoardPosition AfterBestBoard(PlayRanking ranking) =>
+    public BoardPosition AfterBoardOfBest(PlayRanking ranking) =>
         _afterBoards[Decision.RankedBy(ranking).Best.Index];
 
     /// <summary>

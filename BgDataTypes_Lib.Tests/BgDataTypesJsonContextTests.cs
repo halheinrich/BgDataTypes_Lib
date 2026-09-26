@@ -287,7 +287,7 @@ public class BgDataTypesJsonContextTests
         Assert.Contains("\"Mop\":[0,2,0,0,0,0,-5,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,-2,1]", play);
         Assert.DoesNotContain("AfterBestBoard", play);
         Assert.Contains(
-            $"\"AfterBestBoard\":{JsonSerializer.Serialize(((CheckerPlayDecision)FullPlayDecision()).AfterBestBoard(PlayRanking.Equity), ContextOptions)}",
+            $"\"AfterBestBoard\":{JsonSerializer.Serialize(((CheckerPlayDecision)FullPlayDecision()).AfterBoardOfBest(PlayRanking.Equity), ContextOptions)}",
             playRow);
         Assert.Contains("\"AfterBestBoard\":null,\"AfterPlayerBoard\":null", cubeRow);
         Assert.Equal(

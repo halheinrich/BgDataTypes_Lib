@@ -484,7 +484,9 @@ ranking: the equity-only `BestPlayIndex`, `BestPlay`, `EquityLoss(i)` and
 `UserPlayError` are gone (their equity-ordered values are the `Equity`
 ranking's), and a test walks the public surface for any member saying
 best, error or loss that neither takes a ranking nor belongs to a type
-built for one. `CheckerPlayDecision.AfterBestBoard(ranking)` takes one;
+built for one. `CheckerPlayDecision.AfterBoardOfBest(ranking)` takes one
+— renamed from the old `AfterBestBoard` property's name, so a stale use
+cannot bind the method group as a delegate and must fail to compile;
 `AfterBoardOf(index)` gives any candidate's board, `AfterPlayerBoard` the
 user's.
 
@@ -1071,7 +1073,7 @@ member of either holds a value standing for "not applicable".
 BgDecisionData (abstract)       Kind, Id, Xgid, Position, Descriptive; Match, Switch;
                                 the shared members; ViewFor(ranking)
 ├── CheckerPlayDecision         Decision : CheckerPlayDecisionData
-│                               Dice (canonical), AfterBoardOf(i), AfterBestBoard(ranking),
+│                               Dice (canonical), AfterBoardOf(i), AfterBoardOfBest(ranking),
 │                               AfterPlayerBoard (derived)
 └── CubeDecision                Decision : CubeDecisionData
                                 CanBeTooGood
@@ -1198,7 +1200,7 @@ Design points a maintainer needs before touching it:
 ### After-boards (derived)
 
 The boards a checker play's candidates leave: `AfterBoardOf(index)` for
-any candidate, `AfterBestBoard(ranking)` for the best under a ranking, and
+any candidate, `AfterBoardOfBest(ranking)` for the best under a ranking, and
 `AfterPlayerBoard` for the user's. **Derived, never stored** — the arc's
 rule, no stored copy of a derivable value: the position the candidate's
 play reaches from the record's `Position.Mop`,
@@ -1560,7 +1562,7 @@ public sealed class CheckerPlayDecision : BgDecisionData
     public required CheckerPlayDecisionData Decision { get; init; }   // every candidate valid from Position
     [JsonIgnore] public DiceRoll Dice { get; }                          // canonical form of Decision.Dice
     public BoardPosition AfterBoardOf(int index);                       // derived once; next mover's frame
-    public BoardPosition AfterBestBoard(PlayRanking ranking);           // the ranking's best play's
+    public BoardPosition AfterBoardOfBest(PlayRanking ranking);         // the ranking's best play's
     [JsonIgnore] public BoardPosition? AfterPlayerBoard { get; }        // null when UserPlayIndex is null
 }
 
