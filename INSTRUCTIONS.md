@@ -764,8 +764,12 @@ needs before touching it:
   private and every read widens to `int`. Equality is one 26-byte span
   comparison and the hash one `HashCode.AddBytes` pass, so creating,
   comparing and hashing allocate nothing — pinned by test with
-  `GC.GetAllocatedBytesForCurrentThread`, because the move generator
-  deduplicates plays by the position they reach, on its hot path.
+  `GC.GetAllocatedBytesForCurrentThread`, because a consumer does them once
+  per play: BgMoveGen takes the position each play reaches, for every
+  successor it returns and every candidate board, and keys its move-entry
+  searches by position. Its play generation compares no positions; it
+  avoids duplicates by construction (BgMoveGen's INSTRUCTIONS.md, "One same
+  position").
 - **Name and placement.** It names the position of the checkers, distinct
   from `PositionData` (the record category, which adds score and cube) and
   from `BoardState` (the mutable working board), and it collides with no
@@ -823,7 +827,9 @@ below keeps it one.
 - **The snapshot.** `ToPosition()` takes the board as it stands as a
   `BoardPosition` value, allocation-free; later changes to the board do
   not reach it. Two boards are compared through it, never through
-  `Points`, and it is what the move generator deduplicates by.
+  `Points`. It is how a consumer takes the position a play reaches — apply
+  the play, snapshot, undo, as BgMoveGen does for each successor and
+  candidate board — which is why it allocates nothing.
 
 After construction a board changes three ways — the reset, the raw pair
 and the turn boundary — with `Flip()` the private mechanic behind

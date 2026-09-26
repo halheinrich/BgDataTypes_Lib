@@ -46,10 +46,14 @@ namespace BgDataTypes_Lib;
 /// </para>
 /// <para>
 /// <b>Allocation-free.</b> Creating, comparing and hashing a position
-/// allocate nothing: the move generator deduplicates plays by the position
-/// they reach, on its hot path. The counts are stored inline and narrowed,
-/// which the invariant makes lossless (no count exceeds 15 in magnitude);
-/// the storage is private and reads widen back to <see langword="int"/>.
+/// allocate nothing, because a consumer does them once per play: the move
+/// generator (BgMoveGen) takes the position each play reaches, for every
+/// successor it returns and every candidate board, and keys its move-entry
+/// searches by position. Generating the plays compares no positions — the
+/// generator avoids duplicates by construction. The counts are stored
+/// inline and narrowed, which the invariant makes lossless (no count
+/// exceeds 15 in magnitude); the storage is private and reads widen back to
+/// <see langword="int"/>.
 /// </para>
 /// <para>
 /// <b>The frame is the holder's to state.</b> A position does not record
