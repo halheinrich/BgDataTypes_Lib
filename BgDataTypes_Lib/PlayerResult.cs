@@ -15,18 +15,18 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// <b>The error is read only where it exists.</b> <see cref="TryGetError"/>
 /// yields it for <see cref="PlayerResultKind.Scored"/> and
-/// <see cref="PlayerResultKind.Unlisted"/> and nothing for the other two, and
+/// <see cref="PlayerResultKind.Unstated"/> and nothing for the other two, and
 /// <see cref="Match{TResult}"/> hands it to exactly those branches; no member
 /// reads a case without an error as one. The filter's "erred by more than
 /// x" is <c>result.TryGetError(out var error) &amp;&amp; error &gt; x</c>:
-/// scored and unlisted moves above x, never a move the ranking does not
+/// scored and unstated moves above x, never a move the ranking does not
 /// score, never a decision with no move recorded.
 /// </para>
 /// <para>
 /// <b>Built by case.</b> <see cref="NotRecorded"/> and
 /// <see cref="NotScored"/> carry nothing; <see cref="Scored"/> refuses an
 /// error that is negative or not finite — a scored error never is;
-/// <see cref="Unlisted"/> takes the analyser's number as stated. The
+/// <see cref="Unstated"/> takes the analyser's number as stated. The
 /// <c>default</c> value is <see cref="NotRecorded"/>. A value type: reading a
 /// result allocates nothing.
 /// </para>
@@ -62,17 +62,17 @@ public readonly struct PlayerResult : IEquatable<PlayerResult>
 
     /// <summary>A move the record does not state, and the analyser's error for it, as stated.</summary>
     /// <param name="error">The analyser's error.</param>
-    public static PlayerResult Unlisted(double error) => new(PlayerResultKind.Unlisted, error);
+    public static PlayerResult Unstated(double error) => new(PlayerResultKind.Unstated, error);
 
     /// <summary>
     /// The error, for a <see cref="PlayerResultKind.Scored"/> or
-    /// <see cref="PlayerResultKind.Unlisted"/> result.
+    /// <see cref="PlayerResultKind.Unstated"/> result.
     /// </summary>
     /// <param name="error">The error when the result has one; otherwise 0, which means nothing.</param>
     /// <returns><see langword="true"/> exactly when the result has an error.</returns>
     public bool TryGetError(out double error)
     {
-        bool has = Kind is PlayerResultKind.Scored or PlayerResultKind.Unlisted;
+        bool has = Kind is PlayerResultKind.Scored or PlayerResultKind.Unstated;
         error = has ? _error : 0.0;
         return has;
     }
@@ -80,17 +80,17 @@ public readonly struct PlayerResult : IEquatable<PlayerResult>
     /// <summary>Runs the branch of the result's case, handing the error to the two cases that have one.</summary>
     /// <exception cref="ArgumentNullException">A branch is <see langword="null"/>.</exception>
     public TResult Match<TResult>(
-        Func<TResult> notRecorded, Func<TResult> notScored, Func<double, TResult> scored, Func<double, TResult> unlisted)
+        Func<TResult> notRecorded, Func<TResult> notScored, Func<double, TResult> scored, Func<double, TResult> unstated)
     {
         ArgumentNullException.ThrowIfNull(notRecorded);
         ArgumentNullException.ThrowIfNull(notScored);
         ArgumentNullException.ThrowIfNull(scored);
-        ArgumentNullException.ThrowIfNull(unlisted);
+        ArgumentNullException.ThrowIfNull(unstated);
         return Kind switch
         {
             PlayerResultKind.NotScored => notScored(),
             PlayerResultKind.Scored => scored(_error),
-            PlayerResultKind.Unlisted => unlisted(_error),
+            PlayerResultKind.Unstated => unstated(_error),
             _ => notRecorded(),
         };
     }

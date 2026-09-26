@@ -985,7 +985,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(3, data.OnRollNeeds);
         Assert.Equal(5, data.OpponentNeeds);
         Assert.False(data.IsCrawford);
-        Assert.Equal(PlayerResult.Unlisted(0.034), data.PlayerResult);
+        Assert.Equal(PlayerResult.Unstated(0.034), data.PlayerResult);
         Assert.Equal(new BoardPosition(mop), data.Board);
     }
 

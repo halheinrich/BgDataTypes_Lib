@@ -677,7 +677,7 @@ public class DecisionRowSerializationTests
         {
             Assert.EndsWith($",{ranking},Scored", PlayRow(ranking: ranking).ToCsvLine());
             Assert.EndsWith($",{ranking},Scored", CubeRow(ranking: ranking).ToCsvLine());
-            Assert.EndsWith($",{ranking},Unlisted", PlayRow(error: 0.1, ranking: ranking).ToCsvLine());
+            Assert.EndsWith($",{ranking},Unstated", PlayRow(error: 0.1, ranking: ranking).ToCsvLine());
             Assert.EndsWith($",{ranking},NotRecorded", PlayRow(userPlayIndex: null, ranking: ranking).ToCsvLine());
         }
         Assert.EndsWith(",DepthFirst,Scored", PlayRow(ranking: PlayRanking.DepthFirst).ToCsvLine());
@@ -729,7 +729,7 @@ public class DecisionRowSerializationTests
         var row = PlayRow(
             error: 0.12345678, equity: -0.98765432, dice: [6, 3],
             matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
-        const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity,Unlisted";
+        const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity,Unstated";
 
         var original = CultureInfo.CurrentCulture;
         try
@@ -849,7 +849,7 @@ public class DecisionRowSerializationTests
         Assert.Equal(3, row.OnRollNeeds);
         Assert.Equal(5, row.OpponentNeeds);
         Assert.False(row.IsCrawford);
-        Assert.Equal(PlayerResult.Unlisted(0.023), row.PlayerResult);
+        Assert.Equal(PlayerResult.Unstated(0.023), row.PlayerResult);
         Assert.Equal(board, row.Board);
     }
 
@@ -865,7 +865,7 @@ public class DecisionRowSerializationTests
 
         Assert.Equal(DecisionKind.Cube, row.Kind);
         Assert.False(row.IsCrawford);
-        Assert.Equal(PlayerResult.Unlisted(0.011), row.PlayerResult);
+        Assert.Equal(PlayerResult.Unstated(0.011), row.PlayerResult);
     }
 
     [Fact]
@@ -889,8 +889,8 @@ public class DecisionRowSerializationTests
         var scored = PlayRow();
         var none = PlayRow(error: null, userPlayIndex: null);
 
-        Assert.Equal((PlayerResultKind.Unlisted, 0.045), (unlisted.Result, unlisted.Error));
-        Assert.Equal(PlayerResult.Unlisted(0.045), ((IDecisionFilterData)unlisted).PlayerResult);
+        Assert.Equal((PlayerResultKind.Unstated, 0.045), (unlisted.Result, unlisted.Error));
+        Assert.Equal(PlayerResult.Unstated(0.045), ((IDecisionFilterData)unlisted).PlayerResult);
         Assert.Equal((PlayerResultKind.Scored, 0.0), (scored.Result, scored.Error));
         Assert.Equal(PlayerResult.Scored(0.0), ((IDecisionFilterData)scored).PlayerResult);
         Assert.Equal((PlayerResultKind.NotRecorded, (double?)null), (none.Result, none.Error));
@@ -900,7 +900,7 @@ public class DecisionRowSerializationTests
     public static TheoryData<string, string, string, double?> ResultAndErrorBreaches => new()
     {
         { "a scored result without its error", "CheckerPlay", "Scored", null },
-        { "an unlisted result without its error", "CheckerPlay", "Unlisted", null },
+        { "an unstated result without its error", "CheckerPlay", "Unstated", null },
         { "an error beside no move recorded", "CheckerPlay", "NotRecorded", 0.1 },
         { "an error beside a move not scored", "CheckerPlay", "NotScored", 0.1 },
         { "a negative scored error", "CheckerPlay", "Scored", -0.1 },
@@ -912,7 +912,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_AResultAndErrorThatDisagree_AreRefused_BothPaths(string because, string kind, string result, double? error)
     {
         // Added: a row read from JSON is held to what a projection gives —
-        // the error stated exactly for a scored or unlisted result, a scored
+        // the error stated exactly for a scored or unstated result, a scored
         // error never negative, and no cube row not scored.
         var document = WirePaths.Document(kind == "Cube" ? CubeRow() : PlayRow());
         document["Result"] = result;

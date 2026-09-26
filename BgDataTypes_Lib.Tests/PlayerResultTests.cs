@@ -19,7 +19,7 @@ public class PlayerResultTests
         { "not recorded", PlayerResultKind.NotRecorded, null },
         { "not scored", PlayerResultKind.NotScored, null },
         { "scored", PlayerResultKind.Scored, 0.032 },
-        { "unlisted", PlayerResultKind.Unlisted, 0.031 },
+        { "unstated", PlayerResultKind.Unstated, 0.031 },
     };
 
     private static PlayerResult Build(PlayerResultKind kind, double? error) => kind switch
@@ -27,7 +27,7 @@ public class PlayerResultTests
         PlayerResultKind.NotRecorded => PlayerResult.NotRecorded,
         PlayerResultKind.NotScored => PlayerResult.NotScored,
         PlayerResultKind.Scored => PlayerResult.Scored(error!.Value),
-        _ => PlayerResult.Unlisted(error!.Value),
+        _ => PlayerResult.Unstated(error!.Value),
     };
 
     [Theory]
@@ -49,7 +49,7 @@ public class PlayerResultTests
             notRecorded: () => "not recorded",
             notScored: () => "not scored",
             scored: e => $"scored {e}",
-            unlisted: e => $"unlisted {e}");
+            unstated: e => $"unstated {e}");
 
         Assert.Equal(error is double e ? $"{name} {e}" : name, ran);
     }
@@ -76,9 +76,9 @@ public class PlayerResultTests
     }
 
     [Fact]
-    public void AnUnlistedError_IsTheAnalysersNumber_AsStated()
+    public void AnUnstatedError_IsTheAnalysersNumber_AsStated()
     {
-        Assert.True(PlayerResult.Unlisted(0.031).TryGetError(out double error));
+        Assert.True(PlayerResult.Unstated(0.031).TryGetError(out double error));
         Assert.Equal(0.031, error);
         Assert.True(PlayerResult.Scored(0.0).TryGetError(out double zero));
         Assert.Equal(0.0, zero);
@@ -98,7 +98,7 @@ public class PlayerResultTests
         Assert.Equal(PlayerResult.Scored(0.1), PlayerResult.Scored(0.1));
         Assert.True(PlayerResult.Scored(0.1) == PlayerResult.Scored(0.1));
         Assert.Equal(PlayerResult.Scored(0.1).GetHashCode(), PlayerResult.Scored(0.1).GetHashCode());
-        Assert.NotEqual(PlayerResult.Scored(0.1), PlayerResult.Unlisted(0.1));
+        Assert.NotEqual(PlayerResult.Scored(0.1), PlayerResult.Unstated(0.1));
         Assert.NotEqual(PlayerResult.Scored(0.1), PlayerResult.Scored(0.2));
         Assert.True(PlayerResult.NotScored != PlayerResult.NotRecorded);
         Assert.False(PlayerResult.Scored(0.1).Equals((object)0.1));
@@ -110,16 +110,16 @@ public class PlayerResultTests
         Assert.Equal("NotRecorded", PlayerResult.NotRecorded.ToString());
         Assert.Equal("NotScored", PlayerResult.NotScored.ToString());
         Assert.Equal("Scored 0.032", PlayerResult.Scored(0.032).ToString());
-        Assert.Equal("Unlisted 0.031", PlayerResult.Unlisted(0.031).ToString());
+        Assert.Equal("Unstated 0.031", PlayerResult.Unstated(0.031).ToString());
     }
 
     [Fact]
     public void EachKind_HasItsLabel()
     {
         Assert.Equal(
-            [PlayerResultKind.NotRecorded, PlayerResultKind.NotScored, PlayerResultKind.Scored, PlayerResultKind.Unlisted],
+            [PlayerResultKind.NotRecorded, PlayerResultKind.NotScored, PlayerResultKind.Scored, PlayerResultKind.Unstated],
             Enum.GetValues<PlayerResultKind>());
-        Assert.Equal(["Not recorded", "Not scored", "Scored", "Unlisted"], Enum.GetValues<PlayerResultKind>().Select(kind =>
+        Assert.Equal(["Not recorded", "Not scored", "Scored", "Unstated"], Enum.GetValues<PlayerResultKind>().Select(kind =>
             typeof(PlayerResultKind).GetField(kind.ToString())!.GetCustomAttribute<DescriptionAttribute>()!.Description));
     }
 }

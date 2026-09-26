@@ -31,13 +31,13 @@ internal sealed class DecisionView : IDecisionFilterData
     /// holds none, the taker's — as <see cref="CubeDecisionData.UserDoubleError"/>
     /// <c>??</c> <see cref="CubeDecisionData.UserTakeError"/> reads, with each
     /// case named. A stated action is scored with its error; an unstated one
-    /// with an analyser's error is unlisted.
+    /// with an analyser's error is <see cref="PlayerResultKind.Unstated"/>, carrying that error.
     /// </summary>
     private static PlayerResult CubeResult(CubeDecisionData cube) =>
         cube.UserDoublerAction is CubeAction doubled ? PlayerResult.Scored(cube.DoublerActionError(doubled))
-        : cube.UnstatedDoublerActionError is double unstatedDouble ? PlayerResult.Unlisted(unstatedDouble)
+        : cube.UnstatedDoublerActionError is double unstatedDouble ? PlayerResult.Unstated(unstatedDouble)
         : cube.UserTakerAction is CubeAction taken ? PlayerResult.Scored(cube.TakerActionError(taken))
-        : cube.UnstatedTakerActionError is double unstatedTake ? PlayerResult.Unlisted(unstatedTake)
+        : cube.UnstatedTakerActionError is double unstatedTake ? PlayerResult.Unstated(unstatedTake)
         : PlayerResult.NotRecorded;
 
     public PlayRanking Ranking { get; }

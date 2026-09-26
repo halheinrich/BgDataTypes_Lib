@@ -207,7 +207,7 @@ public sealed class CheckerPlayDecisionData
     /// when that play is not among <see cref="Plays"/> — the one error the
     /// candidates cannot determine, since the play itself is not recorded,
     /// and so the player's error under every ranking
-    /// (<see cref="RankedPlays.PlayerResult"/>, <see cref="PlayerResultKind.Unlisted"/>). <see langword="null"/> when
+    /// (<see cref="RankedPlays.PlayerResult"/>, <see cref="PlayerResultKind.Unstated"/>). <see langword="null"/> when
     /// none was recorded, and always when <see cref="UserPlayIndex"/>
     /// identifies a candidate: that play's error is derived for a ranking, so
     /// stating it here too would store a copy.

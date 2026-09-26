@@ -127,12 +127,12 @@ public interface IDecisionFilterData
     /// (<see cref="BgDataTypes_Lib.PlayerResult"/>). For a checker play, the
     /// player's result under <see cref="Ranking"/>
     /// (<see cref="RankedPlays.PlayerResult"/>): scored with its error, not
-    /// scored (no error), unlisted with the analyser's error, or not recorded.
+    /// scored (no error), unstated with the analyser's error, or not recorded.
     /// For a cube decision, the doubler's result or, when the record holds
     /// none, the taker's: a stated action is scored with its error
     /// (<see cref="CubeDecisionData.UserDoubleError"/>,
     /// <see cref="CubeDecisionData.UserTakeError"/>), an unstated one with an
-    /// analyser's error is unlisted; a cube decision is never not scored. The
+    /// analyser's error is unstated; a cube decision is never not scored. The
     /// filter's "erred by more than x" is
     /// <c>PlayerResult.TryGetError(out var error) &amp;&amp; error &gt; x</c>.
     /// </summary>

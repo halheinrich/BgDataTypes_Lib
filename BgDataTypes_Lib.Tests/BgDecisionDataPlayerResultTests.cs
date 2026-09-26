@@ -8,7 +8,7 @@ namespace BgDataTypes_Lib.Tests;
 /// each case by name. A cube decision's is the doubler's result or, when the
 /// record holds none, the taker's — as <c>UserDoubleError ?? UserTakeError</c>
 /// reads — whatever the ranking: a stated action scored with its derived
-/// error, an unstated one unlisted with the analyser's. A checker play's is
+/// error, an unstated one <see cref="PlayerResultKind.Unstated"/> with the analyser's. A checker play's is
 /// the ranking's <see cref="RankedPlays.PlayerResult"/>. The records here rank
 /// alike under both rankings; the case only depth first has, not scored, is
 /// pinned in <see cref="PlayRankingTests"/>.
@@ -72,16 +72,16 @@ public class BgDecisionDataPlayerResultTests
     [Theory]
     [InlineData(0.042, null)]
     [InlineData(null, 0.013)]
-    public void Cube_AnUnstatedActionsError_IsUnlisted_TheAnalysersNumber(double? doubler, double? taker)
+    public void Cube_AnUnstatedActionsError_IsUnstated_TheAnalysersNumber(double? doubler, double? taker)
     {
         // Added: where the record states no action, the analyser's error is
         // the only statement of it — the doubler's, or failing that the
-        // taker's — and the view names it unlisted.
+        // taker's — and the view names it unstated.
         var d = TestRecords.Cube(decision: TestRecords.CubeData(
             userDoublerAction: null, userTakerAction: null,
             unstatedDoublerActionError: doubler, unstatedTakerActionError: taker));
 
-        Assert.All(Views(d), view => Assert.Equal(PlayerResult.Unlisted((doubler ?? taker)!.Value), view.PlayerResult));
+        Assert.All(Views(d), view => Assert.Equal(PlayerResult.Unstated((doubler ?? taker)!.Value), view.PlayerResult));
     }
 
     [Fact]
@@ -99,14 +99,14 @@ public class BgDecisionDataPlayerResultTests
     }
 
     [Fact]
-    public void Checker_AnUnlistedPlay_IsUnlisted_TheAnalysersNumber()
+    public void Checker_AnUnlistedPlay_IsUnstated_TheAnalysersNumber()
     {
         // Added: a user play outside the candidates has no equity here to
         // derive from; the analyser's number is its one statement.
         var d = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(
             userPlayIndex: null, unlistedPlayError: 0.031));
 
-        Assert.All(Views(d), view => Assert.Equal(PlayerResult.Unlisted(0.031), view.PlayerResult));
+        Assert.All(Views(d), view => Assert.Equal(PlayerResult.Unstated(0.031), view.PlayerResult));
     }
 
     [Fact]

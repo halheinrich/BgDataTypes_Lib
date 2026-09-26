@@ -6,7 +6,8 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// Which of four cases a player's result on a decision is
 /// (<see cref="PlayerResult.Kind"/>): no move recorded, a move the ranking
-/// does not score, a scored move, or a move the record does not state. "Not
+/// does not score, a scored move, or a move the record does not state with
+/// the analyser's error. "Not
 /// scored" and "not recorded" are told apart by this value, never by one
 /// <see langword="null"/> (the umbrella's third-round ruling on the records
 /// leg of halheinrich/backgammon#273).
@@ -45,13 +46,14 @@ public enum PlayerResultKind
     Scored,
 
     /// <summary>
-    /// A move the record does not state, with the analyser's error, which is
-    /// the one statement of it: a checker play outside the candidates
-    /// (<see cref="CheckerPlayDecisionData.UnlistedPlayError"/>), or a cube
-    /// action the record does not state
+    /// A move the record does not state, only the analyser's error for it,
+    /// which is the one statement of it: for a checker play, a move off the
+    /// candidate list (<see cref="CheckerPlayDecisionData.UnlistedPlayError"/>);
+    /// for a cube decision, an action the record does not hold
     /// (<see cref="CubeDecisionData.UnstatedDoublerActionError"/>,
-    /// <see cref="CubeDecisionData.UnstatedTakerActionError"/>).
+    /// <see cref="CubeDecisionData.UnstatedTakerActionError"/>). Named for
+    /// what is true of both: the move is not stated.
     /// </summary>
-    [Description("Unlisted")]
-    Unlisted,
+    [Description("Unstated")]
+    Unstated,
 }

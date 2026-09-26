@@ -46,7 +46,7 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>
         UserPlay = userPlayIndex is int user ? _byIndex[user] : null;
         PlayerResult = UserPlay is { } played
             ? (played.Error is double playedError ? PlayerResult.Scored(playedError) : PlayerResult.NotScored)
-            : (unlistedPlayError is double unlisted ? PlayerResult.Unlisted(unlisted) : PlayerResult.NotRecorded);
+            : (unlistedPlayError is double unlisted ? PlayerResult.Unstated(unlisted) : PlayerResult.NotRecorded);
     }
 
     /// <summary>The ranking these are ranked by.</summary>
@@ -67,7 +67,7 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>
     /// <see cref="RankedPlay.Error"/> when the ranking scores it;
     /// <see cref="PlayerResultKind.NotScored"/> when it does not — a play the
     /// ranking does not score has no error;
-    /// <see cref="PlayerResultKind.Unlisted"/> with the analyser's
+    /// <see cref="PlayerResultKind.Unstated"/> with the analyser's
     /// <see cref="CheckerPlayDecisionData.UnlistedPlayError"/> for a play
     /// outside the candidates, which no ranking changes; and
     /// <see cref="PlayerResultKind.NotRecorded"/> when no user play is

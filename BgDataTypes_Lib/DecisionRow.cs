@@ -142,7 +142,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <summary>
     /// The player's error under <see cref="Ranking"/>, stated exactly when
     /// <see cref="Result"/> is <see cref="PlayerResultKind.Scored"/> (never
-    /// negative) or <see cref="PlayerResultKind.Unlisted"/> — the record's
+    /// negative) or <see cref="PlayerResultKind.Unstated"/> — the record's
     /// <see cref="IDecisionFilterData.PlayerResult"/>'s error. Otherwise
     /// <see langword="null"/>, an empty CSV cell, never 0: which of the two
     /// errorless cases it is, <see cref="Result"/> says.
@@ -363,7 +363,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     {
         PlayerResultKind.NotScored => PlayerResult.NotScored,
         PlayerResultKind.Scored => PlayerResult.Scored(Error!.Value),
-        PlayerResultKind.Unlisted => PlayerResult.Unlisted(Error!.Value),
+        PlayerResultKind.Unstated => PlayerResult.Unstated(Error!.Value),
         _ => PlayerResult.NotRecorded,
     };
 
@@ -396,8 +396,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
                 "A cube row's checker-play columns are empty: Roll, AfterBestBoard and AfterPlayerBoard.",
             DecisionKind.Cube when Result == PlayerResultKind.NotScored =>
                 "A cube row's result is never NotScored: a ranking scores checker plays only.",
-            _ when (Result is PlayerResultKind.Scored or PlayerResultKind.Unlisted) != Error.HasValue =>
-                $"A row's Error is stated exactly when its Result is Scored or Unlisted; the Result is {Result}.",
+            _ when (Result is PlayerResultKind.Scored or PlayerResultKind.Unstated) != Error.HasValue =>
+                $"A row's Error is stated exactly when its Result is Scored or Unstated; the Result is {Result}.",
             _ when Result == PlayerResultKind.Scored && !(double.IsFinite(Error!.Value) && Error.Value >= 0.0) =>
                 $"A scored error is a finite number, never negative (got {Error}).",
             _ when !StatedText.Holds(Xgid) => StatedText.Message(nameof(Xgid)),

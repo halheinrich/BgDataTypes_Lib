@@ -327,13 +327,13 @@ public class PlayRankingTests
     }
 
     [Fact]
-    public void AnUnlistedPlay_IsUnlisted_UnderEveryRanking_AndNoneRecordedIsNotRecorded()
+    public void AnUnlistedPlay_IsUnstated_UnderEveryRanking_AndNoneRecordedIsNotRecorded()
     {
         foreach (var ranking in Enum.GetValues<PlayRanking>())
         {
             var unlisted = MixedData(unlistedPlayError: 0.07).RankedBy(ranking);
             Assert.Null(unlisted.UserPlay);
-            Assert.Equal(PlayerResult.Unlisted(0.07), unlisted.PlayerResult);
+            Assert.Equal(PlayerResult.Unstated(0.07), unlisted.PlayerResult);
 
             var none = MixedData().RankedBy(ranking);
             Assert.Null(none.UserPlay);
@@ -413,7 +413,7 @@ public class PlayRankingTests
     {
         // The filter's question, asked of views built for each ranking: the
         // same records answer differently, as the rankings' errors differ. It
-        // selects scored and unlisted moves above x only — never a move the
+        // selects scored and unstated moves above x only — never a move the
         // ranking does not score, never a decision with no move recorded, even
         // at an x below every error.
         BgDecisionData[] records =
@@ -422,7 +422,7 @@ public class PlayRankingTests
             MixedRecord(userPlayIndex: 0),  // scored 0.02 by equity; not scored depth first
             MixedRecord(userPlayIndex: 1),  // scored: 0.07 by equity, 0 depth first
             TestRecords.Cube(decision: TestRecords.CubeData(
-                userDoublerAction: null, userTakerAction: null, unstatedDoublerActionError: 0.3)),  // unlisted 0.3
+                userDoublerAction: null, userTakerAction: null, unstatedDoublerActionError: 0.3)),  // unstated 0.3
             MixedRecord(),                  // not recorded
         ];
 
