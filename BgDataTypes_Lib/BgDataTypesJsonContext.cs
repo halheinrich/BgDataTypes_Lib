@@ -63,6 +63,20 @@ namespace BgDataTypes_Lib;
 /// both halves on both paths.
 /// </para>
 /// <para>
+/// <b>An explicit <c>null</c> for a member that is not nullable is a
+/// <see cref="System.Text.Json.JsonException"/></b>, on both paths and
+/// whatever the caller's options. A value-type member's <c>null</c> the
+/// serializer refuses itself; a reference member's the type refuses — its
+/// init guard's <see cref="ArgumentNullException"/>, which a document gets as
+/// a <see cref="System.Text.Json.JsonException"/> (the rule below).
+/// <see cref="System.Text.Json.JsonSerializerOptions.RespectNullableAnnotations"/>
+/// was measured on .NET 10 (2026-09-25): set, it refuses such a
+/// <c>null</c> on both paths, but it is off by default, and on the
+/// reflection path it is the caller's option to set. So nothing here
+/// depends on it, and this context does not set it: one mechanism, the same
+/// on every path. The same walk pins it, member by member.
+/// </para>
+/// <para>
 /// <b>A decision's kind is explicit, and a member of the other kind is
 /// refused</b> (halheinrich/backgammon#273). Every decision states its
 /// <see cref="DecisionKind"/> as a real member, and no reader infers it from

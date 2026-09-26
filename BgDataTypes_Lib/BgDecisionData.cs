@@ -196,8 +196,9 @@ public abstract class BgDecisionData : IDecisionFilterData
     /// <see cref="DecisionRow.Xgid"/>. Source data, not a copy: it carries the
     /// cube limit, the beaver rule and a money game's header scores, which no
     /// other member holds (INSTRUCTIONS.md, "Stored or derived"). Every
-    /// decision has one, so it is never empty text.
+    /// decision has one, so it is never null or empty text.
     /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
     [JsonPropertyOrder(-3)]
     public required string Xgid
@@ -207,6 +208,7 @@ public abstract class BgDecisionData : IDecisionFilterData
         {
             try
             {
+                ArgumentNullException.ThrowIfNull(value, nameof(Xgid));
                 StatedText.Check(value, nameof(Xgid));
             }
             catch (ArgumentException fault) when (_read)

@@ -340,6 +340,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             // is present, so `required` does not catch it.
             _ when Id is null =>
                 "A row states its Id.",
+            _ when Xgid is null =>
+                "A row states its Xgid.",
             DecisionKind.CheckerPlay when Roll is null =>
                 "A checker-play row states its Roll.",
             DecisionKind.CheckerPlay when !IsTwoFaces(Roll.Value) =>

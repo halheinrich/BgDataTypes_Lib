@@ -19,8 +19,10 @@ namespace BgDataTypes_Lib.Tests;
 /// exactly as its explicit <c>null</c> does, on both — as <see langword="null"/>,
 /// or refused when <c>null</c> would break a rule of the decision's kind (a
 /// checker row without its roll). And every member is exactly one of the two,
-/// so none can arrive silently as a default. The rule is stated on
-/// <see cref="BgDataTypesJsonContext"/>.
+/// so none can arrive silently as a default. An explicit <c>null</c> for a
+/// member that is not nullable is a <see cref="JsonException"/> too, on both
+/// paths, whatever the caller's options say about nullable annotations. The
+/// rules are stated on <see cref="BgDataTypesJsonContext"/>.
 /// </summary>
 /// <remarks>
 /// The members come from the context's own metadata, walked alongside the
@@ -200,6 +202,47 @@ public class WireAbsenceTests
                 var value = member.Info.Get!(Navigate(restored, member.Path));
                 Assert.True(value is null, $"{member} absent on the {path} path read as {value}");
             }
+        }
+    }
+
+    // ── An explicit null for a member that is not nullable ────────
+
+    /// <summary>
+    /// Both paths, each with <see cref="JsonSerializerOptions.RespectNullableAnnotations"/>
+    /// off (the default) and on: the refusal must not depend on the caller's
+    /// options.
+    /// </summary>
+    private static readonly (string Name, JsonSerializerOptions Options)[] NullOptions =
+    [
+        ("reflection", ReflectionOptions),
+        ("reflection, nullable annotations respected", new JsonSerializerOptions { RespectNullableAnnotations = true }),
+        ("context", ContextOptions),
+        ("context, nullable annotations respected", new JsonSerializerOptions
+        {
+            TypeInfoResolver = BgDataTypesJsonContext.Default, RespectNullableAnnotations = true,
+        }),
+    ];
+
+    [Theory]
+    [MemberData(nameof(Members))]
+    public void ExplicitNull_ForAMemberThatIsNotNullable_IsRefused_WhateverTheOptions(Member member)
+    {
+        // Added: an explicit null is refused as a JsonException exactly where
+        // null is not the member's value — a value type by the serializer, a
+        // reference by the type's own guard — on both paths, with the
+        // options' nullable annotations respected or not. A nullable member's
+        // null is its "none", pinned above.
+        if (IsNullable(member.Info))
+            return;
+
+        var full = Documents[member.Document];
+        string withNull = Edited(full.Json, member, remove: false);
+
+        foreach (var (path, options) in NullOptions)
+        {
+            var ex = Record.Exception(() => JsonSerializer.Deserialize(withNull, full.ReadAs, options));
+            Assert.True(ex is JsonException,
+                $"{member} = null on the {path} path: {ex?.GetType().Name ?? "loaded"}");
         }
     }
 

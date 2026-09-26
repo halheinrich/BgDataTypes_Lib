@@ -12,7 +12,8 @@ namespace BgDataTypes_Lib.Tests;
 /// <see cref="JsonException"/> carrying it, on both paths. An <em>absent</em>
 /// member is a different failure: every one is required
 /// (halheinrich/backgammon#222), so a document without it is refused as
-/// absent, on both paths.
+/// absent, on both paths. WireAbsenceTests walks an explicit null through
+/// every member of the graph that is not nullable.
 /// </summary>
 public class BgDecisionDataNullHalfTests
 {
@@ -87,6 +88,15 @@ public class BgDecisionDataNullHalfTests
         Assert.Equal("Descriptive", descriptive.ParamName);
     }
 
+    [Fact]
+    public void Xgid_Null_ThrowsNamingXgid()
+    {
+        // Added: the XGID is not nullable, and its guard refuses a null the
+        // way the others do — before, a null XGID was stored.
+        var ex = Assert.Throws<ArgumentNullException>(() => TestRecords.Cube(xgid: null!));
+        Assert.Equal("Xgid", ex.ParamName);
+    }
+
     // ---------------------------------------------------------------------
     //  The wire — an explicit null is a malformed document
     // ---------------------------------------------------------------------
@@ -110,6 +120,7 @@ public class BgDecisionDataNullHalfTests
 
     [Theory]
     [InlineData("Id")]
+    [InlineData("Xgid")]
     [InlineData("Position")]
     [InlineData("Decision")]
     [InlineData("Descriptive")]

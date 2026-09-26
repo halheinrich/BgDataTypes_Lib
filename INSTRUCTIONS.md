@@ -245,6 +245,18 @@ Design points:
   one kind. A nullable member's absence reads exactly as its explicit
   `null`: as `null`, or refused when `null` breaks a rule of the decision's
   kind (a checker row states its roll).
+- **An explicit `null` for a member that is not nullable is a
+  `JsonException`**, on both paths and whatever the caller's options. A
+  value-type member's `null` the serializer refuses itself; a reference
+  member's the type refuses — its init guard's `ArgumentNullException`,
+  which a document gets as a `JsonException` (see "The decision kinds" for
+  how a type tells a document from code). The `Xgid` guard was the one
+  missing: a null XGID used to be stored. `RespectNullableAnnotations`
+  (.NET 9) was measured on .NET 10 before deciding (2026-09-25): set, it
+  refuses such a `null` on both paths, but it is off by default and on the
+  reflection path it is the caller's option, so nothing here depends on it
+  and the context does not set it. `WireAbsenceTests` sets `null` on every
+  member that is not nullable, on both paths, with the option off and on.
 - **`Unknown` is a value, not an absence.** `AnalysisMode`/`AnalysisLevel`
   (on candidates, cube analyses and rows) are required: "not recorded" is
   spelled `Unknown` by the producer. Making them nullable would give "not
