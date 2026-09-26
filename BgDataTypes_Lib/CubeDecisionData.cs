@@ -38,12 +38,10 @@ public sealed class CubeDecisionData
     }
 
     /// <summary>
-    /// The serializer's constructor, for a category read from a document: it
-    /// marks the category as read before any member is set, so every rule
-    /// refuses a breach as a <see cref="System.Text.Json.JsonException"/> (the
-    /// wire rule on <see cref="BgDataTypesJsonContext"/>). It takes
-    /// <paramref name="analysisMode"/> only because a serializer constructor
-    /// must bind a member.
+    /// The serializer's constructor. It binds <paramref name="analysisMode"/>, its
+    /// first member, only because a serializer constructor must bind one; why
+    /// the pattern exists is stated once, on <see cref="BgDataTypesJsonContext"/>
+    /// ("The serializer constructors").
     /// </summary>
     [JsonConstructor]
     internal CubeDecisionData(AnalysisMode analysisMode)

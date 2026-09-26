@@ -24,12 +24,10 @@ public sealed class CubeDecision : BgDecisionData
     }
 
     /// <summary>
-    /// The serializer's constructor, for a record read from a document: it
-    /// takes the kind the document states, which must be
-    /// <see cref="DecisionKind.Cube"/>, and marks the record as read, so every
-    /// rule it holds its members to refuses a breach as a
-    /// <see cref="System.Text.Json.JsonException"/> (the wire rule on
-    /// <see cref="BgDataTypesJsonContext"/>).
+    /// The serializer's constructor. It binds the document's
+    /// <paramref name="kind"/>, which must be <see cref="DecisionKind.Cube"/>;
+    /// why the pattern exists is stated once, on
+    /// <see cref="BgDataTypesJsonContext"/> ("The serializer constructors").
     /// </summary>
     [JsonConstructor]
     internal CubeDecision(DecisionKind kind) : base(DecisionKind.Cube, kind)

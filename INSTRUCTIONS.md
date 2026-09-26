@@ -1038,20 +1038,27 @@ Design points a maintainer needs before touching it:
   on its own — carrying the init guard's exception as its inner one; code
   breaking the same rule gets the guard's exception itself. This closed the
   converter's one stated limit (a kind read directly used to surface the
-  guard's `ArgumentException`). The mechanism, stated once on
-  `BgDataTypesJsonContext`: each type holding its members to a rule
-  (`CheckerPlayDecision`, `CubeDecision`, `CheckerPlayDecisionData`,
-  `CubeDecisionData`) has an internal `[JsonConstructor]` beside the public
-  parameterless one code uses. It binds one wire member (a kind's binds
-  `Kind`, which the base then holds to the type), marks the instance as
-  read, and runs before any init setter on both paths; each guarded setter
-  rethrows its `ArgumentException` through `DocumentRefusal` when the
-  instance is read. Measured on .NET 10 before relying on it: a generated
-  context sets init and `required` members in an object initializer
-  *before* `IJsonOnDeserializing` runs, so a callback flag cannot work, and
-  a full-member serializer constructor would need `[SetsRequiredMembers]`,
-  which silently turns off the JSON-required meaning of `required`. The
-  converter no longer catches anything; it only dispatches.
+  guard's `ArgumentException`). **The serializer constructors** — the
+  mechanism, and why the platform forces it, are stated once, on
+  `BgDataTypesJsonContext` ("The serializer constructors"), and each
+  constructor's doc points there. In short: each type holding its members
+  to a rule (`CheckerPlayDecision`, `CubeDecision`,
+  `CheckerPlayDecisionData`, `CubeDecisionData`, `PlayCandidate`,
+  `DescriptiveData`) has an internal one-parameter `[JsonConstructor]`
+  beside the public parameterless one code uses. It marks the instance as
+  read, and each guarded setter rethrows its `ArgumentException` through
+  `DocumentRefusal` when the instance is read. It binds one wire member
+  because a serializer constructor must bind one: a kind binds `Kind`,
+  which the base holds to the type, and a category binds its first member
+  for that reason only. The bound member stays required, and the absence
+  walk fails if it ever stops being so. Measured on .NET 10 before relying
+  on it: a generated context sets init and `required` members in an
+  object initializer *before* `IJsonOnDeserializing` runs, so a callback
+  flag cannot work, and a full-member serializer constructor would need
+  `[SetsRequiredMembers]`, which silently turns off the JSON-required
+  meaning of `required`. Accepted by the umbrella as the separate internal
+  constructor pattern, not a hatch around validation. The converter no
+  longer catches anything; it only dispatches.
   `PlayJsonConverter` refuses a play of more than four moves itself — it
   used to let `Play.Add`'s `InvalidOperationException` escape.
 - **The members agree by construction.** Each init setter checks its value

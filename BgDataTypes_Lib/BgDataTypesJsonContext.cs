@@ -98,17 +98,41 @@ namespace BgDataTypes_Lib;
 /// the init guard's <see cref="ArgumentException"/>; a document gets the same
 /// fault as a <see cref="System.Text.Json.JsonException"/> carrying it, so a
 /// reader that absorbs malformed input absorbs every one. A type tells the
-/// two apart by how it was constructed. Each type that holds its members to a
-/// rule has an internal serializer constructor
-/// (<see cref="JsonConstructorAttribute"/>) beside the public one code uses:
-/// it takes one wire member, because a serializer constructor must bind one
-/// (a kind's takes its <c>"Kind"</c>), and marks the instance as read. It
-/// runs before any init setter on both paths. Nothing later can mark the
-/// read in time: measured on .NET 10 (2026-09-25), a generated context sets
-/// the init and <c>required</c> members in an object initializer before
-/// <see cref="IJsonOnDeserializing"/> runs. <see cref="DecisionRow"/> needs no
-/// such constructor. It has no public one, and it holds a row read from JSON
-/// to its rules whole, in <see cref="IJsonOnDeserialized"/>.
+/// two apart by how it was constructed — see the next paragraph.
+/// </para>
+/// <para>
+/// <b>The serializer constructors, and why the platform forces them</b> —
+/// the one statement; each such constructor points here. A type must know,
+/// inside an init setter, whether code or a document is building it, and
+/// .NET 10's serializer offers no hook that runs in time on both paths. Two
+/// were measured and fail (SDK 10.0.401, 2026-09-25). A flag set in
+/// <see cref="IJsonOnDeserializing"/> comes too late: a generated context
+/// sets the init and <c>required</c> members in an object initializer before
+/// that callback runs, though the reflection path runs it first. A
+/// constructor taking every member needs <c>[SetsRequiredMembers]</c>, which
+/// silently drops the JSON-required meaning of <c>required</c>. What does run
+/// before every init setter on both paths is a
+/// <see cref="JsonConstructorAttribute"/> constructor. So each type that holds
+/// its members to a rule — <see cref="CheckerPlayDecision"/>,
+/// <see cref="CubeDecision"/>, <see cref="CheckerPlayDecisionData"/>,
+/// <see cref="CubeDecisionData"/>, <see cref="PlayCandidate"/>,
+/// <see cref="DescriptiveData"/> — has an internal one-parameter serializer
+/// constructor beside the public parameterless one code uses. It marks the
+/// instance as read, and each guard then refuses a breach as a
+/// <see cref="System.Text.Json.JsonException"/> carrying the guard's exception.
+/// A serializer constructor must bind one wire member. A kind binds its
+/// <c>"Kind"</c>, which the base holds to the type. <b>A category binds its
+/// first member only because a serializer constructor must bind one</b>:
+/// nothing about that member is special, and binding it changes nothing
+/// about how it is read. It stays required, and the absence walk
+/// (<c>WireAbsenceTests</c>) fails if it ever stops being so, since a member
+/// that is neither required nor nullable breaks the walk's first rule. The
+/// constructors are internal, so code can never mark an instance as read.
+/// This is the separate-internal-constructor pattern answering a measured
+/// ordering, not a way around validation: every rule still runs, on the same
+/// setters. <see cref="DecisionRow"/> needs no such constructor. It has no
+/// public one, and it holds a row read from JSON to its rules whole, in
+/// <see cref="IJsonOnDeserialized"/>.
 /// </para>
 ///
 /// <para>
