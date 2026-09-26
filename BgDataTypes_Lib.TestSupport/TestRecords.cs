@@ -1,6 +1,4 @@
-using BgDataTypes_Lib;
-
-namespace BgDataTypes_Lib.Tests;
+namespace BgDataTypes_Lib.TestSupport;
 
 /// <summary>
 /// Full wire records for tests. Every stored member of the record types is
@@ -17,8 +15,9 @@ namespace BgDataTypes_Lib.Tests;
 /// whose subject is construction itself (an init guard, or the order members
 /// are set in) writes its own object initializer instead.
 /// </remarks>
-internal static class TestRecords
+public static class TestRecords
 {
+    /// <summary>A position category; each argument is the member of the same name.</summary>
     public static PositionData Position(
         BoardPosition mop = default,
         int onRollNeeds = 0,
@@ -41,6 +40,7 @@ internal static class TestRecords
         IsJacoby = isJacoby,
     };
 
+    /// <summary>A decision category; each argument is the member of the same name.</summary>
     public static DecisionData Decision(
         IReadOnlyList<int>? dice = null,
         IReadOnlyList<PlayCandidate>? plays = null,
@@ -109,6 +109,7 @@ internal static class TestRecords
         UserTakerAction = userTakerAction,
     };
 
+    /// <summary>A descriptive category; each argument is the member of the same name.</summary>
     public static DescriptiveData Descriptive(
         int matchLength = 0,
         string onRollName = "",
@@ -174,6 +175,7 @@ internal static class TestRecords
         LoseBgPct = loseBgPct,
     };
 
+    /// <summary>An outcome category; each argument is the member of the same name.</summary>
     public static PlayOutcomeData Outcome(
         BoardPosition? afterBestBoard = null,
         BoardPosition? afterPlayerBoard = null) => new()

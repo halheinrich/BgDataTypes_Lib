@@ -31,7 +31,7 @@ register converters on their `JsonSerializerOptions`.
 
 ## Layout
 
-Three projects under `BgDataTypes_Lib.slnx`, governed by repo-root
+Four projects under `BgDataTypes_Lib.slnx`, governed by repo-root
 `Directory.Build.props` (TFM, `TreatWarningsAsErrors`, XML doc generation)
 and `Directory.Packages.props` (Central Package Management — no inline
 `Version=` anywhere).
@@ -98,6 +98,11 @@ and `Directory.Packages.props` (Central Package Management — no inline
 `Program.cs` is the `BenchmarkSwitcher` entry point;
 `PlayConstructionBenchmarks.cs` measures every `Play` construction path
 against the incremental `Add` spelling. See Benchmarks below.
+
+**`BgDataTypes_Lib.TestSupport/`** — `TestRecords`, the record builders,
+shipped for test projects to reference: this repository's and every
+consumer's. Not a product and not a test project; see "The test-support
+project" under Architecture.
 
 **`BgDataTypes_Lib.Tests/`** — xUnit, one test class per type or per
 behaviour area of a type (`ProblemKeyTests`, `BoardStateTests`,
@@ -235,7 +240,7 @@ Design points:
 - **Construction states every member.** Producers and tests set every
   required member, including a checker play's inactive cube half and the
   empty strings that used to be defaults. This repo's tests build records
-  through `TestRecords` (the test project), whose builders state every
+  through `TestRecords` (`BgDataTypes_Lib.TestSupport`), whose builders state every
   member and take the ones a test cares about as named arguments; each
   builder default is the member's pre-rule default, so a rewritten test
   kept its meaning.
@@ -1048,6 +1053,38 @@ instantiation exists on either path: no `MakeGenericType`, no converter
 factory — the source generator instantiates the closed converter from the
 consumer's generated code, which is why the pattern is closed (see
 Pitfalls).
+
+### The test-support project
+
+**Why it exists.** Every record states every member (see "Absence on the
+wire"), so a test that builds one by hand restates the records'
+construction — and every consumer's tests did, each with a builder of its
+own. The producer owns that knowledge, so the producer ships the builders:
+`TestRecords`, in `BgDataTypes_Lib.TestSupport`, is the one way tests build
+records, here and in every consumer (each consumer's leg moves its tests
+onto it). This suite uses it too, so the builders are exercised against the
+real records and a change to a record's construction breaks one place.
+
+**Posture** — the BgUiPrimitives_Razor test-support project is the
+precedent, and all three of its properties are mirrored:
+
+- **Not packable.** Consumers reach it by `ProjectReference` from their test
+  projects.
+- **References only the library** — no other project and no package; in
+  particular no test framework, so a consumer's test project keeps its own.
+  The library grants it no internals (`InternalsVisibleTo` names this suite
+  only), so a builder can build nothing a producer cannot.
+- **Production code cannot use it.** The assembly declares
+  `[UnsupportedOSPlatform("browser")]`: every project that can reach a
+  browser publish declares the browser platform, and there a use of this
+  assembly is CA1416, an error under `TreatWarningsAsErrors`. It declares no
+  `IsTrimmable`. Stated limit, as in the precedent: a product that declares
+  no browser platform (a plain class library) is not stopped by the
+  declaration; this repository's half is that the library references no
+  project at all.
+
+`TestSupportPostureTests` pins each of these, reading the two project files
+staged beside the test assembly.
 
 ### Mop layout
 

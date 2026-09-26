@@ -18,10 +18,26 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BgDataTypes_Lib\BgDataTypes_Lib.csproj" />
+    <!-- The builders consumers' tests use, used here too: this suite builds
+         its records through them, so they are exercised against the real
+         records and a change to a record's construction breaks one place. -->
+    <ProjectReference Include="..\BgDataTypes_Lib.TestSupport\BgDataTypes_Lib.TestSupport.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="BgDataTypes_Lib.TestSupport" />
+  </ItemGroup>
+
+  <!-- The two project files the posture pins read, linked (not copied into
+       source control) and staged beside the test assembly, so the pins read
+       the files the projects are actually built from. Moving or renaming
+       either breaks this build rather than a test at runtime. -->
+  <ItemGroup>
+    <None Include="..\BgDataTypes_Lib\BgDataTypes_Lib.csproj"
+          Link="Posture\BgDataTypes_Lib.csproj" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\BgDataTypes_Lib.TestSupport\BgDataTypes_Lib.TestSupport.csproj"
+          Link="Posture\BgDataTypes_Lib.TestSupport.csproj" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Local-only corpus for the Too Good predicate's exercise check
