@@ -700,6 +700,46 @@ public class BoardStateTests
     }
 
     [Fact]
+    public void FlippedCopy_IsTheValuesFlip()
+    {
+        // One flip rule, on the value: the board's flip states none of its own.
+        var s = AsymmetricBoard();
+
+        Assert.Equal(s.ToPosition().Flipped(), s.FlippedCopy().ToPosition());
+    }
+
+    [Fact]
+    public void Flip_RecomputesHighPointOccupied_ForTheNewFrame()
+    {
+        // The on-roll player's highest checker is on 5 and the opponent's
+        // furthest back on 19 (its own 6-point), so the high point is 5
+        // before a flip and 6 after it. The other flip fixtures keep the same
+        // high point in both frames, so they cannot see a missed recompute.
+        var s = BoardState.FromMop(
+            [0, 3, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -4, 0, 0, -2, 0, 0, 0]);
+        Assert.Equal(5, s.HighPointOccupied);
+
+        Assert.Equal(6, s.FlippedCopy().HighPointOccupied);
+
+        s.ApplyPlay([]);   // a pass: the in-place flip alone
+        Assert.Equal(6, s.HighPointOccupied);
+    }
+
+    [Fact]
+    public void ApplyPlay_FlipsByTheValuesRule()
+    {
+        // The position the play reaches in the mover's frame, then the value's
+        // flip, is what ApplyPlay leaves.
+        var s = AsymmetricBoard();
+        var reachedInMoversFrame = s.Copy();
+        reachedInMoversFrame.ApplyMove(new Move(13, 9));
+
+        s.ApplyPlay([new(13, 9)]);
+
+        Assert.Equal(reachedInMoversFrame.ToPosition().Flipped(), s.ToPosition());
+    }
+
+    [Fact]
     public void FlippedCopy_FlipOfFlip_IsIdentity()
     {
         var s = AsymmetricBoard();

@@ -380,6 +380,14 @@ needs before touching it:
   `BoardState` builds from it and compares through it.
 - **No frame of its own.** A position does not record whose turn it
   describes; every member that stores one states its frame.
+- **One flip rule, here.** `Flipped()` returns the position seen from the
+  other side: slot `i` takes the negated count of slot `25 - i`, so the
+  points mirror, the bars swap and the signs invert. It is an involution,
+  allocation-free, and needs no check (the bars' signs swap with the bars;
+  the side totals swap). It is the only statement of the flip: `BoardState`
+  flips — in `ApplyPlay`, `TryApplyPlay` and `FlippedCopy` — by taking its
+  position, flipping it here and writing it back, so the rule cannot drift
+  between the value and the board.
 - **The starting positions are values.** `Standard`, `Nackgammon` and
   `Bg960(seed)` define the layouts once, here; `BoardState`'s factories of
   the same names build a board from them, so "is this the standard start"
@@ -445,10 +453,11 @@ Three layers of mutation, in increasing scope:
   This is the only public way to advance past a turn boundary; callers
   reasoning in on-roll POV never need to flip explicitly.
 
-- **`Flip()`** — `private`. Implementation mechanic for `ApplyPlay` and
-  `FlippedCopy()`. Negates and reverses the array (point `i` ↔ point
-  `25-i`, swapping the bars in the process), then recomputes
-  `HighPointOccupied` from scratch. Stays private: live-state flips
+- **`Flip()`** — `private`. Implementation mechanic for `ApplyPlay`,
+  `TryApplyPlay` and `FlippedCopy()`. It states no rule of its own: it
+  flips the board's position by `BoardPosition.Flipped()` (point `i` ↔
+  point `25-i`, the bars swapping, the signs inverting), writes it back, and
+  recomputes `HighPointOccupied` from scratch. Stays private: live-state flips
   happen only inside `ApplyPlay`, so callers advancing state always
   reason in on-roll POV. `FlippedCopy()` is the public flipped-*copy*
   primitive for querying a position from the other player's frame
@@ -1185,6 +1194,7 @@ public readonly struct BoardPosition :
     public static BoardPosition Bg960(int? seed = null);      // random, symmetric, no blots
     public int this[int point] { get; }                       // slots 0–25
     public void CopyTo(Span<int> destination);                // at least 26 elements
+    public BoardPosition Flipped();                           // the other side's view; the one flip rule
     public bool Equals(BoardPosition other);                  // + ==, !=, Equals(object), GetHashCode
     public override string ToString();                        // "1:-2 6:5 …", or "empty"
 }
@@ -1709,7 +1719,9 @@ measure" is not a valid comparison on this hardware.
   expects to inspect a state "from the original mover's POV" after a
   turn must take a `Copy()` *before* calling `ApplyPlay`. To *view* a
   position from the other player's frame without advancing state, use
-  `FlippedCopy()` — never re-encode negate-and-reverse in a consumer.
+  `BoardPosition.Flipped()` (a value, allocation-free) or `FlippedCopy()`
+  (a board) — never re-encode negate-and-reverse in a consumer; the
+  value's `Flipped()` is the one statement of the rule.
 - **`AnalysisMode` and `AnalysisLevel` always travel as a pair, and
   `Unknown`/`Unknown` is data, not an error.** Both zero values are
   deliberate — "depth not recorded" — and a producer states them: the

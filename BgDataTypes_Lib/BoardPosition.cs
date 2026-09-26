@@ -54,8 +54,8 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// <b>The frame is the holder's to state.</b> A position does not record
 /// whose turn it describes; every member that stores one states its frame
-/// in its own documentation. <see cref="BoardState.FlippedCopy"/> re-expresses
-/// a position from the other player's frame.
+/// in its own documentation. <see cref="Flipped"/> re-expresses a position
+/// from the other player's frame.
 /// </para>
 /// <para>
 /// <b>On the wire</b> a position is a JSON array of its 26 counts in slot
@@ -365,6 +365,30 @@ public readonly struct BoardPosition :
         ReadOnlySpan<sbyte> counts = _counts;
         for (int i = 0; i < SlotCount; i++)
             destination[i] = counts[i];
+    }
+
+    /// <summary>
+    /// This position seen from the other side — re-expressed in the other
+    /// player's frame, as <see cref="BoardState.ApplyPlay"/> leaves a board
+    /// at a turn boundary. Slot <c>i</c> takes the negated count of slot
+    /// <c>25 - i</c>: the points mirror, the bars swap (0 ↔ 25), and every
+    /// sign inverts, so the other player's checkers become the positive
+    /// ones. The one statement of the flip: every flip in this library goes
+    /// through it.
+    /// </summary>
+    /// <remarks>
+    /// An involution — <c>p.Flipped().Flipped() == p</c> — and
+    /// allocation-free. The result is well-formed without a check: each bar's
+    /// count moves to the other bar with its sign inverted, so each bar still
+    /// holds only its own side's checkers, and the two side totals swap.
+    /// </remarks>
+    public BoardPosition Flipped()
+    {
+        ReadOnlySpan<sbyte> counts = _counts;
+        var flipped = new Counts();
+        for (int i = 0; i < SlotCount; i++)
+            flipped[i] = (sbyte)-counts[SlotCount - 1 - i];
+        return new BoardPosition(flipped);
     }
 
     /// <summary>

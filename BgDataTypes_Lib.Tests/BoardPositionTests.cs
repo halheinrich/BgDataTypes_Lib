@@ -253,6 +253,79 @@ public class BoardPositionTests
         Assert.Throws<ArgumentException>("destination", () => position.CopyTo(new int[25]));
     }
 
+    // ── The flip ──────────────────────────────────────────────────
+
+    public static TheoryData<string, int[]> FlipCases => new()
+    {
+        { "standard", StandardCounts },
+        { "both bars", BothBarsCounts },
+        { "one side only, on its bar", [0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2] },
+        { "every checker on the bars", [-15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15] },
+        { "the empty board", new int[26] },
+    };
+
+    [Theory]
+    [MemberData(nameof(FlipCases))]
+    public void Flipped_MirrorsThePoints_SwapsTheBars_InvertsTheSigns(string name, int[] counts)
+    {
+        var flipped = new BoardPosition(counts).Flipped();
+
+        for (int i = 0; i < 26; i++)
+            Assert.True(-counts[25 - i] == flipped[i], $"{name}: slot {i}");
+        Assert.Equal(-counts[25], flipped[0]);
+        Assert.Equal(-counts[0], flipped[25]);
+    }
+
+    [Theory]
+    [MemberData(nameof(FlipCases))]
+    public void Flipped_IsAnInvolution(string name, int[] counts)
+    {
+        var position = new BoardPosition(counts);
+
+        Assert.True(position == position.Flipped().Flipped(), name);
+    }
+
+    [Theory]
+    [MemberData(nameof(FlipCases))]
+    public void Flipped_IsWellFormed(string name, int[] counts)
+    {
+        // The flip builds its result without the outside-data check; the
+        // same counts pass that check.
+        Span<int> flipped = stackalloc int[26];
+        new BoardPosition(counts).Flipped().CopyTo(flipped);
+
+        Assert.True(BoardPosition.TryCreate(flipped, out _), name);
+    }
+
+    [Fact]
+    public void Flipped_AnAsymmetricPosition_IsADifferentPosition()
+    {
+        // Guards against a flip that returns its input: the standard start
+        // and the empty board are flip-symmetric, so they cannot tell.
+        var position = new BoardPosition(BothBarsCounts);
+
+        Assert.NotEqual(position, position.Flipped());
+        Assert.Equal(BoardPosition.Standard, BoardPosition.Standard.Flipped());
+    }
+
+    [Fact]
+    public void Flipped_AllocatesNothing()
+    {
+        var position = new BoardPosition(BothBarsCounts);
+        int sink = position.Flipped()[0];   // warm
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            var flipped = position.Flipped();
+            sink += flipped[0] + flipped[25];
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(0, allocated);
+        Assert.NotEqual(int.MinValue, sink);
+    }
+
     // ── Text form ─────────────────────────────────────────────────
 
     [Fact]
