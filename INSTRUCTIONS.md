@@ -271,14 +271,13 @@ Design points:
   included — through `[JsonRequired]`, since the type states it and code
   never does. A session's facts are all required: a money session's Jacoby
   rule has no "unknown" (the `PositionData.IsJacoby?` it replaced did).
-  `WireAbsenceTests` walks the graph from the context's
-  own metadata, from each kind's contract and each session kind's (139
-  members across four documents — each record kind and each row kind, the
-  play's a match and the cube's money — and eleven types; the previous
-  count stated here, 124, was already stale at `ca83ab1`, which walked
-  128) and pins
-  both halves of the rule on both paths, plus that every member is exactly
-  one kind. A nullable member's absence reads exactly as its explicit
+  `WireAbsenceTests` walks every member of every type of the wire graph,
+  taken from the context's own metadata through each kind's contract and
+  each session kind's, and pins both halves of the rule on both paths,
+  plus that every member is exactly one kind. Its completeness check,
+  `TheWalk_ReachesEveryTypeOfTheGraph`, fails when the walk stops reaching
+  a type of the graph or reaches one it does not list, so a member added to
+  any type the walk reaches is a new case without an edit. A nullable member's absence reads exactly as its explicit
   `null`: as `null`, or refused when `null` breaks a rule of the decision's
   kind (a checker row states its roll).
 - **An explicit `null` for a member that is not nullable is a
@@ -1024,10 +1023,9 @@ Design points a maintainer needs before touching the type:
   unchanged. `TryDerive` reads the record's `Session` by its kind into the
   key's two score productions (a private `Score` of the key's own, which
   the parser also builds, so both doors reach the one emitter).
-  `ProblemKeyByteIdentityTests` holds a sweep of 138 builder variants —
-  every decision kind on four boards, every score shape the grammar spells,
-  every cube shape — to the literal texts captured from the `ca83ab1`
-  build. The parse door's acceptance set is unchanged: it still accepts
+  `ProblemKeyByteIdentityTests` holds a sweep of the builders' variants —
+  every decision kind, every score shape the grammar spells, every cube
+  shape — to the literal texts captured from the `ca83ab1` build. The parse door's acceptance set is unchanged: it still accepts
   keys no record can produce now (a Crawford game at `1a1`, as the Crawford
   cube keys before it), so no stored key stops loading.
 - **No version token inside the key.** The containing stats document's
