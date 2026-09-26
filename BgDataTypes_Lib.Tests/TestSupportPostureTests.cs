@@ -7,9 +7,10 @@ namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
 /// The declarations that keep the test-support assembly out of products, and
-/// the direction of the dependency between it and the library. The builders
-/// are for tests — this repository's and every consumer's — and must never
-/// reach a product; what stops that from this repository's side is one
+/// the direction of the dependency between it and the library. What it ships
+/// — the record builders and the allocation probe, what consumers' tests
+/// share — is for tests, this repository's and every consumer's, and must
+/// never reach a product; what stops that from this repository's side is one
 /// assembly-level declaration, and these pin that nobody quietly removes it.
 /// The BgUiPrimitives_Razor test-support project is the precedent.
 /// </summary>
@@ -105,5 +106,21 @@ public class TestSupportPostureTests
             a => a.Name!.StartsWith("xunit", StringComparison.OrdinalIgnoreCase)
                 || a.Name.StartsWith("nunit", StringComparison.OrdinalIgnoreCase)
                 || a.Name.StartsWith("Microsoft.VisualStudio.TestPlatform", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Added (halheinrich/backgammon#273): the allocation pins' measurement is
+    // what consumers' tests share, so it is stated once, in this assembly,
+    // public to every repository's test project — and this suite, which pins
+    // it, keeps no copy of its own. A copy had already drifted in a consumer.
+    [Fact]
+    public void TheAllocationProbe_IsStatedOnce_InTheTestSupportAssembly()
+    {
+        Assert.Same(TestSupport, typeof(AllocationProbe).Assembly);
+        Assert.True(typeof(AllocationProbe).IsPublic);
+        Assert.Equal("BgDataTypes_Lib.TestSupport", typeof(AllocationProbe).Namespace);
+
+        Assert.DoesNotContain(
+            typeof(TestSupportPostureTests).Assembly.GetTypes(),
+            t => t.Name == nameof(AllocationProbe));
     }
 }

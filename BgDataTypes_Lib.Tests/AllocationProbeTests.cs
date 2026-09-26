@@ -1,11 +1,13 @@
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
-/// The allocation pins' measurement (<see cref="AllocationProbe"/>), pinned on
-/// its own: it reads a path that allocates nothing as nothing, a one-off
-/// allocation as nothing, and a path that allocates on its calls as what it
-/// allocates. The pins are only as good as this, so both halves are
-/// deterministic here rather than left to a race the runtime rarely runs.
+/// The allocation pins' measurement (<see cref="AllocationProbe"/>, shipped in
+/// the test-support project for every repository's pins), pinned on its own,
+/// here where it is written: it reads a path that allocates nothing as
+/// nothing, a one-off allocation as nothing, and a path that allocates on its
+/// calls as what it allocates. The pins are only as good as this, so both
+/// halves are deterministic here rather than left to a race the runtime
+/// rarely runs.
 /// </summary>
 public class AllocationProbeTests
 {
@@ -19,6 +21,53 @@ public class AllocationProbeTests
 
         Assert.Equal(0, AllocationProbe.SteadyStateBytes(() => sink++));
         Assert.True(sink > 0);
+    }
+
+    [Fact]
+    public void TheProbe_StopsAtTheFirstWindowThatAllocatesNothing_AndOtherwiseMeasuresEveryWindow()
+    {
+        // Added when the probe moved to the test-support project: the early
+        // exit is part of the measurement as stated — a clean window ends it —
+        // and the one thing a consumer's copy had dropped. The result alone
+        // cannot show it (the fewest bytes over every window is the same
+        // number), so the calls the probe makes are counted. A path that
+        // allocates on its calls gets the warm-up and every window. A path
+        // that allocates nothing gets the warm-up and whole windows up to the
+        // first clean one — fewer than every window. Not "exactly one
+        // window": a one-off the runtime makes on the thread could dirty the
+        // first, which is what the probe exists to absorb.
+        const int everyWindow = (1 + AllocationProbe.Windows) * AllocationProbe.CallsPerWindow;
+
+        int allocating = 0;
+        AllocationProbe.SteadyStateBytes(() => { allocating++; _kept = new byte[16]; });
+        Assert.Equal(everyWindow, allocating);
+
+        int clean = 0;
+        AllocationProbe.SteadyStateBytes(() => clean++);
+        AssertStoppedAtACleanWindow(clean, atLeast: 2 * AllocationProbe.CallsPerWindow);
+
+        // A one-off in the first measured window: a later one is clean, and
+        // the probe stops there.
+        int oneOff = 0;
+        AllocationProbe.SteadyStateBytes(() =>
+        {
+            if (++oneOff == AllocationProbe.CallsPerWindow + 1)
+                _kept = new byte[4096];
+        });
+        AssertStoppedAtACleanWindow(oneOff, atLeast: 3 * AllocationProbe.CallsPerWindow);
+
+        static void AssertStoppedAtACleanWindow(int calls, int atLeast)
+        {
+            Assert.True(calls < everyWindow, $"{calls} calls: the probe measured every window");
+            Assert.True(calls >= atLeast, $"{calls} calls: fewer than the warm-up and the windows before a clean one");
+            Assert.Equal(0, calls % AllocationProbe.CallsPerWindow);
+        }
+    }
+
+    [Fact]
+    public void ANullPath_IsRefused()
+    {
+        Assert.Equal("call", Assert.Throws<ArgumentNullException>(() => AllocationProbe.SteadyStateBytes(null!)).ParamName);
     }
 
     [Fact]

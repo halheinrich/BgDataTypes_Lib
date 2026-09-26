@@ -4,10 +4,12 @@
        generation are repo-wide policy — see ..\Directory.Build.props. Only
        per-project decisions live here.
 
-       What this is: the record builders, shipped for TEST projects to
-       reference — this repository's and every consumer's — so a test builds a
-       well-formed decision record by stating only what it cares about, and no
-       test anywhere restates the records' construction. It is not a product
+       What this is: what consumers' tests share, shipped for TEST projects to
+       reference — this repository's and every consumer's. The record builders
+       (TestRecords), so a test builds a well-formed decision record by stating
+       only what it cares about and no test anywhere restates the records'
+       construction; and the allocation probe (AllocationProbe), so every
+       repository's allocation pins measure one way. It is not a product
        assembly and not a test project: it carries no test SDK, so
        `dotnet test` does not try to run it. The BgUiPrimitives_Razor
        test-support project is the precedent it mirrors (INSTRUCTIONS.md,

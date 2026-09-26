@@ -127,10 +127,11 @@ and `Directory.Packages.props` (Central Package Management — no inline
 `PlayConstructionBenchmarks.cs` measures every `Play` construction path
 against the incremental `Add` spelling. See Benchmarks below.
 
-**`BgDataTypes_Lib.TestSupport/`** — `TestRecords`, the record builders,
-shipped for test projects to reference: this repository's and every
-consumer's. Not a product and not a test project; see "The test-support
-project" under Architecture.
+**`BgDataTypes_Lib.TestSupport/`** — what consumers' tests share, shipped
+for test projects to reference, this repository's and every consumer's:
+`TestRecords`, the record builders, and `AllocationProbe`, the allocation
+pins' one measurement. Not a product and not a test project; see "The
+test-support project" under Architecture.
 
 **`BgDataTypes_Lib.Tests/`** — xUnit, one test class per type or per
 behaviour area of a type (`ProblemKeyTests`, `BoardStateTests`,
@@ -146,14 +147,16 @@ halheinrich/backgammon#187) — vacuous on an empty or absent corpus by
 design, per the AGENTS.md TestData rule, so it cannot gate and nothing on
 CI depends on it.
 
-Every pin that says a path allocates nothing measures through the
-suite's `AllocationProbe`: a warm-up of a whole window's calls, then the
-fewest bytes any of several measured windows allocated on the test thread.
-A one-off allocation the runtime makes there lands in one window at most,
-so it cannot fail a pin, while a path that allocates on its calls
-allocates in every window and still does; `AllocationProbeTests` pins both
-halves. (A single measured loop failed once on an allocation that was not
-the path's — the rider of halheinrich/backgammon#273's match-context leg.)
+Every pin that says a path allocates nothing measures through
+`AllocationProbe`, in the test-support project, so this suite's pins and
+every consumer's measure one way: a warm-up of a whole window's calls, then
+the fewest bytes any of several measured windows allocated on the test
+thread, stopping at the first that allocates nothing. A one-off allocation
+the runtime makes there lands in one window at most, so it cannot fail a
+pin, while a path that allocates on its calls allocates in every window and
+still does; `AllocationProbeTests`, in this suite, pins both halves. (A
+single measured loop failed once on an allocation that was not the path's —
+the rider of halheinrich/backgammon#273's match-context leg.)
 
 ## Architecture
 
@@ -1764,6 +1767,16 @@ own. The producer owns that knowledge, so the producer ships the builders:
 records, here and in every consumer (each consumer's leg moves its tests
 onto it). This suite uses it too, so the builders are exercised against the
 real records and a change to a record's construction breaks one place.
+
+**What it holds: what consumers' tests share.** The project began as the
+record builders' home; its purpose is what every repository's tests would
+otherwise each restate. The second thing so shared is `AllocationProbe`,
+the allocation pins' measurement (halheinrich/backgammon#273): a consumer
+copied it and the copy drifted within a leg (it dropped the early exit), so
+the one statement lives here, public, and consumers' tests reference it
+rather than copy it. It depends on the runtime alone, so the posture below
+holds unchanged; its behaviour is pinned by `AllocationProbeTests` in this
+suite, and that the suite keeps no copy by `TestSupportPostureTests`.
 
 **Posture** — the BgUiPrimitives_Razor test-support project is the
 precedent, and all three of its properties are mirrored:
