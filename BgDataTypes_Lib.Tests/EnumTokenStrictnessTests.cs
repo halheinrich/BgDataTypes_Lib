@@ -6,8 +6,9 @@ using BgDataTypes_Lib;
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
-/// Pins the string-token-exact contract of this library's five wire enums
-/// (halheinrich/backgammon#164): every reader of a stored or wire token accepts
+/// Pins the string-token-exact contract of this library's wire enums
+/// (halheinrich/backgammon#164) — <see cref="DecisionKind"/>'s is pinned with
+/// the rest of the kind's wire rules, in DecisionKindTests: every reader of a stored or wire token accepts
 /// the declared member names and rejects numeric ordinals, so no payload can
 /// silently re-couple to member declaration numbering — which AnalysisLevel in
 /// particular reserves the right to change. Which bytes the names are stays
@@ -71,6 +72,10 @@ public class EnumTokenStrictnessTests
         AssertStringTokenExact(AnalysisMode.BookRollout);
 
     [Fact]
+    public void BookEdition_IsStringTokenExact() =>
+        AssertStringTokenExact(BookEdition.V2);
+
+    [Fact]
     public void CubeAction_IsStringTokenExact() =>
         AssertStringTokenExact(CubeAction.Take);
 
@@ -92,6 +97,7 @@ public class EnumTokenStrictnessTests
     {
         AssertEveryMemberRoundTrips<AnalysisLevel>();
         AssertEveryMemberRoundTrips<AnalysisMode>();
+        AssertEveryMemberRoundTrips<BookEdition>();
         AssertEveryMemberRoundTrips<CubeAction>();
         AssertEveryMemberRoundTrips<CubeClaim>();
         AssertEveryMemberRoundTrips<CubeOwner>();
