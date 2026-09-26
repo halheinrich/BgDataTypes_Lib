@@ -128,25 +128,46 @@ public static class TestRecords
 
     /// <summary>
     /// A position category; each argument is the member of the same name. By
-    /// default the standard start at 0-0 in a 7-point match, the cube centred
-    /// on 1. The pip counts are not arguments: the category derives them from
-    /// <paramref name="mop"/>.
+    /// default the standard start at 0-0 in a 7-point match (<see cref="MatchSession"/>'s
+    /// default), the cube centred on 1. The pip counts are not arguments: the
+    /// category derives them from <paramref name="mop"/>.
     /// </summary>
     public static PositionData Position(
         BoardPosition? mop = null,
-        int onRollNeeds = 7,
-        int opponentNeeds = 7,
         int cubeSize = 1,
         CubeOwner cubeOwner = CubeOwner.Centered,
-        bool isCrawford = false,
-        bool? isJacoby = null) => new()
+        Session? session = null) => new()
     {
         Mop = mop ?? BoardPosition.Standard,
-        OnRollNeeds = onRollNeeds,
-        OpponentNeeds = opponentNeeds,
         CubeSize = cubeSize,
         CubeOwner = cubeOwner,
+        Session = session ?? MatchSession(),
+    };
+
+    /// <summary>
+    /// A match, as it stands at the decision; each argument is the member of
+    /// the same name. By default a 7-point match at 0-0 — both players
+    /// 7-away — outside the Crawford game.
+    /// </summary>
+    public static MatchSession MatchSession(
+        int length = 7,
+        int onRollNeeds = 7,
+        int opponentNeeds = 7,
+        bool isCrawford = false) => new()
+    {
+        Length = length,
+        OnRollNeeds = onRollNeeds,
+        OpponentNeeds = opponentNeeds,
         IsCrawford = isCrawford,
+    };
+
+    /// <summary>
+    /// A money session, as it stands at the decision; each argument is the
+    /// member of the same name. By default under the Jacoby rule, XG's
+    /// default for a money session.
+    /// </summary>
+    public static MoneySession MoneySession(bool isJacoby = true) => new()
+    {
         IsJacoby = isJacoby,
     };
 
@@ -232,12 +253,12 @@ public static class TestRecords
 
     /// <summary>
     /// A descriptive category; each argument is the member of the same name.
-    /// By default Alice against Bob in a 7-point match, whose game started
-    /// from the standard position. The source file is not here: a record
-    /// derives it from its id.
+    /// By default Alice against Bob, in a game that started from the standard
+    /// position. The source file is not here: a record derives it from its
+    /// id. Nor is a match's length: it is the match's own fact
+    /// (<see cref="MatchSession"/>).
     /// </summary>
     public static DescriptiveData Descriptive(
-        int matchLength = 7,
         string? onRollName = "Alice",
         string? opponentName = "Bob",
         string? title = null,
@@ -247,7 +268,6 @@ public static class TestRecords
         string? comment = null,
         bool flagged = false) => new()
     {
-        MatchLength = matchLength,
         OnRollName = onRollName,
         OpponentName = opponentName,
         Title = title,

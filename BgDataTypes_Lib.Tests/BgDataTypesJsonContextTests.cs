@@ -45,13 +45,14 @@ public class BgDataTypesJsonContextTests
         return TestRecords.CheckerPlay(
             id: new XgDecisionId("match.xg", Game: 4, MoveNumber: 22, IsCube: false),
             xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:64:0:0:0:0:10",
+            // The Crawford game at 1-away to 5-away: the fixture used to state
+            // it at 3-away to 5-away, which no match can reach and the match
+            // session now refuses (halheinrich/backgammon#273).
             position: TestRecords.Position(
                 mop: new BoardPosition(mop),
-                onRollNeeds: 3,
-                opponentNeeds: 5,
                 cubeSize: 2,
                 cubeOwner: CubeOwner.OnRoll,
-                isCrawford: true),
+                session: TestRecords.MatchSession(length: 9, onRollNeeds: 1, opponentNeeds: 5, isCrawford: true)),
             decision: TestRecords.CheckerPlayData(
                 dice: [6, 4],
                 plays: [
@@ -76,7 +77,6 @@ public class BgDataTypesJsonContextTests
                 ],
                 userPlayIndex: 1),
             descriptive: TestRecords.Descriptive(
-                matchLength: 9,
                 onRollName: "Mochy",
                 opponentName: "Falafel",
                 title: "Final",
@@ -92,11 +92,9 @@ public class BgDataTypesJsonContextTests
         xgid: "XGID=-b----E-C---eE---c-e----B-:1:1:1:00:0:0:1:0:10",
         position: TestRecords.Position(
             mop: BoardPosition.Empty,
-            onRollNeeds: 0,
-            opponentNeeds: 0,
             cubeSize: 2,
             cubeOwner: CubeOwner.Centered,
-            isJacoby: true),
+            session: TestRecords.MoneySession(isJacoby: true)),
         decision: TestRecords.CubeData(
             analysisMode: AnalysisMode.BookRollout,
             analysisLevel: AnalysisLevel.XgRoller,
@@ -120,7 +118,6 @@ public class BgDataTypesJsonContextTests
             userDoublerAction: CubeAction.Double,
             userTakerAction: CubeAction.Take),
         descriptive: TestRecords.Descriptive(
-            matchLength: 0,
             onRollName: "Hal",
             opponentName: "Bot"));
 
@@ -367,14 +364,16 @@ public class BgDataTypesJsonContextTests
     private static HashSet<Type> WireClosure()
     {
         // Roots: the wire units — the document roots, and the types that
-        // define their own wire token via a bundled converter. Move and the
-        // two decision kinds are roots because no property walk can reach
-        // them: Play's converter stops the walk at Play yet emits Move
-        // elements, and BgDecisionData's stops it at the base yet delegates
-        // to the kinds, each resolving them through the active options.
+        // define their own wire token via a bundled converter. Move, the two
+        // decision kinds and the two session kinds are roots because no
+        // property walk can reach them: Play's converter stops the walk at
+        // Play yet emits Move elements, and BgDecisionData's and Session's
+        // stop it at the base yet delegate to the kinds, each resolving them
+        // through the active options.
         Type[] roots =
         [
             typeof(BgDecisionData), typeof(CheckerPlayDecision), typeof(CubeDecision),
+            typeof(Session), typeof(MoneySession), typeof(MatchSession), typeof(SessionKind),
             typeof(DecisionRow), typeof(DecisionKind),
             typeof(Play), typeof(Move), typeof(DecisionId),
             typeof(ProblemKey), typeof(DiceRoll), typeof(BoardPosition),

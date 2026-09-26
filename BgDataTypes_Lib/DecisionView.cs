@@ -43,11 +43,7 @@ internal sealed class DecisionView : IDecisionFilterData
     public PlayRanking Ranking { get; }
     public DecisionKind Kind => _record.Kind;
     public string? Player => _record.Player;
-    public int OnRollNeeds => _record.OnRollNeeds;
-    public int OpponentNeeds => _record.OpponentNeeds;
-    public bool IsCrawford => _record.IsCrawford;
-    public int MatchLength => _record.MatchLength;
-    public bool? IsJacoby => _record.IsJacoby;
+    public Session Session => _record.Session;
     public int? MoveNumber => _record.MoveNumber;
     public bool? IsStandardStart => _record.IsStandardStart;
     public BoardPosition Board => _record.Board;

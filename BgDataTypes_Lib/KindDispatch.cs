@@ -6,7 +6,8 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// How a document that states its kind is read as that kind — the one
 /// mechanism behind every converter here that reads a closed family of kinds
-/// (<see cref="BgDecisionDataJsonConverter"/>, a decision's). Each such
+/// (<see cref="BgDecisionDataJsonConverter"/>, a decision's, and
+/// <see cref="SessionJsonConverter"/>, a session's). Each such
 /// converter supplies only its family's mapping from a kind to that kind's
 /// generated contract; finding the kind, refusing a document without exactly
 /// one known kind, and handing the whole document to the contract are stated

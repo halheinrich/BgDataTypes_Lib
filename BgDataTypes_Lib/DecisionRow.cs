@@ -37,10 +37,20 @@ namespace BgDataTypes_Lib;
 /// </para>
 ///
 /// <para>
+/// <b>It carries the session's kind the same way</b>
+/// (<see cref="SessionKind"/>): one column per fact of each kind, the other
+/// kind's empty — a money row's <see cref="MatchLength"/>, away scores and
+/// Crawford flag, a match row's <see cref="IsJacoby"/>. The typed
+/// <see cref="Session"/> is the columns as the record's kind, excluded from
+/// JSON as <see cref="Dice"/> is.
+/// </para>
+///
+/// <para>
 /// <b>Read back whole.</b> A row read from JSON is held, once every column is
-/// read, to what a projection of a record guarantees — the kind's columns
-/// present and the other kind's empty, the roll two die faces, the rules of
-/// <see cref="DecisionRules"/> — and a document breaking any of them is
+/// read, to what a projection of a record guarantees — each kind's columns
+/// present and the other kind's empty, the roll two die faces, the session's
+/// own rules, the rules of <see cref="DecisionRules"/> — and a document
+/// breaking any of them is
 /// refused with a <see cref="JsonException"/>, on the reflection path and
 /// through <see cref="BgDataTypesJsonContext"/> alike. Every column but the
 /// nullable ones is <c>required</c>, per the wire rule stated on
@@ -50,6 +60,11 @@ namespace BgDataTypes_Lib;
 /// </summary>
 public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 {
+    // The session columns as the record's kind: set once, by whichever of the
+    // two ways a row comes into being — From, with the record's own session,
+    // or a read, with the session the columns state (OnDeserialized).
+    private Session? _session;
+
     /// <summary>The serializer's and <see cref="From"/>'s constructor; there is no other.</summary>
     [JsonConstructor]
     internal DecisionRow()
@@ -83,7 +98,13 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             },
             static cube => ((int?)null, cube.Decision.Depth, cube.Decision.NoDoubleEquity));
 
-        return new DecisionRow
+        // The session's own columns, the other kind's empty.
+        var session = record.Session;
+        var (length, onRollNeeds, opponentNeeds, isCrawford, isJacoby) = session.Match(
+            static money => ((int?)null, (int?)null, (int?)null, (bool?)null, (bool?)money.IsJacoby),
+            static match => ((int?)match.Length, (int?)match.OnRollNeeds, (int?)match.OpponentNeeds, (bool?)match.IsCrawford, (bool?)null));
+
+        var row = new DecisionRow
         {
             Kind = record.Kind,
             Id = record.Id,
@@ -91,7 +112,6 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             Ranking = ranking,
             Result = view.PlayerResult.Kind,
             Error = view.PlayerResult.TryGetError(out double error) ? error : null,
-            MatchLength = record.MatchLength,
             Player = record.Player,
             IsStandardStart = record.IsStandardStart,
             Roll = roll,
@@ -99,14 +119,18 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             AnalysisMode = view.AnalysisMode,
             AnalysisLevel = view.AnalysisLevel,
             Equity = equity,
-            OnRollNeeds = record.OnRollNeeds,
-            OpponentNeeds = record.OpponentNeeds,
-            IsCrawford = record.IsCrawford,
-            IsJacoby = record.IsJacoby,
+            SessionKind = session.Kind,
+            MatchLength = length,
+            OnRollNeeds = onRollNeeds,
+            OpponentNeeds = opponentNeeds,
+            IsCrawford = isCrawford,
+            IsJacoby = isJacoby,
             Board = record.Board,
             AfterBestBoard = view.AfterBestBoard,
             AfterPlayerBoard = view.AfterPlayerBoard,
         };
+        row._session = session;
+        return row;
     }
 
     /// <summary>
@@ -157,21 +181,6 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <see cref="PlayerResultKind.NotScored"/>. The last CSV column.
     /// </summary>
     public required PlayerResultKind Result { get; init; }
-
-    /// <summary>Match length (0 = unlimited/money).</summary>
-    public required int MatchLength { get; init; }
-
-    /// <summary>
-    /// True for an unlimited (money) session
-    /// (<see cref="IDecisionFilterData.IsMoneyGame"/>). Redeclared concretely
-    /// over the interface default so the predicate is visible on the type
-    /// itself — <see cref="MatchScore"/> and other concrete-typed consumers
-    /// read it here; the type's single spelling of the rule. Derived from
-    /// <see cref="MatchLength"/>, so excluded from JSON;
-    /// <see cref="MatchLength"/> remains the CSV and JSON wire form.
-    /// </summary>
-    [JsonIgnore]
-    public bool IsMoneyGame => MatchLength == 0;
 
     /// <summary>
     /// Name of the player who made the decision
@@ -269,20 +278,35 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// </summary>
     public required double Equity { get; init; }
 
-    /// <summary>Away score for the player on roll. 0 for money games.</summary>
-    public required int OnRollNeeds { get; init; }
+    /// <summary>
+    /// The session's kind (<see cref="Session.Kind"/>), stated as a column: it
+    /// decides which kind's session columns are present — a match's
+    /// <see cref="MatchLength"/>, <see cref="OnRollNeeds"/>,
+    /// <see cref="OpponentNeeds"/> and <see cref="IsCrawford"/>, or a money
+    /// session's <see cref="IsJacoby"/> — the other kind's being empty.
+    /// </summary>
+    public required SessionKind SessionKind { get; init; }
 
-    /// <summary>Away score for the opponent. 0 for money games.</summary>
-    public required int OpponentNeeds { get; init; }
+    /// <summary>A match's length (<see cref="MatchSession.Length"/>); <see langword="null"/> for a money row — an empty CSV cell, never 0.</summary>
+    public int? MatchLength { get; init; }
 
-    /// <summary>True if this is the Crawford game; never for a cube decision (<see cref="DecisionRules.CrawfordMessage"/>).</summary>
-    public required bool IsCrawford { get; init; }
+    /// <summary>What the player on roll still needs in a match (<see cref="MatchSession.OnRollNeeds"/>); <see langword="null"/> for a money row, never 0.</summary>
+    public int? OnRollNeeds { get; init; }
+
+    /// <summary>What the opponent still needs in a match (<see cref="MatchSession.OpponentNeeds"/>); <see langword="null"/> for a money row, never 0.</summary>
+    public int? OpponentNeeds { get; init; }
 
     /// <summary>
-    /// Whether the Jacoby rule was in force
-    /// (<see cref="IDecisionFilterData.IsJacoby"/>), in the tri-state contract
-    /// <see cref="PositionData.IsJacoby"/> owns and states. Stored rather than
-    /// derived — the CSV shape carries the fact, so the row must too:
+    /// Whether this is a match's Crawford game (<see cref="MatchSession.IsCrawford"/>),
+    /// never for a cube decision (<see cref="DecisionRules.CrawfordMessage"/>);
+    /// <see langword="null"/> for a money row, which has no Crawford game.
+    /// </summary>
+    public bool? IsCrawford { get; init; }
+
+    /// <summary>
+    /// Whether a money session's Jacoby rule was in force
+    /// (<see cref="MoneySession.IsJacoby"/>); <see langword="null"/> for a match
+    /// row, which has no Jacoby rule. Every money row states it.
     /// <see cref="MatchScore"/> spells it as a suffix on the money token, the
     /// way <see cref="IsCrawford"/> spells itself as the <c>C</c> suffix on a
     /// match score.
@@ -290,21 +314,23 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     public bool? IsJacoby { get; init; }
 
     /// <summary>
-    /// Match score string derived from <see cref="OnRollNeeds"/>, <see cref="OpponentNeeds"/>,
-    /// <see cref="IsCrawford"/>, <see cref="IsMoneyGame"/>, and <see cref="IsJacoby"/>.
-    /// Used for CSV output only.
-    /// <para>
-    /// A money row spells the Jacoby rule as a suffix on the money token —
-    /// <c>moneyJ</c> or <c>moneyNJ</c> — the same in-grammar shape Crawford's
-    /// <c>C</c> suffix uses on a match score. When the rule is unknown
-    /// (<see cref="IsJacoby"/> <see langword="null"/> on a money row) the
-    /// token is the bare <c>money</c>: it states what is known and withholds
-    /// what is not, and it is neither of the two rule-bearing tokens, which is
-    /// exactly the filter-layer contract
-    /// (<see cref="IDecisionFilterData.IsJacoby"/>). Read back through a
-    /// filter surface it fails loud rather than quietly matching, <c>money</c>
-    /// being the retired token there.
-    /// </para>
+    /// The session columns as the record's kind (<see cref="IDecisionFilterData.Session"/>):
+    /// the record's own session for a row built by <see cref="From"/>, and the
+    /// session its columns state for a row read from JSON, which the read
+    /// holds to that kind's rules. Excluded from JSON; the columns are the wire
+    /// form.
+    /// </summary>
+    [JsonIgnore]
+    public Session Session => _session!;
+
+    /// <summary>
+    /// The match score as one token, for CSV output only, spelled from
+    /// <see cref="Session"/>: a match's away scores, <c>3a5a</c>, with a
+    /// <c>C</c> suffix in the Crawford game (<c>1a4aC</c>); money as
+    /// <c>moneyJ</c> or <c>moneyNJ</c> by its Jacoby rule — the same
+    /// in-grammar suffix shape. Every money session states its rule, so the
+    /// bare <c>money</c> a row whose rule was not stamped once wrote is gone
+    /// (halheinrich/backgammon#273).
     /// <para>
     /// A token, so culture-invariant: the away scores are written with the
     /// invariant culture whatever the ambient one, as every number in
@@ -312,16 +338,11 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// </para>
     /// </summary>
     [JsonIgnore]
-    public string MatchScore => IsMoneyGame
-        ? IsJacoby switch
-        {
-            true  => "moneyJ",
-            false => "moneyNJ",
-            null  => "money"
-        }
-        : IsCrawford
-            ? string.Create(CultureInfo.InvariantCulture, $"{OnRollNeeds}a{OpponentNeeds}aC")
-            : string.Create(CultureInfo.InvariantCulture, $"{OnRollNeeds}a{OpponentNeeds}a");
+    public string MatchScore => Session.Match(
+        static money => money.IsJacoby ? "moneyJ" : "moneyNJ",
+        static match => match.IsCrawford
+            ? string.Create(CultureInfo.InvariantCulture, $"{match.OnRollNeeds}a{match.OpponentNeeds}aC")
+            : string.Create(CultureInfo.InvariantCulture, $"{match.OnRollNeeds}a{match.OpponentNeeds}a"));
 
     /// <summary>
     /// The board at the moment of the decision. <b>Frame: the player on
@@ -378,14 +399,15 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <exception cref="JsonException">The row breaks one of those guarantees; the message names it.</exception>
     void IJsonOnDeserialized.OnDeserialized()
     {
+        // The identifier converter reads a JSON null as null; the member is
+        // present, so `required` does not catch it.
+        if (Id is null)
+            throw new JsonException("A row states its Id.");
+        if (Xgid is null)
+            throw new JsonException("A row states its Xgid.");
+
         string? fault = Kind switch
         {
-            // The identifier converter reads a JSON null as null; the member
-            // is present, so `required` does not catch it.
-            _ when Id is null =>
-                "A row states its Id.",
-            _ when Xgid is null =>
-                "A row states its Xgid.",
             DecisionKind.CheckerPlay when Roll is null =>
                 "A checker-play row states its Roll.",
             DecisionKind.CheckerPlay when !IsTwoFaces(Roll.Value) =>
@@ -403,14 +425,58 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             _ when !StatedText.Holds(Xgid) => StatedText.Message(nameof(Xgid)),
             _ when !StatedText.Holds(Player) => StatedText.Message(nameof(Player)),
             _ when !StatedText.Holds(AnalysisDepth) => StatedText.Message(nameof(AnalysisDepth)),
-            _ when !DecisionRules.CrawfordAllows(Kind, IsCrawford) => DecisionRules.CrawfordMessage,
-            _ when !DecisionRules.IdAgrees(Id, Kind) => DecisionRules.IdKindMessage,
-            _ when !DecisionRules.StartAgrees(Id, IsStandardStart) => DecisionRules.StartMessage,
-            _ => null,
+            _ => SessionColumnsFault(),
         };
         if (fault is not null)
             throw new JsonException(fault);
+
+        // The columns as the session's kind, held to that kind's rules as a
+        // record's session is; then the rules binding the decision to it.
+        try
+        {
+            _session = StatedSession();
+        }
+        catch (ArgumentException breach)
+        {
+            throw DocumentRefusal.Of(breach);
+        }
+        fault = !DecisionRules.CrawfordAllows(Kind, _session) ? DecisionRules.CrawfordMessage
+            : !DecisionRules.IdAgrees(Id, Kind) ? DecisionRules.IdKindMessage
+            : !DecisionRules.StartAgrees(Id, IsStandardStart) ? DecisionRules.StartMessage
+            : null;
+        if (fault is not null)
+            throw new JsonException(fault);
     }
+
+    /// <summary>
+    /// Why the session columns are not one kind's — its own stated, the other
+    /// kind's empty — or <see langword="null"/> when they are.
+    /// </summary>
+    private string? SessionColumnsFault() => SessionKind switch
+    {
+        SessionKind.Match when MatchLength is null || OnRollNeeds is null || OpponentNeeds is null || IsCrawford is null
+            || IsJacoby is not null =>
+            "A match row states its MatchLength, OnRollNeeds, OpponentNeeds and IsCrawford, and no money column: IsJacoby is empty.",
+        SessionKind.Money when IsJacoby is null
+            || MatchLength is not null || OnRollNeeds is not null || OpponentNeeds is not null || IsCrawford is not null =>
+            "A money row states its IsJacoby, and no match column: MatchLength, OnRollNeeds, OpponentNeeds and IsCrawford are empty.",
+        SessionKind.Match or SessionKind.Money => null,
+        _ => $"Unknown session kind {SessionKind}.",
+    };
+
+    /// <summary>
+    /// The session the columns state, built as a record's session is, so its
+    /// kind's rules refuse a breach with the guard's own exception.
+    /// </summary>
+    private Session StatedSession() => SessionKind == SessionKind.Match
+        ? new MatchSession
+        {
+            Length = MatchLength!.Value,
+            OnRollNeeds = OnRollNeeds!.Value,
+            OpponentNeeds = OpponentNeeds!.Value,
+            IsCrawford = IsCrawford!.Value,
+        }
+        : new MoneySession { IsJacoby = IsJacoby!.Value };
 
     private static bool IsTwoFaces(int roll) =>
         roll / 10 is >= 1 and <= 6 && roll % 10 is >= 1 and <= 6;
@@ -438,7 +504,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             CsvEscape(Xgid),
             Error?.ToString("G6", invariant),
             CsvEscape(MatchScore),
-            MatchLength.ToString(invariant),
+            MatchLength?.ToString(invariant),
             CsvEscape(Player),
             CsvEscape(SourceFile),
             Game?.ToString(invariant),

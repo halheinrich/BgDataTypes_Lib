@@ -60,10 +60,9 @@ public sealed class CubeDecision : BgDecisionData
     /// Whether the Too Good verdict can occur at this position — the
     /// offerability fact of SPEC-scoring §3's 2026-09-02 amendment
     /// (halheinrich/backgammon#187): <see langword="false"/> exactly when the
-    /// session is money (<see cref="BgDecisionData.IsMoneyGame"/>), the
-    /// Jacoby rule is known to be in force (<see cref="BgDecisionData.IsJacoby"/>
-    /// is <see langword="true"/>) and the cube is centred
-    /// (<see cref="PositionData.CubeOwner"/> is
+    /// session is money under the Jacoby rule (a <see cref="MoneySession"/>
+    /// whose <see cref="MoneySession.IsJacoby"/> is set) and the cube is
+    /// centred (<see cref="PositionData.CubeOwner"/> is
     /// <see cref="CubeOwner.Centered"/>); <see langword="true"/> otherwise.
     /// Gammons do not count under Jacoby until the cube turns, so the
     /// no-double equity never exceeds the cash there and the verdict cannot
@@ -74,31 +73,25 @@ public sealed class CubeDecision : BgDecisionData
     /// The one derivation site of this fact in the ecosystem: a consumer
     /// that offers cube answers reads it to decide whether the Too Good pair
     /// is in the option set, and never re-derives it from the record's
-    /// rules fields (the same encapsulation rule as
+    /// session (the same encapsulation rule as
     /// <see cref="CubeDecisionData.BestDoublerClaim"/>). It lives on the
     /// record, not on <see cref="CubeDecisionData"/>, because only the record
-    /// sees money, Jacoby and cube owner together; and only on a cube
-    /// decision, the one kind the question has a meaning for. Money is
-    /// reached through the record's <see cref="BgDecisionData.IsMoneyGame"/>,
-    /// never a <c>MatchLength == 0</c> restated here.
+    /// sees the session and the cube owner together; and only on a cube
+    /// decision, the one kind the question has a meaning for. Money is the
+    /// session's kind, never a match length of 0.
     /// </para>
     /// <para>
-    /// An unknown rule is not a known Jacoby rule:
-    /// <see cref="BgDecisionData.IsJacoby"/> <see langword="null"/> (a money
-    /// record whose rule was never stamped, or any match record) leaves this
-    /// <see langword="true"/> — the verdict is withheld only when the
-    /// position's own facts rule it out, the same posture
-    /// <see cref="IDecisionFilterData.IsJacoby"/> states for the filter layer.
-    /// This is a fact about the position, independent of what
-    /// <see cref="CubeDecisionData.BestClaimPair"/> derives: the derivation
-    /// reads equities only and would still name Too Good if the producer's
-    /// numbers said so.
+    /// A match has no Jacoby rule, so a match's cube decision can always be
+    /// too good; a money session always states its rule, so no unknown rule
+    /// remains to withhold the verdict on. This is a fact about the position,
+    /// independent of what <see cref="CubeDecisionData.BestClaimPair"/>
+    /// derives: the derivation reads equities only and would still name Too
+    /// Good if the producer's numbers said so.
     /// </para>
     /// </remarks>
     [JsonIgnore]
     public bool CanBeTooGood =>
-        !(IsMoneyGame
-          && IsJacoby == true
+        !(Session is MoneySession { IsJacoby: true }
           && Position.CubeOwner == CubeOwner.Centered);
 
     /// <inheritdoc/>

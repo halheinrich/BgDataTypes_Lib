@@ -188,17 +188,15 @@ public class CubeDecisionDataClaimDerivationTests
             id: new XgpDecisionId("jacoby-redouble.xgp"),
             position: TestRecords.Position(
                 mop: BoardPosition.Empty,
-                onRollNeeds: 0,            // money session
-                opponentNeeds: 0,
-                isJacoby: true,
                 cubeSize: 2,               // cube already turned:
-                cubeOwner: CubeOwner.OnRoll // a redouble decision
+                cubeOwner: CubeOwner.OnRoll, // a redouble decision
+                session: TestRecords.MoneySession(isJacoby: true)
             ),
             decision: TestRecords.CubeData(
                 noDoubleEquity: 1.15,      // playing on (gammons re-armed)
                 doubleTakeEquity: 1.30     // beats cashing; opponent passes
             ),
-            descriptive: TestRecords.Descriptive(matchLength: 0, isStandardStart: null));
+            descriptive: TestRecords.Descriptive(isStandardStart: null));
 
         Assert.Equal(CubeClaim.TooGood, record.Decision.BestDoublerClaim);
         Assert.Equal(CubeClaimPair.TooGoodPass, record.Decision.BestClaimPair);

@@ -37,14 +37,14 @@ public class ProblemKeyTests
     private static int[] StandardMop() =>
         [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0];
 
+    // Rewritten for the session kinds (halheinrich/backgammon#273): a fixture
+    // states its session — a match at a standing, or money under a rule —
+    // never away scores of 0 standing for money.
     private static BgDecisionData PlayDecision(
         int[]? mop = null,
-        int onRollNeeds = 7,
-        int opponentNeeds = 7,
-        bool isCrawford = false,
+        Session? session = null,
         int cubeSize = 1,
         CubeOwner cubeOwner = CubeOwner.Centered,
-        bool? isJacoby = null,
         int[]? dice = null,
         DescriptiveData? descriptive = null,
         DecisionId? id = null) => TestRecords.CheckerPlay(
@@ -52,12 +52,9 @@ public class ProblemKeyTests
         xgid: "XGID=not-consulted-by-derivation",
         position: TestRecords.Position(
             mop: new BoardPosition(mop ?? StandardMop()),
-            onRollNeeds: onRollNeeds,
-            opponentNeeds: opponentNeeds,
-            isCrawford: isCrawford,
             cubeSize: cubeSize,
             cubeOwner: cubeOwner,
-            isJacoby: isJacoby),
+            session: session ?? Match(7, 7)),
         // The key reads the roll, never the candidates: one pass, which is
         // valid from every board a fixture here states.
         decision: TestRecords.CheckerPlayData(dice: dice ?? [3, 1], plays: [TestRecords.Candidate(play: [])]),
@@ -65,33 +62,38 @@ public class ProblemKeyTests
 
     private static BgDecisionData CubeDecision(
         int[]? mop = null,
-        int onRollNeeds = 5,
-        int opponentNeeds = 2,
-        bool isCrawford = false,
+        Session? session = null,
         int cubeSize = 2,
         CubeOwner cubeOwner = CubeOwner.OnRoll,
-        bool? isJacoby = null,
         DescriptiveData? descriptive = null,
         DecisionId? id = null) => TestRecords.Cube(
         id: id ?? new XgDecisionId("fixture.xg", Game: 1, MoveNumber: 2, IsCube: true),
         xgid: "XGID=not-consulted-by-derivation",
         position: TestRecords.Position(
             mop: new BoardPosition(mop ?? StandardMop()),
-            onRollNeeds: onRollNeeds,
-            opponentNeeds: opponentNeeds,
-            isCrawford: isCrawford,
             cubeSize: cubeSize,
             cubeOwner: cubeOwner,
-            isJacoby: isJacoby),
+            session: session ?? Match(5, 2)),
         decision: TestRecords.CubeData(),
         descriptive: descriptive);
 
     /// <summary>
-    /// A money-game (0-away/0-away) checker play carrying the Jacoby fact —
-    /// the shape whose key the v3 money suffix spells.
+    /// A match at this standing. Its length, which no key reads, is the larger
+    /// of 7 and the away scores.
     /// </summary>
-    private static BgDecisionData MoneyPlay(bool? isJacoby, int[]? dice = null) =>
-        PlayDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby, dice: dice);
+    private static MatchSession Match(int onRollNeeds, int opponentNeeds, bool isCrawford = false) =>
+        TestRecords.MatchSession(
+            length: Math.Max(7, Math.Max(onRollNeeds, opponentNeeds)),
+            onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isCrawford: isCrawford);
+
+    private static MoneySession Money(bool isJacoby) => TestRecords.MoneySession(isJacoby: isJacoby);
+
+    /// <summary>
+    /// A money checker play under a stated Jacoby rule — the shape whose key
+    /// the v3 money suffix spells.
+    /// </summary>
+    private static BgDecisionData MoneyPlay(bool isJacoby, int[]? dice = null) =>
+        PlayDecision(session: Money(isJacoby), dice: dice);
 
     private static ProblemKey Derive(BgDecisionData data)
     {
@@ -146,16 +148,16 @@ public class ProblemKeyTests
     public void Equality_AwayScoresPerturbed_NotEqual()
     {
         Assert.NotEqual(
-            Derive(PlayDecision(onRollNeeds: 7, opponentNeeds: 7)),
-            Derive(PlayDecision(onRollNeeds: 7, opponentNeeds: 5)));
+            Derive(PlayDecision(session: Match(7, 7))),
+            Derive(PlayDecision(session: Match(7, 5))));
     }
 
     [Fact]
     public void Equality_CrawfordToggle_NotEqual()
     {
         Assert.NotEqual(
-            Derive(PlayDecision(onRollNeeds: 1, opponentNeeds: 3)),
-            Derive(PlayDecision(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true)));
+            Derive(PlayDecision(session: Match(1, 3))),
+            Derive(PlayDecision(session: Match(1, 3, isCrawford: true))));
     }
 
     [Fact]
@@ -189,7 +191,7 @@ public class ProblemKeyTests
     {
         // Same position facts; the kind discriminant (dice presence) splits them.
         var play = Derive(PlayDecision(
-            onRollNeeds: 5, opponentNeeds: 2, cubeSize: 2, cubeOwner: CubeOwner.OnRoll));
+            session: Match(5, 2), cubeSize: 2, cubeOwner: CubeOwner.OnRoll));
         var cube = Derive(CubeDecision());
 
         Assert.NotEqual(play, cube);
@@ -227,7 +229,7 @@ public class ProblemKeyTests
     public void CanonicalForm_CrawfordPlayKey_Pinned()
     {
         var key = Derive(PlayDecision(
-            onRollNeeds: 1, opponentNeeds: 3, isCrawford: true, dice: [5, 2]));
+            session: Match(1, 3, isCrawford: true), dice: [5, 2]));
 
         Assert.Equal(PinnedCrawfordPlayKey, key.ToString());
     }
@@ -247,7 +249,7 @@ public class ProblemKeyTests
     {
         // The suffix rides the score field, so it is orthogonal to the kind
         // discriminant: a money cube key carries it and still has no dice.
-        var key = Derive(CubeDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: true));
+        var key = Derive(CubeDecision(session: Money(true)));
 
         Assert.Equal(PinnedMoneyCubeKey, key.ToString());
         Assert.True(key.IsCubeDecision);
@@ -426,13 +428,11 @@ public class ProblemKeyTests
         var a = PlayDecision(
             id: new XgDecisionId("one.xg", Game: 1, MoveNumber: 4, IsCube: false),
             descriptive: TestRecords.Descriptive(
-                matchLength: 7,
                 onRollName: "Alice",
                 opponentName: "Bob"));
         var b = PlayDecision(
             id: new XgpDecisionId("two.xgp"),
             descriptive: TestRecords.Descriptive(
-                matchLength: 7,
                 onRollName: "Carol",
                 opponentName: "Dave",
                 isStandardStart: null));
@@ -445,11 +445,13 @@ public class ProblemKeyTests
     {
         // Spec §1 consequence, POSITIVE fixture: 3-away/2-away is the same
         // problem whether the match is to 7 or to 11 — match length is
-        // subsumed by away scores and must not participate.
-        var shortMatch = PlayDecision(onRollNeeds: 3, opponentNeeds: 2,
-            descriptive: TestRecords.Descriptive(matchLength: 7));
-        var longMatch = PlayDecision(onRollNeeds: 3, opponentNeeds: 2,
-            descriptive: TestRecords.Descriptive(matchLength: 11));
+        // subsumed by away scores and must not participate. Rewritten: the
+        // length is the match session's own now, not the descriptive
+        // category's.
+        var shortMatch = PlayDecision(
+            session: TestRecords.MatchSession(length: 7, onRollNeeds: 3, opponentNeeds: 2));
+        var longMatch = PlayDecision(
+            session: TestRecords.MatchSession(length: 11, onRollNeeds: 3, opponentNeeds: 2));
 
         Assert.Equal(Derive(shortMatch), Derive(longMatch));
     }
@@ -597,26 +599,42 @@ public class ProblemKeyTests
         AssertBoardRefusedAtEveryDoor(opponentOnOnRollBar);
     }
 
+    // The score rungs below were TryDerive pins until money and match became
+    // the session's kinds (halheinrich/backgammon#273): a record can no longer
+    // hold such a score, so TryDerive never meets one. Each is rewritten, as
+    // the malformed boards were, to pin the refusal at the two doors that
+    // remain — the session's own and the key's parse door.
+
     [Theory]
     [InlineData(-1, 7)]
     [InlineData(7, -1)]
-    [InlineData(0, 7)]      // one-sided zero: money is 0/0 only
+    [InlineData(0, 7)]      // one-sided zero: money is its own kind, not 0/0
     [InlineData(7, 0)]
-    public void NoKey_InvalidAwayScores(int onRollNeeds, int opponentNeeds)
+    [InlineData(0, 0)]      // the old money stand-in, in a match
+    public void InvalidAwayScores_CannotBeBuilt_AndTheirKeysDoNotParse(int onRollNeeds, int opponentNeeds)
     {
-        AssertNoKey(PlayDecision(onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds));
+        // Rewritten from NoKey_InvalidAwayScores.
+        Assert.Throws<ArgumentOutOfRangeException>(() => Match(onRollNeeds, opponentNeeds));
+        if (onRollNeeds != 0 || opponentNeeds != 0)
+            Assert.False(ProblemKey.TryParse(StandardBoardToken + $"/{onRollNeeds}a{opponentNeeds}/1c/31", null, out _));
     }
 
-    [Theory]
-    [InlineData(0, 0)]      // crawford in a money game
-    [InlineData(3, 2)]      // crawford with neither side 1-away
-    public void NoKey_InconsistentCrawford(int onRollNeeds, int opponentNeeds)
+    [Fact]
+    public void CrawfordWithNoPlayerAtMatchPoint_CannotBeBuilt_AndItsKeyDoesNotParse()
     {
-        // The money case supplies the Jacoby fact deliberately, so the
-        // crawford rung is what rejects it — not the money-needs-Jacoby rung.
-        AssertNoKey(PlayDecision(
-            onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isCrawford: true,
-            isJacoby: true));
+        // Rewritten from NoKey_InconsistentCrawford(3, 2).
+        var ex = Assert.Throws<ArgumentException>(() => Match(3, 2, isCrawford: true));
+        Assert.Contains("1-away", ex.Message);
+        Assert.False(ProblemKey.TryParse(StandardBoardToken + "/3a2cr/1c/31", null, out _));
+    }
+
+    [Fact]
+    public void CrawfordInMoney_IsNotExpressible_AndItsKeyDoesNotParse()
+    {
+        // Rewritten from NoKey_InconsistentCrawford(0, 0): a money session
+        // has no Crawford game, so there is no member to state one in.
+        Assert.Null(typeof(MoneySession).GetProperty("IsCrawford"));
+        Assert.False(ProblemKey.TryParse(StandardBoardToken + "/0a0crj/1c/31", null, out _));
     }
 
     [Theory]
@@ -658,55 +676,61 @@ public class ProblemKeyTests
     public void Jacoby_MoneyCubeKeys_ToggleSplitsIdentity()
     {
         Assert.NotEqual(
-            Derive(CubeDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: true)),
-            Derive(CubeDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: false)));
+            Derive(CubeDecision(session: Money(true))),
+            Derive(CubeDecision(session: Money(false))));
     }
 
     [Fact]
-    public void Jacoby_MatchKeys_FactIsIgnored()
+    public void Jacoby_AMatchStatesNoJacobyFact_SoNoneCanReachItsKey()
     {
-        // Off money the question does not arise, so a stamped value must not
-        // reach the key — and must not cost the record its key either. The
-        // in-tree producer stamps money records only; tolerating a stamp here
-        // is deliberate slack for any laxer producer.
-        var stampedOn = Derive(PlayDecision(isJacoby: true));
-        var stampedOff = Derive(PlayDecision(isJacoby: false));
-        var unstamped = Derive(PlayDecision(isJacoby: null));
+        // Rewritten from Jacoby_MatchKeys_FactIsIgnored, which pinned a stamp
+        // on a match record being ignored by the key. Off money the question
+        // does not arise, and a match now has no member to state it in: the
+        // match session has none, and a match document carrying one is
+        // refused rather than read with the stamp dropped.
+        Assert.Null(typeof(MatchSession).GetProperty("IsJacoby"));
+        Assert.Null(typeof(PositionData).GetProperty("IsJacoby"));
 
-        Assert.Equal(unstamped, stampedOn);
-        Assert.Equal(unstamped, stampedOff);
+        var document = WirePaths.Document<BgDecisionData>(PlayDecision());
+        document["Position"]!["Session"]!["IsJacoby"] = true;
+        WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Jacoby_MatchKeys_ByteIdenticalToV2(bool? isJacoby)
+    [Fact]
+    public void Jacoby_MatchKeys_ByteIdenticalToV2()
     {
         // The v3 grammar's compatibility pin: every match key's canonical
-        // string is exactly what v2 emitted, whatever the fact says. The
-        // literals are the v2 wire-contract pins declared above.
+        // string is exactly what v2 emitted. The literals are the v2
+        // wire-contract pins declared above. Rewritten from
+        // Jacoby_MatchKeys_ByteIdenticalToV2(isJacoby): a match states no
+        // Jacoby fact to vary.
         Assert.Equal(
             PinnedPlayKey,
-            Derive(PlayDecision(isJacoby: isJacoby)).ToString());
+            Derive(PlayDecision()).ToString());
         Assert.Equal(
             PinnedCubeKey,
-            Derive(CubeDecision(isJacoby: isJacoby)).ToString());
+            Derive(CubeDecision()).ToString());
         Assert.Equal(
             PinnedCrawfordPlayKey,
-            Derive(PlayDecision(
-                onRollNeeds: 1, opponentNeeds: 3, isCrawford: true, isJacoby: isJacoby,
-                dice: [5, 2])).ToString());
+            Derive(PlayDecision(session: Match(1, 3, isCrawford: true), dice: [5, 2])).ToString());
     }
 
     [Fact]
-    public void NoKey_MoneyRecordWithoutJacobyFact()
+    public void AMoneyRecordWithoutItsJacobyRule_CannotBeRead_AndTheV2MoneyKeyDoesNotParse()
     {
-        // The underivable rung extended: same posture as unstamped dice —
-        // the fact the money grammar spells is absent, so guessing "off"
-        // is forbidden and there is no key.
-        AssertNoKey(MoneyPlay(isJacoby: null));
-        AssertNoKey(CubeDecision(onRollNeeds: 0, opponentNeeds: 0, isJacoby: null));
+        // Rewritten from NoKey_MoneyRecordWithoutJacobyFact. The underivable
+        // rung is gone with the state it guarded: a money session states its
+        // rule (required, so omitting it does not compile), and a money
+        // document without it is refused on both paths — no money record is
+        // under an unknown rule, so none is left without a key for one. The
+        // text a key without the rule would be is still not in the grammar.
+        foreach (var record in new[] { MoneyPlay(isJacoby: true), CubeDecision(session: Money(true)) })
+        {
+            var document = WirePaths.Document(record);
+            document["Position"]!["Session"]!.AsObject().Remove("IsJacoby");
+            WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
+        }
+        Assert.False(ProblemKey.TryParse(RetiredV2MoneyPlayKey, null, out _));
     }
 
     [Fact]
@@ -896,7 +920,7 @@ public class ProblemKeyTests
             Assert.Equal(
                 PinnedCrawfordPlayKey,
                 Derive(PlayDecision(
-                    onRollNeeds: 1, opponentNeeds: 3, isCrawford: true, dice: [5, 2]))
+                    session: Match(1, 3, isCrawford: true), dice: [5, 2]))
                     .ToString());
 
             Assert.Equal(

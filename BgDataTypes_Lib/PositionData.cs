@@ -4,15 +4,50 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// The position-and-match-state category of a <see cref="BgDecisionData"/>:
-/// the board, the score context, and the cube state at the moment of the
-/// decision. The stored members are producer-supplied from the source file
-/// (see <c>ConvertXgToJson_Lib</c>); the pip counts are derived from the
-/// board and never stored (no stored copy of a derivable value). Every
-/// stored member but the nullable <see cref="IsJacoby"/> is <c>required</c>,
-/// per the wire rule stated on <see cref="BgDataTypesJsonContext"/>.
+/// the board, the cube state and the session at the moment of the decision.
+/// The stored members are producer-supplied from the source file (see
+/// <c>ConvertXgToJson_Lib</c>); the pip counts are derived from the board and
+/// never stored (no stored copy of a derivable value). Every stored member is
+/// <c>required</c>, per the wire rule stated on
+/// <see cref="BgDataTypesJsonContext"/>.
 /// </summary>
+/// <remarks>
+/// <b>Money or a match is the session's kind</b> (halheinrich/backgammon#273,
+/// Hal's ruling of 2026-09-26): <see cref="Session"/> is a
+/// <see cref="MoneySession"/> or a <see cref="MatchSession"/>, each carrying
+/// only its own facts. The away scores, the Crawford flag and the Jacoby rule
+/// this category used to hold — a money record's away scores 0 and its
+/// Crawford flag false as stand-ins, a match record's Jacoby fact meaningless
+/// — are the kinds' now, so none can be stated where it does not apply.
+/// </remarks>
 public class PositionData
 {
+    // True while the category is read from a document (see the serializer's
+    // constructor below): each rule then refuses as a JsonException.
+    private readonly bool _read;
+
+    // Null only while construction is still stating it; `required` guarantees
+    // it is set by the time construction ends.
+    private readonly Session? _session;
+
+    /// <summary>Creates the category; its members are set by the initializer.</summary>
+    public PositionData()
+    {
+    }
+
+    /// <summary>
+    /// The serializer's constructor. It binds <paramref name="mop"/>, its
+    /// first member, only because a serializer constructor must bind one; why
+    /// the pattern exists is stated once, on <see cref="BgDataTypesJsonContext"/>
+    /// ("The serializer constructors").
+    /// </summary>
+    [JsonConstructor]
+    internal PositionData(BoardPosition mop)
+    {
+        _read = true;
+        Mop = mop;
+    }
+
     /// <summary>
     /// Men on Point — the board at the moment of the decision.
     /// <b>Frame: the player on roll's</b>, the decision-maker's:
@@ -22,18 +57,6 @@ public class PositionData
     /// <see cref="BoardPosition"/> layout, well-formed by its invariant).
     /// </summary>
     public required BoardPosition Mop { get; init; }
-
-    /// <summary>
-    /// Away score for the player on roll — points still needed to win the
-    /// match (e.g. 3 means "3-away"). 0 for money games.
-    /// </summary>
-    public required int OnRollNeeds { get; init; }
-
-    /// <summary>
-    /// Away score for the opponent — points still needed to win the match.
-    /// 0 for money games.
-    /// </summary>
-    public required int OpponentNeeds { get; init; }
 
     /// <summary>
     /// The on-roll player's pip count, derived from <see cref="Mop"/> by the
@@ -80,59 +103,27 @@ public class PositionData
     public required CubeOwner CubeOwner { get; init; }
 
     /// <summary>
-    /// True when this decision occurred in the Crawford game (the one game,
-    /// immediately after a player reaches match point, in which doubling is
-    /// barred).
+    /// The session the decision is played in, as it stands at the decision,
+    /// from the player on roll's side: a <see cref="MoneySession"/> (its rules)
+    /// or a <see cref="MatchSession"/> (its length, both away scores and
+    /// whether this is the Crawford game). Match on it with
+    /// <see cref="Session.Match{TResult}"/>.
     /// </summary>
-    public required bool IsCrawford { get; init; }
-
-    /// <summary>
-    /// Whether the Jacoby rule was in force — <b>a money-game fact
-    /// only</b>. Under Jacoby, gammons and backgammons count as a single
-    /// point until the cube has been turned; with a centered cube that voids
-    /// undoubled gammons outright and shifts the doubling window, so it can
-    /// change the correct answer and participates in
-    /// <see cref="ProblemKey"/> identity for money records
-    /// (SPEC-stats-identity.md §1, amended 2026-08-20;
-    /// halheinrich/backgammon#120).
-    ///
-    /// <para>
-    /// <b>Three states, deliberately.</b> <see langword="null"/> means the
-    /// fact is not carried — because it does not apply (a match record) or
-    /// because the producer did not supply it — never "off". Whether the record
-    /// is a money game is <em>not</em> encoded here: that remains the
-    /// away-scores pair (<see cref="OnRollNeeds"/> and
-    /// <see cref="OpponentNeeds"/> both <c>0</c>), the single source of that
-    /// truth. So the three meaningful readings are: match record (away
-    /// scores non-zero) — the question does not arise and this member
-    /// is ignored wherever it matters; money record with a value — the
-    /// fact, which the key spells; money record with
-    /// <see langword="null"/> — unknown, which is
-    /// <see cref="ProblemKey"/>'s no-key rung (a money record whose Jacoby
-    /// fact is missing yields no key rather than a guessed one).
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Producer-stamped, never parsed back out of the XGID.</b> The
-    /// converting parser (<c>ConvertXgToJson_Lib</c>) stamps this from the
-    /// source record. The same information sits in bit 0 of XGID field 7
-    /// (a Jacoby + 2×Beaver bitmask, never the raw value), but the XGID
-    /// string is display and provenance only — it is an identity
-    /// nowhere, so nothing downstream re-derives this from
-    /// <see cref="BgDecisionData.Xgid"/>.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>What a producer stamps.</b> A money record carries the value; a
-    /// match record carries <see langword="null"/>, because the fact does
-    /// not apply there — the producer stamps XG's field-7 bit onto money
-    /// records only, rather than passing it through on every record
-    /// (<c>ConvertXgToJson_Lib</c>'s <c>MatchContext.JacobyStamp</c>). A
-    /// non-null value on a match record is nonetheless tolerated, not
-    /// rejected: <see cref="ProblemKey.TryDerive"/> ignores it and the
-    /// match key is unaffected, so a record from a laxer producer still
-    /// gets its key.
-    /// </para>
-    /// </summary>
-    public bool? IsJacoby { get; init; }
+    /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
+    public required Session Session
+    {
+        get => _session!;
+        init
+        {
+            try
+            {
+                ArgumentNullException.ThrowIfNull(value, nameof(Session));
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
+            _session = value;
+        }
+    }
 }

@@ -45,7 +45,7 @@ public class AfterBoardDerivationTests
         [.. TesterPlays.Select((play, i) => TestRecords.Candidate(play: play, equity: i == best ? 0.5 : -0.1 * i))];
 
     private static CheckerPlayDecision Tester(int best, int? userPlayIndex) => TestRecords.CheckerPlay(
-        position: TestRecords.Position(mop: TesterMop, onRollNeeds: 3, opponentNeeds: 5),
+        position: TestRecords.Position(mop: TesterMop, session: TestRecords.MatchSession(onRollNeeds: 3, opponentNeeds: 5)),
         decision: TestRecords.CheckerPlayData(
             dice: [5, 4],
             plays: TesterCandidates(best),
@@ -121,7 +121,7 @@ public class AfterBoardDerivationTests
     {
         var decision = TestRecords.CheckerPlayData(
             dice: [5, 4], plays: TesterCandidates(best: 2), userPlayIndex: 1);
-        var position = TestRecords.Position(mop: TesterMop, onRollNeeds: 3, opponentNeeds: 5);
+        var position = TestRecords.Position(mop: TesterMop, session: TestRecords.MatchSession(onRollNeeds: 3, opponentNeeds: 5));
 
         var positionFirst = new CheckerPlayDecision
         {

@@ -53,7 +53,9 @@ namespace BgDataTypes_Lib;
 /// </para>
 /// <list type="bullet">
 /// <item><description>a cube decision is never made in the Crawford game
-/// (halheinrich/backgammon#201) — <see cref="Position"/> refuses it;</description></item>
+/// (halheinrich/backgammon#201) — <see cref="Position"/> refuses a
+/// <see cref="MatchSession"/> whose <see cref="MatchSession.IsCrawford"/> is
+/// set;</description></item>
 /// <item><description>an <see cref="XgDecisionId"/> names this record's own kind
 /// — <see cref="Id"/> refuses the other;</description></item>
 /// <item><description>a standalone position states no
@@ -240,7 +242,7 @@ public abstract class BgDecisionData
             try
             {
                 ArgumentNullException.ThrowIfNull(value, nameof(Position));
-                if (!DecisionRules.CrawfordAllows(_kind, value.IsCrawford))
+                if (!DecisionRules.CrawfordAllows(_kind, value.Session))
                     throw new ArgumentException(DecisionRules.CrawfordMessage, nameof(Position));
                 PositionStated(value);
             }
@@ -356,29 +358,9 @@ public abstract class BgDecisionData
     /// <inheritdoc cref="IDecisionFilterData.Player"/>
     [JsonIgnore]
     public string? Player => Descriptive.OnRollName;
-    /// <inheritdoc cref="IDecisionFilterData.OnRollNeeds"/>
+    /// <inheritdoc cref="IDecisionFilterData.Session"/>
     [JsonIgnore]
-    public int OnRollNeeds => Position.OnRollNeeds;
-    /// <inheritdoc cref="IDecisionFilterData.OpponentNeeds"/>
-    [JsonIgnore]
-    public int OpponentNeeds => Position.OpponentNeeds;
-    /// <inheritdoc cref="IDecisionFilterData.IsCrawford"/>
-    [JsonIgnore]
-    public bool IsCrawford => Position.IsCrawford;
-    /// <inheritdoc cref="IDecisionFilterData.IsJacoby"/>
-    [JsonIgnore]
-    public bool? IsJacoby => Position.IsJacoby;
-    /// <inheritdoc cref="IDecisionFilterData.MatchLength"/>
-    [JsonIgnore]
-    public int MatchLength => Descriptive.MatchLength;
-    /// <summary>
-    /// True for an unlimited (money) session: <see cref="IDecisionFilterData.IsMoneyGame"/>'s
-    /// rule, redeclared concretely as <see cref="DecisionRow.IsMoneyGame"/> is,
-    /// now that the record reaches the filter view through
-    /// <see cref="ViewFor"/> rather than being one.
-    /// </summary>
-    [JsonIgnore]
-    public bool IsMoneyGame => MatchLength == 0;
+    public Session Session => Position.Session;
     /// <inheritdoc cref="IDecisionFilterData.MoveNumber"/>
     /// <remarks>
     /// Derived from <see cref="Id"/>, as <see cref="Game"/> is

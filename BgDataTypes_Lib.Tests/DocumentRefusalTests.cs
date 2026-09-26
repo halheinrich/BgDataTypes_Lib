@@ -46,8 +46,23 @@ public class DocumentRefusalTests
 
     public static IEnumerable<(string Because, BgDecisionData Valid, Action<JsonObject> Break, Type Inner)> RecordBreaches()
     {
-        yield return ("a cube decision in the Crawford game", TestRecords.Cube(),
-            d => d["Position"]!["IsCrawford"] = true, typeof(ArgumentException));
+        // Rewritten: the Crawford flag is the match session's, and the cube
+        // sits at 1-away to 3-away, where a Crawford game can be, so what
+        // refuses it is the cube rule.
+        yield return ("a cube decision in the Crawford game",
+            TestRecords.Cube(position: TestRecords.Position(session: TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3))),
+            d => d["Position"]!["Session"]!["IsCrawford"] = true, typeof(ArgumentException));
+        // Added: the match session's own rules, inside a record.
+        yield return ("a match's away score of 0, inside a record", TestRecords.CheckerPlay(),
+            d => d["Position"]!["Session"]!["OnRollNeeds"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("a match of length 0, inside a record", TestRecords.Cube(),
+            d => d["Position"]!["Session"]!["Length"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("an away score past the match's length, inside a record", TestRecords.CheckerPlay(),
+            d => d["Position"]!["Session"]!["OpponentNeeds"] = 8, typeof(ArgumentOutOfRangeException));
+        yield return ("a Crawford game with no player 1-away, inside a record", TestRecords.CheckerPlay(),
+            d => d["Position"]!["Session"]!["IsCrawford"] = true, typeof(ArgumentException));
+        yield return ("a null session, inside a record", TestRecords.CheckerPlay(),
+            d => d["Position"]!["Session"] = null, typeof(ArgumentNullException));
         yield return ("an identifier naming the other kind", TestRecords.Cube(),
             d => d["Id"] = "match.xg:g1:m2:play", typeof(ArgumentException));
         yield return ("a standalone position stating its start", TestRecords.Cube(),
@@ -103,6 +118,23 @@ public class DocumentRefusalTests
             d => d["UserDoublerAction"] = "Take", typeof(ArgumentOutOfRangeException));
         yield return ("a taker half holding a doubler action", typeof(CubeDecisionData), TestRecords.CubeData(),
             d => d["UserTakerAction"] = "Double", typeof(ArgumentOutOfRangeException));
+        // Added: a match session and a position read on their own
+        // (halheinrich/backgammon#273), as the base and as the kind.
+        yield return ("an away score of 0", typeof(Session), TestRecords.MatchSession(),
+            d => d["OnRollNeeds"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("an away score of 0, read as the kind", typeof(MatchSession), TestRecords.MatchSession(),
+            d => d["OpponentNeeds"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("a match of length 0", typeof(MatchSession), TestRecords.MatchSession(),
+            d => d["Length"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("a length below an away score", typeof(MatchSession), TestRecords.MatchSession(),
+            d => d["Length"] = 5, typeof(ArgumentOutOfRangeException));
+        yield return ("a Crawford game with no player 1-away", typeof(Session), TestRecords.MatchSession(),
+            d => d["IsCrawford"] = true, typeof(ArgumentException));
+        yield return ("a Crawford game with both players 1-away", typeof(MatchSession),
+            TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 1),
+            d => d["IsCrawford"] = true, typeof(ArgumentException));
+        yield return ("a null session", typeof(PositionData), TestRecords.Position(),
+            d => d["Session"] = null, typeof(ArgumentNullException));
     }
 
     [Fact]
@@ -122,7 +154,10 @@ public class DocumentRefusalTests
     {
         // The document's refusal is the guard's exception rewrapped; code
         // building the same value gets the guard's exception itself.
-        Assert.Throws<ArgumentException>(() => TestRecords.Cube(position: TestRecords.Position(isCrawford: true)));
+        Assert.Throws<ArgumentException>(() => TestRecords.Cube(position: TestRecords.Position(
+            session: TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true))));
+        Assert.Throws<ArgumentOutOfRangeException>(() => TestRecords.MatchSession(onRollNeeds: 0));
+        Assert.Throws<ArgumentException>(() => TestRecords.MatchSession(isCrawford: true));
         Assert.Throws<ArgumentOutOfRangeException>(() => TestRecords.CubeData(userDoublerAction: CubeAction.Take));
         Assert.Throws<ArgumentOutOfRangeException>(() => TestRecords.CheckerPlayData(dice: [7, 1]));
         Assert.Throws<ArgumentException>(() => TestRecords.CheckerPlay(
@@ -180,6 +215,9 @@ public class DocumentRefusalTests
     [InlineData(typeof(CubeDecisionData))]
     [InlineData(typeof(PlayCandidate))]
     [InlineData(typeof(DescriptiveData))]
+    [InlineData(typeof(PositionData))]
+    [InlineData(typeof(MoneySession))]
+    [InlineData(typeof(MatchSession))]
     public void TheSerializersConstructor_IsInternal_AndCodesIsPublicAndParameterless(Type type)
     {
         // The read mode is set only by the constructor the serializer uses,

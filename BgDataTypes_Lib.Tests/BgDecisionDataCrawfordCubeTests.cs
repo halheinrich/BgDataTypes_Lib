@@ -16,11 +16,15 @@ namespace BgDataTypes_Lib.Tests;
 /// </summary>
 public class BgDecisionDataCrawfordCubeTests
 {
+    // Rewritten: the Crawford game is the match session's
+    // (halheinrich/backgammon#273), and a money session has none.
     private static PositionData Crawford() =>
-        TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
+        TestRecords.Position(session: TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true));
 
     private static PositionData NotCrawford() =>
-        TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3);
+        TestRecords.Position(session: TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3));
+
+    private static bool IsCrawford(BgDecisionData record) => record.Session is MatchSession { IsCrawford: true };
 
     // ---------------------------------------------------------------------
     //  Object initializers
@@ -68,7 +72,7 @@ public class BgDecisionDataCrawfordCubeTests
         // Rewritten from CrawfordPlay_Constructs_InEitherOrder.
         var play = TestRecords.CheckerPlay(position: Crawford());
 
-        Assert.True(play.IsCrawford);
+        Assert.True(IsCrawford(play));
         Assert.Equal(DecisionKind.CheckerPlay, play.Kind);
     }
 
@@ -78,7 +82,7 @@ public class BgDecisionDataCrawfordCubeTests
         // Rewritten from NonCrawfordCube_Constructs_InEitherOrder.
         var cube = TestRecords.Cube(position: NotCrawford());
 
-        Assert.False(cube.IsCrawford);
+        Assert.False(IsCrawford(cube));
         Assert.Equal(DecisionKind.Cube, cube.Kind);
     }
 
@@ -129,9 +133,9 @@ public class BgDecisionDataCrawfordCubeTests
             var play = WirePaths.RoundTrip<BgDecisionData>(TestRecords.CheckerPlay(position: Crawford()), options);
             var cube = WirePaths.RoundTrip<BgDecisionData>(TestRecords.Cube(position: NotCrawford()), options);
 
-            Assert.True(play.IsCrawford);
+            Assert.True(IsCrawford(play));
             Assert.IsType<CheckerPlayDecision>(play);
-            Assert.False(cube.IsCrawford);
+            Assert.False(IsCrawford(cube));
             Assert.IsType<CubeDecision>(cube);
         }
     }

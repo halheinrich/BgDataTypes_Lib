@@ -18,7 +18,9 @@ internal static class DecisionRules
     //  The Crawford rule (halheinrich/backgammon#201)
     //
     //  Doubling is prohibited in the Crawford game, so a cube decision in a
-    //  Crawford position describes a decision that cannot exist.
+    //  Crawford position describes a decision that cannot exist. The Crawford
+    //  game is a match's (MatchSession.IsCrawford): a money session has none,
+    //  so the rule reads the session's kind, never a flag standing for "no".
     //  BgGame_Lib's GameState states the rule again for live play, and the
     //  two stay separate by layering: that one is a three-reason legality
     //  predicate over live match state (no cube, Crawford, opponent owns
@@ -29,9 +31,9 @@ internal static class DecisionRules
     internal const string CrawfordMessage =
         "Doubling is prohibited in the Crawford game, so a cube decision cannot carry the Crawford flag.";
 
-    /// <summary>Whether a decision of <paramref name="kind"/> may sit in a position whose Crawford flag is <paramref name="isCrawford"/>.</summary>
-    internal static bool CrawfordAllows(DecisionKind kind, bool isCrawford) =>
-        !(isCrawford && kind == DecisionKind.Cube);
+    /// <summary>Whether a decision of <paramref name="kind"/> may be made in <paramref name="session"/>.</summary>
+    internal static bool CrawfordAllows(DecisionKind kind, Session session) =>
+        !(kind == DecisionKind.Cube && session is MatchSession { IsCrawford: true });
 
     // -----------------------------------------------------------------------
     //  The identifier's kind

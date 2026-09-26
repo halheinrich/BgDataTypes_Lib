@@ -44,46 +44,20 @@ public interface IDecisionFilterData
     /// </summary>
     string? Player { get; }
 
-    /// <summary>Away score for the player on roll. 0 for money games.</summary>
-    int OnRollNeeds { get; }
-
-    /// <summary>Away score for the opponent. 0 for money games.</summary>
-    int OpponentNeeds { get; }
-
-    /// <summary>True if this is the Crawford game.</summary>
-    bool IsCrawford { get; }
-
-    /// <summary>Match length (0 = unlimited/money).</summary>
-    int MatchLength { get; }
-
     /// <summary>
-    /// True for an unlimited (money) session. This default implementation is
-    /// the contract's single spelling of the money-game rule — derived from
-    /// <see cref="MatchLength"/>, the same rule <see cref="IMatchInfo.IsMoneyGame"/>
-    /// states at match scope. An implementation redeclares it only to surface
-    /// the predicate on its concrete type (see
-    /// <see cref="DecisionRow.IsMoneyGame"/>), never to change the derivation.
+    /// The session the decision was played in, as it stands at the decision,
+    /// from the player on roll's side (<see cref="PositionData.Session"/>): a
+    /// <see cref="MoneySession"/> — its rules, the Jacoby rule among them — or
+    /// a <see cref="MatchSession"/> — its length, both away scores and whether
+    /// this is the Crawford game. Each kind carries only its own facts, so a
+    /// filter reading a match's away scores or a money session's Jacoby rule
+    /// matches on the kind (<see cref="Session.Match{TResult}"/>, or a pattern
+    /// such as <c>Session is MoneySession { IsJacoby: true }</c>) and cannot
+    /// read one kind's fact off the other. Money is the kind, never a match
+    /// length of 0, and every money session states its Jacoby rule: no record
+    /// is money under an unknown rule (halheinrich/backgammon#273).
     /// </summary>
-    bool IsMoneyGame => MatchLength == 0;
-
-    /// <summary>
-    /// Whether the Jacoby rule was in force, in the tri-state contract
-    /// <see cref="PositionData.IsJacoby"/> owns and states — money records
-    /// carry the fact, match records carry <see langword="null"/> because the
-    /// question does not arise there, and <see langword="null"/> on a money
-    /// record means the rule was never stamped.
-    /// <para>
-    /// Filter-layer consequence of that last rung: a money record whose fact
-    /// is <see langword="null"/> matches <em>neither</em> money score token —
-    /// not <c>moneyJ</c> and not <c>moneyNJ</c>. An unknown rule is never
-    /// guessed into one of them. Consumers spell that conjunction themselves
-    /// as <c>IsMoneyGame &amp;&amp; IsJacoby == true</c> / <c>== false</c>;
-    /// the near-miss spellings <c>!= false</c> and <c>!= true</c> silently
-    /// admit the unknown record into one side, which is the thing a
-    /// consumer's tests must pin against.
-    /// </para>
-    /// </summary>
-    bool? IsJacoby { get; }
+    Session Session { get; }
 
     /// <summary>
     /// 1-based move number within the game; <see langword="null"/> for a

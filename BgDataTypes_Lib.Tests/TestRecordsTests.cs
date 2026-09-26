@@ -20,6 +20,8 @@ public class TestRecordsTests
         Assert.NotNull(TestRecords.Cube());
         Assert.NotNull(TestRecords.Row());
         Assert.NotNull(TestRecords.Position());
+        Assert.NotNull(TestRecords.MatchSession());
+        Assert.NotNull(TestRecords.MoneySession());
         Assert.NotNull(TestRecords.CheckerPlayData());
         Assert.NotNull(TestRecords.CubeData());
         Assert.NotNull(TestRecords.Descriptive());
@@ -60,6 +62,22 @@ public class TestRecordsTests
         Assert.Equal(167, play.Position.OpponentPipCount);
         Assert.Equal(new XgDecisionId("match.xg", 1, 1, IsCube: false), play.Id);
         Assert.True(play.IsStandardStart);
+    }
+
+    [Fact]
+    public void TheSessions_AreASevenPointMatchAtZeroZero_AndMoneyUnderJacoby()
+    {
+        // Added with the session kinds (halheinrich/backgammon#273): the
+        // position's default session is the match both records sit in, and
+        // money's default rule is XG's default.
+        var match = TestRecords.MatchSession();
+        var money = TestRecords.MoneySession();
+
+        Assert.Equal((7, 7, 7, false), (match.Length, match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
+        Assert.True(money.IsJacoby);
+        Assert.Equal(match, TestRecords.Position().Session);
+        Assert.Equal(match, TestRecords.CheckerPlay().Session);
+        Assert.Equal(match, TestRecords.Cube().Session);
     }
 
     [Fact]

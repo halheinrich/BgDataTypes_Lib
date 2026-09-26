@@ -40,7 +40,6 @@ public class DecisionRowSerializationTests
         DecisionId? id = null,
         string xgid = "XGID=x",
         double? error = null,
-        int matchLength = 7,
         string? player = "Alice",
         bool? isStandardStart = null,
         int[]? dice = null,
@@ -48,10 +47,7 @@ public class DecisionRowSerializationTests
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
         int? rolloutTrials = null,
         double equity = 0.1604,
-        int onRollNeeds = 7,
-        int opponentNeeds = 7,
-        bool isCrawford = false,
-        bool? isJacoby = null,
+        Session? session = null,
         BoardPosition? board = null,
         int? userPlayIndex = 0,
         PlayRanking ranking = PlayRanking.Equity)
@@ -62,9 +58,7 @@ public class DecisionRowSerializationTests
         return DecisionRow.From(TestRecords.CheckerPlay(
             id: id,
             xgid: xgid,
-            position: TestRecords.Position(
-                mop: mop, onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds,
-                isCrawford: isCrawford, isJacoby: isJacoby),
+            position: TestRecords.Position(mop: mop, session: session),
             decision: TestRecords.CheckerPlayData(
                 dice: dice ?? [3, 1],
                 plays: [TestRecords.Candidate(
@@ -73,9 +67,16 @@ public class DecisionRowSerializationTests
                 userPlayIndex: error is null ? userPlayIndex : null,
                 unlistedPlayError: error),
             descriptive: TestRecords.Descriptive(
-                matchLength: matchLength, onRollName: player,
+                onRollName: player,
                 isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))), ranking);
     }
+
+    // The session a row states (halheinrich/backgammon#273): a match at a
+    // length and standing, or money under a rule.
+    private static MatchSession Match(int length, int onRollNeeds, int opponentNeeds, bool isCrawford = false) =>
+        TestRecords.MatchSession(length: length, onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isCrawford: isCrawford);
+
+    private static MoneySession Money(bool isJacoby) => TestRecords.MoneySession(isJacoby: isJacoby);
 
     /// <summary>
     /// A cube row, from a record as <see cref="PlayRow"/> is: the depth, mode,
@@ -89,23 +90,20 @@ public class DecisionRowSerializationTests
         DecisionId? id = null,
         string xgid = "XGID=x",
         double? error = null,
-        int matchLength = 7,
         string? player = "Alice",
         bool? isStandardStart = null,
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
         int? rolloutTrials = null,
         double equity = 0.512,
-        int onRollNeeds = 7,
-        int opponentNeeds = 7,
-        bool? isJacoby = null,
+        Session? session = null,
         PlayRanking ranking = PlayRanking.Equity)
     {
         id ??= new XgDecisionId("match.xg", 1, 2, IsCube: true);
         return DecisionRow.From(TestRecords.Cube(
             id: id,
             xgid: xgid,
-            position: TestRecords.Position(onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isJacoby: isJacoby),
+            position: TestRecords.Position(session: session),
             decision: error is null
                 ? TestRecords.CubeData(
                     analysisMode: analysisMode, analysisLevel: analysisLevel, rolloutTrials: rolloutTrials,
@@ -115,7 +113,7 @@ public class DecisionRowSerializationTests
                     noDoubleEquity: equity, userDoublerAction: null, userTakerAction: null,
                     unstatedDoublerActionError: error),
             descriptive: TestRecords.Descriptive(
-                matchLength: matchLength, onRollName: player,
+                onRollName: player,
                 isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))), ranking);
     }
 
@@ -165,11 +163,7 @@ public class DecisionRowSerializationTests
             id: new XgDecisionId("mochy-falafel.xg", Game: 2, MoveNumber: 7, IsCube: false),
             xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:63:0:0:3:0:10",
             error: 0.023,
-            matchLength: 9,
-            onRollNeeds: 3,
-            opponentNeeds: 5,
-            isCrawford: false,
-            isJacoby: null,
+            session: Match(9, 3, 5),
             player: "Mochy",
             dice: [6, 3],
             equity: -0.142,
@@ -180,11 +174,13 @@ public class DecisionRowSerializationTests
         Assert.Equal(DecisionKind.CheckerPlay, restored.Kind);
         Assert.Equal(original.Xgid, restored.Xgid);
         Assert.Equal(original.Error, restored.Error);
-        Assert.Equal(original.MatchLength, restored.MatchLength);
-        Assert.Equal(original.OnRollNeeds, restored.OnRollNeeds);
-        Assert.Equal(original.OpponentNeeds, restored.OpponentNeeds);
-        Assert.Equal(original.IsCrawford, restored.IsCrawford);
-        Assert.Equal(original.IsJacoby, restored.IsJacoby);
+        Assert.Equal(SessionKind.Match, restored.SessionKind);
+        Assert.Equal(9, restored.MatchLength);
+        Assert.Equal(3, restored.OnRollNeeds);
+        Assert.Equal(5, restored.OpponentNeeds);
+        Assert.Equal(false, restored.IsCrawford);
+        Assert.Null(restored.IsJacoby);
+        Assert.Equal(original.Session, restored.Session);
         Assert.Equal(original.Player, restored.Player);
         Assert.Equal(original.SourceFile, restored.SourceFile);
         Assert.Equal(2, restored.Game);
@@ -208,9 +204,7 @@ public class DecisionRowSerializationTests
             analysisMode: AnalysisMode.Rollout,
             analysisLevel: AnalysisLevel.Ply3,
             rolloutTrials: 1296,
-            matchLength: 9,
-            onRollNeeds: 1,
-            opponentNeeds: 1);
+            session: Match(9, 1, 1));
 
         var restored = RoundTrip(original);
 
@@ -218,7 +212,7 @@ public class DecisionRowSerializationTests
         Assert.Null(restored.Roll);
         Assert.Equal(original.Equity, restored.Equity);
         Assert.Equal(original.AnalysisDepth, restored.AnalysisDepth);
-        Assert.False(restored.IsCrawford);
+        Assert.Equal(false, restored.IsCrawford);
     }
 
     [Fact]
@@ -226,11 +220,11 @@ public class DecisionRowSerializationTests
     {
         // The flag's true round trip rides a Crawford checker play: a
         // Crawford cube cannot be constructed (DecisionRowCrawfordCubeTests).
-        var original = PlayRow(dice: [5, 2], matchLength: 9, onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
+        var original = PlayRow(dice: [5, 2], session: Match(9, 1, 3, isCrawford: true));
 
         var restored = RoundTrip(original);
 
-        Assert.True(restored.IsCrawford);
+        Assert.Equal(true, restored.IsCrawford);
         Assert.Equal(DecisionKind.CheckerPlay, restored.Kind);
         Assert.Equal("1a3aC", restored.MatchScore);
     }
@@ -268,7 +262,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_RoundTrip_MatchScoreNotSerialized()
     {
-        var original = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
+        var original = PlayRow(session: Match(9, 3, 5));
         var json = JsonSerializer.Serialize(original, Options);
 
         Assert.DoesNotContain("MatchScore", json);
@@ -302,7 +296,6 @@ public class DecisionRowSerializationTests
             Assert.Equal(ranked.PlayerResult, row.PlayerResult);
             Assert.Equal(PlayerResultKind.Scored, row.Result);
             Assert.Equal(0.1813, row.Error!.Value, 12);
-            Assert.Equal(record.MatchLength, row.MatchLength);
             Assert.Equal(record.Player, row.Player);
             Assert.Equal(record.SourceFile, row.SourceFile);
             Assert.Equal(record.IsStandardStart, row.IsStandardStart);
@@ -311,10 +304,16 @@ public class DecisionRowSerializationTests
             Assert.Equal(ranked.Best.Candidate.AnalysisMode, row.AnalysisMode);
             Assert.Equal(ranked.Best.Candidate.AnalysisLevel, row.AnalysisLevel);
             Assert.Equal(ranked.Best.Candidate.Equity, row.Equity);
-            Assert.Equal(record.OnRollNeeds, row.OnRollNeeds);
-            Assert.Equal(record.OpponentNeeds, row.OpponentNeeds);
-            Assert.Equal(record.IsCrawford, row.IsCrawford);
-            Assert.Equal(record.IsJacoby, row.IsJacoby);
+            // Rewritten: the session columns are the match session's, and the
+            // money column is empty.
+            var match = Assert.IsType<MatchSession>(record.Session);
+            Assert.Same(record.Session, row.Session);
+            Assert.Equal(SessionKind.Match, row.SessionKind);
+            Assert.Equal(match.Length, row.MatchLength);
+            Assert.Equal(match.OnRollNeeds, row.OnRollNeeds);
+            Assert.Equal(match.OpponentNeeds, row.OpponentNeeds);
+            Assert.Equal(match.IsCrawford, row.IsCrawford);
+            Assert.Null(row.IsJacoby);
             Assert.Equal(record.Board, row.Board);
             Assert.Equal(record.AfterBoardOfBest(ranking), row.AfterBestBoard);
             Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
@@ -357,18 +356,23 @@ public class DecisionRowSerializationTests
                      TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(dice: [1, 3], userPlayIndex: 1)),
                      TestRecords.CheckerPlay(id: new XgpDecisionId("p.xgp"), decision: TestRecords.CheckerPlayData(userPlayIndex: null)),
                      TestRecords.Cube(),
-                     TestRecords.Cube(position: TestRecords.Position(onRollNeeds: 0, opponentNeeds: 0, isJacoby: true),
-                         descriptive: TestRecords.Descriptive(matchLength: 0)),
+                     TestRecords.Cube(position: TestRecords.Position(session: Money(true))),
                  })
         {
             foreach (var ranking in Enum.GetValues<PlayRanking>())
             {
                 var fromRecord = record.ViewFor(ranking);
                 IDecisionFilterData fromRow = DecisionRow.From(record, ranking);
+                IDecisionFilterData readBack = RoundTrip(DecisionRow.From(record, ranking));
 
+                // Rewritten: IsMoneyGame is gone with the 0 it read; the
+                // session is a member of the contract, and a value, so the
+                // row read back from JSON agrees with the record too.
                 foreach (var property in typeof(IDecisionFilterData).GetProperties())
+                {
                     Assert.Equal(property.GetValue(fromRecord), property.GetValue(fromRow));
-                Assert.Equal(fromRecord.IsMoneyGame, fromRow.IsMoneyGame);
+                    Assert.Equal(property.GetValue(fromRecord), property.GetValue(readBack));
+                }
                 Assert.Equal(ranking, fromRow.Ranking);
             }
         }
@@ -413,7 +417,7 @@ public class DecisionRowSerializationTests
         // (a fixture's mutation, what it breaks)
         { "cube-roll", "A cube row's checker-play columns are empty" },
         { "cube-afterbest", "A cube row's checker-play columns are empty" },
-        { "cube-crawford", "Crawford" },
+        { "cube-crawford", "Doubling is prohibited in the Crawford game" },
         { "play-no-roll", "states its Roll" },
         { "play-bad-roll", "not two die faces" },
         { "play-no-afterbest", "the board its best play leaves" },
@@ -421,17 +425,45 @@ public class DecisionRowSerializationTests
         { "standalone-with-start", "IsStandardStart is a fact about a game" },
         { "game-without-start", "IsStandardStart is a fact about a game" },
         { "null-id", "states its Id" },
+        // The session's kind (halheinrich/backgammon#273): its own columns
+        // stated and the other kind's empty, then the kind's own rules.
+        { "match-no-length", "A match row states its MatchLength" },
+        { "match-with-jacoby", "no money column" },
+        { "match-kind-over-money-columns", "A match row states its MatchLength" },
+        { "money-no-jacoby", "A money row states its IsJacoby" },
+        { "money-with-away-score", "no match column" },
+        { "money-with-zero-length", "no match column" },
+        { "match-zero-away", "needs at least one point" },
+        { "match-away-past-length", "never more than the match's length" },
+        { "match-zero-length", "at least one point" },
+        { "crawford-with-no-player-1-away", "exactly one player is 1-away" },
     };
 
     private static string Malformed(string name)
     {
         var play = WirePaths.Document(PlayRow());
         var cube = WirePaths.Document(CubeRow());
+        var money = WirePaths.Document(PlayRow(session: Money(true)));
         switch (name)
         {
             case "cube-roll": cube["Roll"] = 31; return cube.ToJsonString();
             case "cube-afterbest": cube["AfterBestBoard"] = play["AfterBestBoard"]!.DeepClone(); return cube.ToJsonString();
-            case "cube-crawford": cube["IsCrawford"] = true; return cube.ToJsonString();
+            case "cube-crawford":
+                // At 1-away to 3-away, where the Crawford game can be: what
+                // refuses the row is the cube rule, not the standing's.
+                var crawfordable = WirePaths.Document(CubeRow(session: Match(7, 1, 3)));
+                crawfordable["IsCrawford"] = true;
+                return crawfordable.ToJsonString();
+            case "match-no-length": play.Remove("MatchLength"); return play.ToJsonString();
+            case "match-with-jacoby": play["IsJacoby"] = true; return play.ToJsonString();
+            case "match-kind-over-money-columns": money["SessionKind"] = "Match"; return money.ToJsonString();
+            case "money-no-jacoby": money.Remove("IsJacoby"); return money.ToJsonString();
+            case "money-with-away-score": money["OnRollNeeds"] = 3; return money.ToJsonString();
+            case "money-with-zero-length": money["MatchLength"] = 0; return money.ToJsonString();
+            case "match-zero-away": play["OnRollNeeds"] = 0; return play.ToJsonString();
+            case "match-away-past-length": play["OpponentNeeds"] = 8; return play.ToJsonString();
+            case "match-zero-length": play["MatchLength"] = 0; return play.ToJsonString();
+            case "crawford-with-no-player-1-away": play["IsCrawford"] = true; return play.ToJsonString();
             case "play-no-roll": play.Remove("Roll"); return play.ToJsonString();
             case "play-bad-roll": play["Roll"] = 70; return play.ToJsonString();
             case "play-no-afterbest": play["AfterBestBoard"] = null; return play.ToJsonString();
@@ -535,69 +567,90 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  IsMoneyGame — derived from MatchLength, feeds MatchScore
+    //  The session's kind — a column, with the other kind's columns empty
+    //  (halheinrich/backgammon#273). Rewritten from the IsMoneyGame tests:
+    //  money is the stated kind, never a MatchLength of 0.
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_IsMoneyGame_MoneyRow()
+    public void DecisionRow_MoneyRow_StatesItsKind_AndLeavesTheMatchColumnsEmpty()
     {
-        var row = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0);
+        // Rewritten from DecisionRow_IsMoneyGame_MoneyRow, which read money
+        // off a 0 and wrote the bare rule-unknown token.
+        var row = PlayRow(session: Money(true));
 
-        Assert.True(row.IsMoneyGame);
-        // IsJacoby unset, so the bare (rule-unknown) money token.
-        Assert.Equal("money", row.MatchScore);
+        Assert.Equal(SessionKind.Money, row.SessionKind);
+        Assert.Equal(true, row.IsJacoby);
+        Assert.Null(row.MatchLength);
+        Assert.Null(row.OnRollNeeds);
+        Assert.Null(row.OpponentNeeds);
+        Assert.Null(row.IsCrawford);
+        Assert.Equal(Money(true), row.Session);
+        Assert.Equal("moneyJ", row.MatchScore);
     }
 
     [Fact]
-    public void DecisionRow_IsMoneyGame_OnePointMatch()
+    public void DecisionRow_OnePointMatch_IsAMatch()
     {
-        // The shortest possible match — the boundary case next to money's 0.
-        var row = PlayRow(matchLength: 1, onRollNeeds: 1, opponentNeeds: 1);
+        // Rewritten from DecisionRow_IsMoneyGame_OnePointMatch: the shortest
+        // match, no longer a boundary next to money's 0.
+        var row = PlayRow(session: Match(1, 1, 1));
 
-        Assert.False(row.IsMoneyGame);
+        Assert.Equal(SessionKind.Match, row.SessionKind);
+        Assert.Null(row.IsJacoby);
         Assert.Equal("1a1a", row.MatchScore);
     }
 
     [Fact]
-    public void DecisionRow_IsMoneyGame_StandardMatch()
+    public void DecisionRow_StandardMatch_StatesItsColumns()
     {
-        var row = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
+        // Rewritten from DecisionRow_IsMoneyGame_StandardMatch.
+        var row = PlayRow(session: Match(9, 3, 5));
 
-        Assert.False(row.IsMoneyGame);
+        Assert.Equal(SessionKind.Match, row.SessionKind);
+        Assert.Equal((9, 3, 5, false), (row.MatchLength, row.OnRollNeeds, row.OpponentNeeds, row.IsCrawford));
         Assert.Equal("3a5a", row.MatchScore);
     }
 
     [Fact]
-    public void DecisionRow_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire()
+    public void DecisionRow_TheSessionKindIsTheWire_AndNoMatchLengthStandsInForMoney()
     {
-        var original = PlayRow(matchLength: 0);
+        // Rewritten from DecisionRow_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire.
+        var original = PlayRow(session: Money(false));
         var json = JsonSerializer.Serialize(original, Options);
 
         Assert.DoesNotContain("IsMoneyGame", json);
-        Assert.Contains("\"MatchLength\":0", json);
+        Assert.Contains("\"SessionKind\":\"Money\",\"MatchLength\":null,\"OnRollNeeds\":null,\"OpponentNeeds\":null,\"IsCrawford\":null,\"IsJacoby\":false", json);
 
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
-        Assert.True(restored.IsMoneyGame);
+        Assert.Equal(Money(false), restored.Session);
     }
 
     [Fact]
-    public void DecisionRow_IsMoneyGame_NotInCsvOutput()
+    public void DecisionRow_MoneyRow_WritesAnEmptyMatchLengthCell()
     {
-        var row = PlayRow(matchLength: 0);
+        // Rewritten from DecisionRow_IsMoneyGame_NotInCsvOutput: the column
+        // count is unchanged (14 columns, 13 commas), and a money row's
+        // MatchLength cell is empty — never the 0 it used to write.
+        var row = PlayRow(session: Money(true));
+        string[] cells = row.ToCsvLine().Split(',');
 
         Assert.DoesNotContain("IsMoneyGame", DecisionRow.CsvHeader);
-        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
-        Assert.Equal(13, row.ToCsvLine().Count(c => c == ','));
+        Assert.Equal(14, cells.Length);
+        Assert.Equal("MatchLength", DecisionRow.CsvHeader.Split(',')[3]);
+        Assert.Equal("", cells[3]);
+        Assert.Equal("9", PlayRow(session: Match(9, 3, 5)).ToCsvLine().Split(',')[3]);
     }
 
     [Fact]
-    public void DecisionRow_IDecisionFilterData_IsMoneyGame()
+    public void DecisionRow_IDecisionFilterData_Session_IsTheKind()
     {
-        IDecisionFilterData money = PlayRow(matchLength: 0);
-        IDecisionFilterData match = PlayRow(matchLength: 9);
+        // Rewritten from DecisionRow_IDecisionFilterData_IsMoneyGame.
+        IDecisionFilterData money = PlayRow(session: Money(true));
+        IDecisionFilterData match = PlayRow(session: Match(9, 3, 5));
 
-        Assert.True(money.IsMoneyGame);
-        Assert.False(match.IsMoneyGame);
+        Assert.IsType<MoneySession>(money.Session);
+        Assert.IsType<MatchSession>(match.Session);
     }
 
     // -----------------------------------------------------------------------
@@ -605,51 +658,59 @@ public class DecisionRowSerializationTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_MatchScore_Money_JacobyUnknown()
+    public void DecisionRow_MatchScore_Money_HasNoUnknownRuleToken()
     {
-        // No IsJacoby stamp — the bare token, which is neither moneyJ nor moneyNJ.
-        var row = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0);
-        Assert.Equal("money", row.MatchScore);
+        // Rewritten from DecisionRow_MatchScore_Money_JacobyUnknown: a money
+        // row always states its rule, so the bare "money" token is gone; each
+        // money row writes one of the two rule-bearing tokens.
+        Assert.Equal("moneyJ", PlayRow(session: Money(true)).MatchScore);
+        Assert.Equal("moneyNJ", PlayRow(session: Money(false)).MatchScore);
+        Assert.DoesNotContain("money", new[] { PlayRow(session: Money(true)).MatchScore, PlayRow(session: Money(false)).MatchScore });
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Money_Jacoby()
     {
-        var row = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: true);
+        var row = PlayRow(session: Money(true));
         Assert.Equal("moneyJ", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Money_NoJacoby()
     {
-        var row = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: false);
+        var row = PlayRow(session: Money(false));
         Assert.Equal("moneyNJ", row.MatchScore);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    [InlineData(null)]
-    public void DecisionRow_MatchScore_MatchRow_IgnoresIsJacoby(bool? isJacoby)
+    [Fact]
+    public void DecisionRow_MatchScore_MatchRow_HasNoJacobyToSpell()
     {
-        // The suffix is money-only: a match score is unchanged by the stamp,
-        // stray or otherwise, exactly as PositionData.IsJacoby's contract says.
-        var row = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5, isJacoby: isJacoby);
+        // Rewritten from DecisionRow_MatchScore_MatchRow_IgnoresIsJacoby(isJacoby):
+        // a match row cannot state a Jacoby rule — its IsJacoby column is
+        // empty from the record, and a document stating one is refused
+        // (DecisionRow_Read_BreakingAGuarantee_IsRefused_BothPaths) — so the
+        // score has no suffix to leave off.
+        var row = PlayRow(session: Match(9, 3, 5));
+
+        Assert.Null(row.IsJacoby);
         Assert.Equal("3a5a", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Standard()
     {
-        var row = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
+        var row = PlayRow(session: Match(9, 3, 5));
         Assert.Equal("3a5a", row.MatchScore);
     }
 
     [Fact]
     public void DecisionRow_MatchScore_Crawford()
     {
-        var row = PlayRow(matchLength: 9, onRollNeeds: 1, opponentNeeds: 1, isCrawford: true);
-        Assert.Equal("1a1aC", row.MatchScore);
+        // Rewritten: the fixture stated the Crawford game at 1-away to 1-away,
+        // which no match reaches and the match session refuses; 1-away to
+        // 3-away is one.
+        var row = PlayRow(session: Match(9, 1, 3, isCrawford: true));
+        Assert.Equal("1a3aC", row.MatchScore);
     }
 
     // -----------------------------------------------------------------------
@@ -694,7 +755,7 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_EscapesCommas()
     {
-        var row = PlayRow(matchLength: 9, onRollNeeds: 3, opponentNeeds: 5, player: "Last, First");
+        var row = PlayRow(session: Match(9, 3, 5), player: "Last, First");
         var line = row.ToCsvLine();
         Assert.Contains("\"Last, First\"", line);
     }
@@ -728,7 +789,7 @@ public class DecisionRowSerializationTests
         // two or change its sign.
         var row = PlayRow(
             error: 0.12345678, equity: -0.98765432, dice: [6, 3],
-            matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
+            session: Match(9, 3, 5));
         const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity,Unstated";
 
         var original = CultureInfo.CurrentCulture;
@@ -838,17 +899,15 @@ public class DecisionRowSerializationTests
         IDecisionFilterData row = PlayRow(
             player: "Mochy",
             dice: [6, 3],
-            matchLength: 9,
-            onRollNeeds: 3,
-            opponentNeeds: 5,
+            session: Match(9, 3, 5),
             error: 0.023,
             board: board);
 
+        // Rewritten: the away scores and the Crawford flag reach the filter
+        // as the match session.
         Assert.Equal("Mochy", row.Player);
         Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
-        Assert.Equal(3, row.OnRollNeeds);
-        Assert.Equal(5, row.OpponentNeeds);
-        Assert.False(row.IsCrawford);
+        Assert.Equal(Match(9, 3, 5), row.Session);
         Assert.Equal(PlayerResult.Unstated(0.023), row.PlayerResult);
         Assert.Equal(board, row.Board);
     }
@@ -858,13 +917,11 @@ public class DecisionRowSerializationTests
     {
         IDecisionFilterData row = CubeRow(
             player: "Falafel",
-            matchLength: 9,
-            onRollNeeds: 1,
-            opponentNeeds: 1,
+            session: Match(9, 1, 1),
             error: 0.011);
 
         Assert.Equal(DecisionKind.Cube, row.Kind);
-        Assert.False(row.IsCrawford);
+        Assert.Equal(Match(9, 1, 1), row.Session);
         Assert.Equal(PlayerResult.Unstated(0.011), row.PlayerResult);
     }
 
@@ -873,10 +930,11 @@ public class DecisionRowSerializationTests
     {
         // The flag forwards from a record that can exist — a Crawford
         // checker play; the cube case above is post-Crawford by necessity.
-        IDecisionFilterData row = PlayRow(dice: [5, 2], matchLength: 9, onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
+        // Rewritten: through the match session.
+        IDecisionFilterData row = PlayRow(dice: [5, 2], session: Match(9, 1, 3, isCrawford: true));
 
         Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
-        Assert.True(row.IsCrawford);
+        Assert.True(Assert.IsType<MatchSession>(row.Session).IsCrawford);
     }
 
     [Fact]
@@ -1219,76 +1277,80 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  IsJacoby — tri-state field, CSV via MatchScore
+    //  IsJacoby — a money row's column, CSV via MatchScore
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_IsJacoby_NullRoundTrips()
+    public void DecisionRow_IsJacoby_IsNullOnAMatchRow_AndRoundTrips()
     {
-        // Rewritten from DecisionRow_IsJacoby_DefaultsToNull: the unknown rule
-        // is the null a producer states, and it round-trips (the absent case
-        // is DecisionRow_IsJacoby_AbsentFromJson_ReadsAsNotSupplied).
-        var json = JsonSerializer.Serialize(PlayRow(isJacoby: null), Options);
+        // Rewritten from DecisionRow_IsJacoby_NullRoundTrips: null is no
+        // longer an unknown rule a producer states, but the match row's empty
+        // money column, and it round-trips as that.
+        var json = JsonSerializer.Serialize(PlayRow(), Options);
         var row = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
 
         Assert.Contains("\"IsJacoby\":null", json);
         Assert.Null(row.IsJacoby);
+        Assert.IsType<MatchSession>(row.Session);
     }
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    [InlineData(null)]
-    public void DecisionRow_RoundTrip_IsJacoby(bool? isJacoby)
+    public void DecisionRow_RoundTrip_IsJacoby(bool isJacoby)
     {
-        var original = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby);
+        // Rewritten: two states on a money row, not three.
+        var original = PlayRow(session: Money(isJacoby));
 
         var restored = RoundTrip(original);
 
         Assert.Equal(isJacoby, restored.IsJacoby);
         Assert.Equal(original.MatchScore, restored.MatchScore);
+        Assert.Equal(original.Session, restored.Session);
     }
 
     [Fact]
-    public void DecisionRow_IsJacoby_AbsentFromJson_ReadsAsNotSupplied()
+    public void DecisionRow_IsJacoby_AbsentFromAMoneyRow_IsRefused_BothPaths()
     {
-        // A money row without the fact reads as unknown.
-        var restored = ReadWithout(
-            PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: true), "IsJacoby");
+        // Rewritten from DecisionRow_IsJacoby_AbsentFromJson_ReadsAsNotSupplied:
+        // a money row without its rule used to read as unknown and write the
+        // bare "money" token. A money row states its rule now.
+        var document = WirePaths.Document(PlayRow(session: Money(true)));
+        document.Remove("IsJacoby");
 
-        Assert.Null(restored.IsJacoby);
-        Assert.Equal("money", restored.MatchScore);
+        var ex = WirePaths.AssertRefused<DecisionRow>(document.ToJsonString());
+        Assert.Contains("A money row states its IsJacoby", ex.Message);
     }
 
     [Theory]
     [InlineData(true, "moneyJ")]
     [InlineData(false, "moneyNJ")]
-    [InlineData(null, "money")]
-    public void DecisionRow_IDecisionFilterData_IsJacoby(bool? isJacoby, string expectedScore)
+    public void DecisionRow_IDecisionFilterData_IsJacoby(bool isJacoby, string expectedScore)
     {
-        IDecisionFilterData data = PlayRow(matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby);
+        // Rewritten: the filter reads the rule off the money session.
+        IDecisionFilterData data = PlayRow(session: Money(isJacoby));
 
-        Assert.True(data.IsMoneyGame);
-        Assert.Equal(isJacoby, data.IsJacoby);
+        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(data.Session).IsJacoby);
         Assert.Equal(expectedScore, ((DecisionRow)data).MatchScore);
     }
 
     [Fact]
-    public void DecisionRow_IDecisionFilterData_IsJacoby_MatchRow_IsNull()
+    public void DecisionRow_IDecisionFilterData_IsJacoby_MatchRow_HasNone()
     {
-        IDecisionFilterData data = PlayRow(matchLength: 9);
+        // Rewritten from DecisionRow_IDecisionFilterData_IsJacoby_MatchRow_IsNull.
+        IDecisionFilterData data = PlayRow(session: Match(9, 9, 9));
 
-        Assert.False(data.IsMoneyGame);
-        Assert.Null(data.IsJacoby);
+        Assert.IsType<MatchSession>(data.Session);
+        Assert.Null(((DecisionRow)data).IsJacoby);
     }
 
     [Theory]
     [InlineData(true, "moneyJ")]
     [InlineData(false, "moneyNJ")]
-    [InlineData(null, "money")]
-    public void DecisionRow_ToCsvLine_IsJacoby_RidesTheMatchScoreColumn(bool? isJacoby, string expectedToken)
+    public void DecisionRow_ToCsvLine_IsJacoby_RidesTheMatchScoreColumn(bool isJacoby, string expectedToken)
     {
-        var row = PlayRow(xgid: "XGID=x", matchLength: 0, onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby);
+        // Rewritten: the rule-unknown "money" case is gone.
+        var row = PlayRow(xgid: "XGID=x", session: Money(isJacoby));
         var line = row.ToCsvLine();
 
         // Header: Xgid,Error,MatchScore,MatchLength,... — MatchScore is column

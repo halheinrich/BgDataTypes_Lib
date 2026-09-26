@@ -15,13 +15,13 @@ namespace BgDataTypes_Lib;
 ///
 /// <para>
 /// A fact participates iff it can change the correct answer — and only then:
-/// the on-roll-relative board (both bars), the away-scores pair
-/// (<c>0</c>/<c>0</c> = money game), the Crawford flag, the cube state
-/// (size and owner — for both decision kinds), the Jacoby rule
-/// (<see cref="PositionData.IsJacoby"/> — <b>money keys only</b>: with a
+/// the on-roll-relative board (both bars), the session's score — a match's
+/// away-scores pair and Crawford flag, or money with its Jacoby rule
+/// (<see cref="MoneySession.IsJacoby"/> — <b>money keys only</b>: with a
 /// centered cube it voids undoubled gammons and shifts the doubling window,
-/// and it is meaningless off money), and, for checker plays only, the dice
-/// in canonical unordered form. The decision kind rides on the dice:
+/// and it is meaningless off money) — the cube state (size and owner — for
+/// both decision kinds), and, for checker plays only, the dice in canonical
+/// unordered form. The decision kind rides on the dice:
 /// a play key carries them, a cube key carries none. Beaver and max-cube,
 /// match length, raw scores, seat/turn, and all provenance are excluded by
 /// ratified ruling — this key therefore collapses strictly more than the
@@ -40,9 +40,9 @@ namespace BgDataTypes_Lib;
 /// board  := 26 comma-separated signed decimal integers, Mop order
 ///           ([0] opponent bar &lt;= 0, [1..24] points, [25] on-roll bar &gt;= 0;
 ///           positive = on-roll player's checkers)
-/// score  := match | money
+/// score  := match | money                          ; the session's kind
 /// match  := onRollAway 'a' opponentAway [ 'cr' ]   ; both away scores &gt; 0
-/// money  := '0a0' jacoby                           ; money game
+/// money  := '0a0' jacoby                           ; money session
 /// jacoby := 'j'                                    ; Jacoby rule in force
 ///         | 'nj'                                   ; Jacoby rule not in force
 /// cube   := size owner                             ; owner: c=centered,
@@ -83,6 +83,19 @@ namespace BgDataTypes_Lib;
 /// let a stats document split a problem's tallies. Enforcement is
 /// structural: the parser re-formats the parsed facts and requires ordinal
 /// equality with the input, so only canonical spellings survive.
+/// </para>
+///
+/// <para>
+/// <b>The text is kept, the construction is the kinds'</b> (Hal,
+/// 2026-09-26; halheinrich/backgammon#273). The grammar already writes money
+/// as its own production, <c>0a0</c> with its Jacoby suffix — a key's text,
+/// not a stand-in on any record — so every key is byte-identical to what the
+/// previous construction wrote, and the stats documents keyed by it are
+/// unchanged. What changed is where the facts come from:
+/// <see cref="TryDerive"/> reads the record's <see cref="Session"/> by its
+/// kind, a <see cref="MoneySession"/> into the money production and a
+/// <see cref="MatchSession"/> into the match one, never a match length or an
+/// away score of 0.
 /// </para>
 ///
 /// <para>
@@ -171,23 +184,20 @@ public sealed class ProblemKey :
     /// </param>
     /// <returns>
     /// <see langword="false"/> — no key, per the ratified no-key rung —
-    /// when the facts are malformed, degenerate, or inconsistent: an empty
-    /// board (the board is otherwise well-formed by its type,
-    /// <see cref="BoardPosition"/>); a negative away score; exactly one away
-    /// score zero (money is
-    /// <c>0</c>/<c>0</c> only — a single 0-away side means the match is
-    /// over); a Crawford flag in a money game or with neither side 1-away;
-    /// a money record whose <see cref="PositionData.IsJacoby"/> is
-    /// <see langword="null"/> (the fact the money grammar spells is not
-    /// supplied — guessing "off" is exactly what this rung forbids); a cube
-    /// size that is not a positive power of two; or an undefined
-    /// <see cref="CubeOwner"/> value. Otherwise <see langword="true"/>. (A
-    /// checker play's dice are no rung: they are two faces 1–6 by
-    /// construction, <see cref="CheckerPlayDecisionData.Dice"/>.)
-    /// A <see cref="PositionData.IsJacoby"/> stamp on a <em>match</em>
-    /// record is not a rejection rung: the fact is meaningless off money,
-    /// so it is ignored and the match key is unaffected.
-    /// Never throws on bad facts (degrade, never block).
+    /// when the facts are malformed or degenerate: an empty board (the board
+    /// is otherwise well-formed by its type, <see cref="BoardPosition"/>); a
+    /// cube size that is not a positive power of two; or an undefined
+    /// <see cref="CubeOwner"/> value. Otherwise <see langword="true"/>. The
+    /// score is no rung: the record's <see cref="Session"/> is well-formed by
+    /// its kind — a match's away scores at least 1, its Crawford game with a
+    /// 1-away side, a money session's Jacoby rule always stated — so the
+    /// score rules the parse door still enforces (<see cref="AreValidFacts"/>)
+    /// hold of every record by construction. The money rung that withheld a
+    /// key from a money record with no Jacoby fact is gone with the fact's
+    /// absence (halheinrich/backgammon#273). (A checker play's dice are no
+    /// rung either: they are two faces 1–6 by construction,
+    /// <see cref="CheckerPlayDecisionData.Dice"/>.) Never throws on bad facts
+    /// (degrade, never block).
     /// </returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="data"/> is <see langword="null"/> — a
@@ -206,19 +216,64 @@ public sealed class ProblemKey :
         // none for a cube decision.
         DiceRoll? dice = data.Match<DiceRoll?>(static play => play.Dice, static _ => null);
 
-        if (!AreValidFacts(
-                position.Mop,
-                position.OnRollNeeds, position.OpponentNeeds, position.IsCrawford,
-                position.CubeSize, position.CubeOwner, position.IsJacoby))
+        // The score field from the session's kind: money into the money
+        // production, a match into the match one.
+        Score score = position.Session.Match(
+            static money => Score.Money(money.IsJacoby),
+            static match => Score.Match(match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
+
+        if (!AreValidFacts(position.Mop, score, position.CubeSize, position.CubeOwner))
             return false;
 
         key = new ProblemKey(
-            FormatCanonical(
-                position.Mop,
-                position.OnRollNeeds, position.OpponentNeeds, position.IsCrawford,
-                position.CubeSize, position.CubeOwner, position.IsJacoby, dice),
+            FormatCanonical(position.Mop, score, position.CubeSize, position.CubeOwner, dice),
             isCubeDecision: data.Kind == DecisionKind.Cube);
         return true;
+    }
+
+    // -----------------------------------------------------------------------
+    //  The score field — the grammar's two productions
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The score field's facts, as the grammar's two productions: money with
+    /// its Jacoby rule, or a match's away scores and Crawford flag. Both doors
+    /// reach the one emitter through it — <see cref="TryDerive"/> from the
+    /// record's <see cref="Session"/>, the parser from the text — so the key's
+    /// own representation, not a record's, is what the grammar spells.
+    /// </summary>
+    private readonly struct Score
+    {
+        private Score(bool isMoney, bool isJacoby, int onRollAway, int opponentAway, bool isCrawford)
+        {
+            IsMoney = isMoney;
+            IsJacoby = isJacoby;
+            OnRollAway = onRollAway;
+            OpponentAway = opponentAway;
+            IsCrawford = isCrawford;
+        }
+
+        /// <summary>The money production, <c>0a0</c> with the rule's suffix.</summary>
+        internal static Score Money(bool isJacoby) => new(true, isJacoby, 0, 0, false);
+
+        /// <summary>The match production, the away scores with a presence-encoded Crawford token.</summary>
+        internal static Score Match(int onRollAway, int opponentAway, bool isCrawford) =>
+            new(false, false, onRollAway, opponentAway, isCrawford);
+
+        /// <summary>Whether this is the money production.</summary>
+        internal bool IsMoney { get; }
+
+        /// <summary>The money production's Jacoby rule.</summary>
+        internal bool IsJacoby { get; }
+
+        /// <summary>The match production's away score for the player on roll.</summary>
+        internal int OnRollAway { get; }
+
+        /// <summary>The match production's away score for the opponent.</summary>
+        internal int OpponentAway { get; }
+
+        /// <summary>The match production's Crawford flag.</summary>
+        internal bool IsCrawford { get; }
     }
 
     // -----------------------------------------------------------------------
@@ -227,13 +282,12 @@ public sealed class ProblemKey :
 
     /// <summary>
     /// The no-key rung's fact validation (dice are validated separately at
-    /// each door, before a <see cref="DiceRoll"/> can exist). See
-    /// <see cref="TryDerive"/> for the full rejection list.
+    /// each door, before a <see cref="DiceRoll"/> can exist). A record's
+    /// session keeps the score rules by its kind, so only the board and the
+    /// cube can fail here for a record (<see cref="TryDerive"/>); the parse
+    /// door reaches every rule.
     /// </summary>
-    private static bool AreValidFacts(
-        BoardPosition board,
-        int onRollAway, int opponentAway, bool isCrawford,
-        int cubeSize, CubeOwner cubeOwner, bool? isJacoby)
+    private static bool AreValidFacts(BoardPosition board, Score score, int cubeSize, CubeOwner cubeOwner)
     {
         // Board: real-board posture (see the type remarks). Well-formedness
         // is the board's own invariant; the key adds only that a real
@@ -241,23 +295,17 @@ public sealed class ProblemKey :
         if (board == BoardPosition.Empty)
             return false;                              // empty board
 
-        // Away scores: money is 0a0 only; one 0-away side = match over.
-        if (onRollAway < 0 || opponentAway < 0)
-            return false;
-        if ((onRollAway == 0) != (opponentAway == 0))
-            return false;
-
-        // Crawford: barred in money; requires a 1-away side.
-        if (isCrawford && (onRollAway == 0 || (onRollAway != 1 && opponentAway != 1)))
-            return false;
-
-        // Jacoby: the money grammar spells it, so a money record must carry
-        // it — an absent fact is the no-key rung, never a guessed "off".
-        // Off money the question does not arise: a stamped value there is
-        // ignored (not rejected) — the in-tree producer stamps money records
-        // only, but a meaningless member must never cost a match key.
-        if (onRollAway == 0 && isJacoby is null)
-            return false;
+        // A match's away scores are at least 1 — a 0-away side means the
+        // match is over, and 0a0 is the money production alone — and its
+        // Crawford game has a 1-away side. Money has no score rule of its
+        // own: its production is 0a0 with its rule spelled.
+        if (!score.IsMoney)
+        {
+            if (score.OnRollAway < 1 || score.OpponentAway < 1)
+                return false;
+            if (score.IsCrawford && score.OnRollAway != 1 && score.OpponentAway != 1)
+                return false;
+        }
 
         // Cube: positive power of two, defined owner.
         if (cubeSize < 1 || (cubeSize & (cubeSize - 1)) != 0)
@@ -271,6 +319,12 @@ public sealed class ProblemKey :
     // -----------------------------------------------------------------------
     //  Canonical formatting
     // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Canonical score-field token of the money production, before its Jacoby
+    /// suffix: the grammar's own spelling of money, not an away score.
+    /// </summary>
+    private const string MoneyScoreToken = "0a0";
 
     /// <summary>
     /// Canonical score-field token for the Crawford game. Presence-encoded:
@@ -301,9 +355,7 @@ public sealed class ProblemKey :
     /// All numeric formatting is explicitly invariant.
     /// </summary>
     private static string FormatCanonical(
-        BoardPosition board,
-        int onRollAway, int opponentAway, bool isCrawford,
-        int cubeSize, CubeOwner cubeOwner, bool? isJacoby, DiceRoll? dice)
+        BoardPosition board, Score score, int cubeSize, CubeOwner cubeOwner, DiceRoll? dice)
     {
         var sb = new StringBuilder(96);
 
@@ -314,20 +366,21 @@ public sealed class ProblemKey :
             sb.Append(board[i].ToString(CultureInfo.InvariantCulture));
         }
 
-        sb.Append('/')
-          .Append(onRollAway.ToString(CultureInfo.InvariantCulture))
-          .Append('a')
-          .Append(opponentAway.ToString(CultureInfo.InvariantCulture));
-        if (onRollAway == 0)
+        sb.Append('/');
+        if (score.IsMoney)
         {
-            // Money (0a0): the ruled money-only Jacoby suffix. Crawford is
-            // barred here, and AreValidFacts has already guaranteed the fact
-            // is present, so the value read is safe.
-            sb.Append(isJacoby!.Value ? JacobyOnToken : JacobyOffToken);
+            // The money production: 0a0 and the ruled money-only Jacoby
+            // suffix, both values spelled.
+            sb.Append(MoneyScoreToken)
+              .Append(score.IsJacoby ? JacobyOnToken : JacobyOffToken);
         }
-        else if (isCrawford)
+        else
         {
-            sb.Append(CrawfordToken);
+            sb.Append(score.OnRollAway.ToString(CultureInfo.InvariantCulture))
+              .Append('a')
+              .Append(score.OpponentAway.ToString(CultureInfo.InvariantCulture));
+            if (score.IsCrawford)
+                sb.Append(CrawfordToken);
         }
 
         sb.Append('/')
@@ -478,8 +531,8 @@ public sealed class ProblemKey :
 
         // Jacoby suffix (money grammar). "nj" is tested first: it ends in the
         // same letter as "j", so the longer token has to win. A suffix on a
-        // match key tokenizes here but cannot survive — the re-format identity
-        // check below rejects it, since match keys never emit one.
+        // match key tokenizes here but cannot survive — the production check
+        // below refuses a match spelling a Jacoby rule.
         bool? isJacoby = null;
         if (opponentSpan.EndsWith(JacobyOffToken))
         {
@@ -513,17 +566,31 @@ public sealed class ProblemKey :
             dice = roll;
         }
 
+        // ---- The production: 0a0 is money, with its rule spelled and never
+        // Crawford; anything else is a match, which spells no Jacoby rule ----
+        Score score;
+        if (onRollAway == 0 && opponentAway == 0)
+        {
+            if (isJacoby is not bool jacoby || isCrawford)
+                return false;
+            score = Score.Money(jacoby);
+        }
+        else
+        {
+            if (isJacoby is not null)
+                return false;
+            score = Score.Match(onRollAway, opponentAway, isCrawford);
+        }
+
         // ---- The same fact validation as TryDerive guards the parse door ----
-        if (!AreValidFacts(
-                board, onRollAway, opponentAway, isCrawford, cubeSize, cubeOwner, isJacoby))
+        if (!AreValidFacts(board, score, cubeSize, cubeOwner))
             return false;
 
         // ---- One spelling per value: re-format and require ordinal identity.
         // This is the structural enforcement of the strict-parse contract —
         // "03", "+2", low-first dice, or any other variant spelling re-formats
         // differently and is rejected here.
-        string canonical = FormatCanonical(
-            board, onRollAway, opponentAway, isCrawford, cubeSize, cubeOwner, isJacoby, dice);
+        string canonical = FormatCanonical(board, score, cubeSize, cubeOwner, dice);
         if (!s.SequenceEqual(canonical))
             return false;
 

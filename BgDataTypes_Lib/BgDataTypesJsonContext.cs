@@ -19,21 +19,23 @@ namespace BgDataTypes_Lib;
 /// (<see cref="BgDecisionData"/>, <see cref="DecisionRow"/>) and the types
 /// that define their own wire token via a bundled converter
 /// (<see cref="Play"/>, <see cref="DecisionId"/>, <see cref="ProblemKey"/>,
-/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and the nine enums — <see cref="CubeClaim"/>
+/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and the ten enums — <see cref="CubeClaim"/>
 /// among them ahead of its first embedding document, so the claim
 /// vocabulary of halheinrich/backgammon#86 is born source-genned and
 /// downstream contexts chain rather than re-cover it). Composite parts
 /// (<see cref="PositionData"/>, <see cref="CheckerPlayDecisionData"/>,
 /// <see cref="CubeDecisionData"/>, <see cref="DescriptiveData"/>,
 /// <see cref="PlayCandidate"/>) ride the generator's property-graph walk
-/// from the roots. Two converters stop that walk, so what lies past them is
+/// from the roots. Three converters stop that walk, so what lies past them is
 /// declared explicitly and resolved through the active
 /// <see cref="System.Text.Json.JsonSerializerOptions"/> at runtime — these
 /// declarations are what that resolution finds in a trimmed consumer:
-/// <see cref="Play"/>'s converter emits <see cref="Move"/> elements, and
+/// <see cref="Play"/>'s converter emits <see cref="Move"/> elements;
 /// <see cref="BgDecisionDataJsonConverter"/> delegates to the two kinds,
 /// <see cref="CheckerPlayDecision"/> and <see cref="CubeDecision"/>, reading
-/// <see cref="DecisionKind"/> to choose. A completeness test keeps the
+/// <see cref="DecisionKind"/> to choose; and <see cref="SessionJsonConverter"/>
+/// to the two session kinds, <see cref="MoneySession"/> and
+/// <see cref="MatchSession"/>, reading <see cref="SessionKind"/>. A completeness test keeps the
 /// declarations honest: the serialized-property closure of the roots must
 /// resolve through this context, member by member.
 /// </para>
@@ -81,11 +83,12 @@ namespace BgDataTypes_Lib;
 /// refused</b> (halheinrich/backgammon#273). Every decision states its
 /// <see cref="DecisionKind"/> as a real member, and no reader infers it from
 /// which members are present; see <see cref="BgDecisionDataJsonConverter"/>.
-/// The types whose members belong to one kind — the two records and their
-/// two <c>Decision</c> categories — disallow unmapped members, so a document
-/// whose kind contradicts its members is a
-/// <see cref="System.Text.Json.JsonException"/> rather than a record that
-/// silently dropped the other kind's data. The shared categories
+/// So does every session its <see cref="SessionKind"/>, by the same mechanism
+/// (<see cref="SessionJsonConverter"/>). The types whose members belong to one
+/// kind — the two records, their two <c>Decision</c> categories and the two
+/// sessions — disallow unmapped members, so a document whose kind contradicts
+/// its members is a <see cref="System.Text.Json.JsonException"/> rather than a
+/// value that silently dropped the other kind's data. The shared categories
 /// (<see cref="PositionData"/>, <see cref="DescriptiveData"/>,
 /// <see cref="PlayCandidate"/>) keep the serializer's default and ignore a
 /// member they do not know: no member of theirs can belong to the other kind.
@@ -116,12 +119,14 @@ namespace BgDataTypes_Lib;
 /// its members to a rule — <see cref="CheckerPlayDecision"/>,
 /// <see cref="CubeDecision"/>, <see cref="CheckerPlayDecisionData"/>,
 /// <see cref="CubeDecisionData"/>, <see cref="PlayCandidate"/>,
-/// <see cref="DescriptiveData"/> — has an internal one-parameter serializer
-/// constructor beside the public parameterless one code uses. It marks the
-/// instance as read, and each guard then refuses a breach as a
-/// <see cref="System.Text.Json.JsonException"/> carrying the guard's exception.
-/// A serializer constructor must bind one wire member. A kind binds its
-/// <c>"Kind"</c>, which the base holds to the type. <b>A category binds its
+/// <see cref="PositionData"/>, <see cref="DescriptiveData"/>,
+/// <see cref="MoneySession"/>, <see cref="MatchSession"/> — has an internal
+/// one-parameter serializer constructor beside the public parameterless one
+/// code uses. It marks the instance as read, and each guard then refuses a
+/// breach as a <see cref="System.Text.Json.JsonException"/> carrying the
+/// guard's exception. A serializer constructor must bind one wire member. A
+/// kind — of a decision or of a session — binds its <c>"Kind"</c>, which the
+/// base holds to the type. <b>A category binds its
 /// first member only because a serializer constructor must bind one</b>:
 /// nothing about that member is special, and binding it changes nothing
 /// about how it is read. It stays required, and the absence walk
@@ -182,6 +187,9 @@ namespace BgDataTypes_Lib;
 [JsonSerializable(typeof(BgDecisionData))]
 [JsonSerializable(typeof(CheckerPlayDecision))]
 [JsonSerializable(typeof(CubeDecision))]
+[JsonSerializable(typeof(Session))]
+[JsonSerializable(typeof(MoneySession))]
+[JsonSerializable(typeof(MatchSession))]
 [JsonSerializable(typeof(DecisionRow))]
 [JsonSerializable(typeof(Play))]
 [JsonSerializable(typeof(Move))]
@@ -195,6 +203,7 @@ namespace BgDataTypes_Lib;
 [JsonSerializable(typeof(CubeClaim))]
 [JsonSerializable(typeof(CubeOwner))]
 [JsonSerializable(typeof(DecisionKind))]
+[JsonSerializable(typeof(SessionKind))]
 [JsonSerializable(typeof(BookEdition))]
 [JsonSerializable(typeof(PlayRanking))]
 [JsonSerializable(typeof(PlayerResultKind))]

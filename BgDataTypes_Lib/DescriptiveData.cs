@@ -4,8 +4,11 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// The provenance-and-metadata category of a <see cref="BgDecisionData"/>:
-/// who was playing, and the match it belongs to. Producer-supplied from the
-/// source file's headers (see <c>ConvertXgToJson_Lib</c>). Every member but
+/// who was playing, and where the decision was recorded. Producer-supplied
+/// from the source file's headers (see <c>ConvertXgToJson_Lib</c>). A match's
+/// length is not here: it is the match's own fact, on
+/// <see cref="MatchSession.Length"/>, so a money session has none to state
+/// (halheinrich/backgammon#273; it used to be 0 here). Every member but
 /// the nullable ones is <c>required</c>, per the wire rule stated on
 /// <see cref="BgDataTypesJsonContext"/>, and each nullable member's
 /// documentation says what <see langword="null"/> means.
@@ -48,20 +51,17 @@ public class DescriptiveData
     }
 
     /// <summary>
-    /// The serializer's constructor. It binds <paramref name="matchLength"/>, its
-    /// first member, only because a serializer constructor must bind one; why
-    /// the pattern exists is stated once, on <see cref="BgDataTypesJsonContext"/>
-    /// ("The serializer constructors").
+    /// The serializer's constructor. It binds <paramref name="flagged"/>, the
+    /// category's one required member, only because a serializer constructor
+    /// must bind one; why the pattern exists is stated once, on
+    /// <see cref="BgDataTypesJsonContext"/> ("The serializer constructors").
     /// </summary>
     [JsonConstructor]
-    internal DescriptiveData(int matchLength)
+    internal DescriptiveData(bool flagged)
     {
         _read = true;
-        MatchLength = matchLength;
+        Flagged = flagged;
     }
-
-    /// <summary>Match length in points. 0 = unlimited / money session.</summary>
-    public required int MatchLength { get; init; }
 
     /// <summary>
     /// Name of the player on roll — the decision-maker this record scores.

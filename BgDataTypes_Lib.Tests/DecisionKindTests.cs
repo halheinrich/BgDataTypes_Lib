@@ -245,8 +245,12 @@ public class DecisionKindTests
         // ArgumentException. The limit is closed — the kind refuses the rule
         // itself, so read either way it is a JsonException carrying the
         // guard's exception (DocumentRefusalTests has the whole matrix).
-        var document = WirePaths.Document<BgDecisionData>(TestRecords.Cube());
-        document["Position"]!["IsCrawford"] = true;
+        // The Crawford flag is the match session's (halheinrich/backgammon#273),
+        // at a standing where the Crawford game can be, so the cube rule is
+        // what refuses it.
+        var document = WirePaths.Document<BgDecisionData>(TestRecords.Cube(
+            position: TestRecords.Position(session: TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3))));
+        document["Position"]!["Session"]!["IsCrawford"] = true;
 
         var direct = WirePaths.AssertRefused<CubeDecision>(document.ToJsonString());
         var viaBase = WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());

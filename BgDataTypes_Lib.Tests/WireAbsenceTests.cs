@@ -100,6 +100,14 @@ public class WireAbsenceTests
             case JsonTypeInfoKind.None when type == typeof(Play) && node is JsonArray { Count: > 0 } moves:
                 Walk(document, [.. path, 0], typeof(Move), moves[0]!, members);
                 break;
+
+            // A session's converter dispatches on its kind, as a record's
+            // does; the walk follows it into the kind the document states,
+            // whose contract names the members (halheinrich/backgammon#273).
+            case JsonTypeInfoKind.None when type == typeof(Session) && node is JsonObject session:
+                Walk(document, path, (string?)session["Kind"] == nameof(SessionKind.Money)
+                    ? typeof(MoneySession) : typeof(MatchSession), node, members);
+                break;
         }
     }
 
@@ -133,12 +141,14 @@ public class WireAbsenceTests
     {
         // Guards the walk itself: a type it silently stopped reaching would
         // take its members out of every case below. Rewritten for the two
-        // decision kinds and their categories.
+        // decision kinds and their categories, and again for the two session
+        // kinds (the play golden is a match, the cube golden money).
         var owners = AllMembers().Select(m => m.Owner).ToHashSet();
 
         Type[] expected =
         [
             typeof(CheckerPlayDecision), typeof(CubeDecision), typeof(PositionData),
+            typeof(MoneySession), typeof(MatchSession),
             typeof(CheckerPlayDecisionData), typeof(CubeDecisionData), typeof(PlayCandidate),
             typeof(Move), typeof(DescriptiveData), typeof(DecisionRow),
         ];

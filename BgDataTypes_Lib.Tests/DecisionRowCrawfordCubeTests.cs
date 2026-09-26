@@ -18,7 +18,13 @@ namespace BgDataTypes_Lib.Tests;
 public class DecisionRowCrawfordCubeTests
 {
     private static PositionData Crawford() =>
-        TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true);
+        TestRecords.Position(session: TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true));
+
+    // The same standing outside the Crawford game: a cube may be made there.
+    private static PositionData PostCrawford() =>
+        TestRecords.Position(session: TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3));
+
+    private static bool? IsCrawford(DecisionRow row) => (row.Session as MatchSession)?.IsCrawford;
 
     // ---------------------------------------------------------------------
     //  Construction — through the one door, the record
@@ -42,7 +48,7 @@ public class DecisionRowCrawfordCubeTests
         // Rewritten from CrawfordPlay_Constructs_InEitherOrder.
         var row = TestRecords.Row(TestRecords.CheckerPlay(position: Crawford()));
 
-        Assert.True(row.IsCrawford);
+        Assert.True(IsCrawford(row));
         Assert.Equal(DecisionKind.CheckerPlay, row.Kind);
     }
 
@@ -51,9 +57,9 @@ public class DecisionRowCrawfordCubeTests
     {
         // Rewritten from NonCrawfordCube_Constructs_InEitherOrder.
         var row = TestRecords.Row(TestRecords.Cube(
-            position: TestRecords.Position(onRollNeeds: 1, opponentNeeds: 3)));
+            position: PostCrawford()));
 
-        Assert.False(row.IsCrawford);
+        Assert.False(IsCrawford(row));
         Assert.Equal(DecisionKind.Cube, row.Kind);
     }
 
@@ -68,7 +74,7 @@ public class DecisionRowCrawfordCubeTests
     /// </summary>
     private static string CrawfordCubeDocument(bool kindFirst)
     {
-        var document = WirePaths.Document(TestRecords.Row(TestRecords.Cube()));
+        var document = WirePaths.Document(TestRecords.Row(TestRecords.Cube(position: PostCrawford())));
         var kind = document["Kind"]!.DeepClone();
         document.Remove("Kind");
         document.Remove("IsCrawford");
@@ -95,9 +101,11 @@ public class DecisionRowCrawfordCubeTests
         // Rewritten from Deserialize_CrawfordCube_Throws and
         // Deserialize_CrawfordCube_ThroughContext_Throws: the refusal is a
         // JsonException naming the rule, whatever order the members come in.
+        // The cube sits at 1-away to 3-away, where a Crawford game is
+        // possible, so what refuses it is the cube rule, not the standing's.
         var ex = WirePaths.AssertRefused<DecisionRow>(CrawfordCubeDocument(kindFirst));
 
-        Assert.Contains("Crawford", ex.Message);
+        Assert.Equal(DecisionRules.CrawfordMessage, ex.Message);
     }
 
     [Fact]
@@ -123,7 +131,7 @@ public class DecisionRowCrawfordCubeTests
         foreach (var (_, options) in WirePaths.Both)
         {
             var restored = JsonSerializer.Deserialize<DecisionRow>(JsonSerializer.Serialize(row, options), options)!;
-            Assert.True(restored.IsCrawford);
+            Assert.True(IsCrawford(restored));
             Assert.Equal(DecisionKind.CheckerPlay, restored.Kind);
         }
     }
@@ -132,12 +140,12 @@ public class DecisionRowCrawfordCubeTests
     public void Deserialize_NonCrawfordCube_Loads_BothPaths()
     {
         // Rewritten from Deserialize_NonCrawfordCube_Loads.
-        var row = TestRecords.Row(TestRecords.Cube(position: TestRecords.Position(onRollNeeds: 1, opponentNeeds: 1)));
+        var row = TestRecords.Row(TestRecords.Cube(position: TestRecords.Position(session: TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 1))));
 
         foreach (var (_, options) in WirePaths.Both)
         {
             var restored = JsonSerializer.Deserialize<DecisionRow>(JsonSerializer.Serialize(row, options), options)!;
-            Assert.False(restored.IsCrawford);
+            Assert.False(IsCrawford(restored));
             Assert.Equal(DecisionKind.Cube, restored.Kind);
         }
     }

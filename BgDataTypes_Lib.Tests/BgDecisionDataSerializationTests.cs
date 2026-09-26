@@ -560,60 +560,60 @@ public class BgDecisionDataSerializationTests
         var mop = new int[26];
         mop[1] = 2; mop[6] = -5; mop[24] = -2; mop[25] = 1;
 
+        // Rewritten: the away scores and the Crawford flag are the match
+        // session's (halheinrich/backgammon#273), read back through it.
         var original = TestRecords.Position(
             mop: new BoardPosition(mop),
-            onRollNeeds: 3,
-            opponentNeeds: 5,
             cubeSize: 2,
             cubeOwner: CubeOwner.OnRoll,
-            isCrawford: false);
+            session: TestRecords.MatchSession(length: 7, onRollNeeds: 3, opponentNeeds: 5, isCrawford: false));
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PositionData>(json, Options)!;
 
         Assert.Equal(original.Mop, restored.Mop);
-        Assert.Equal(original.OnRollNeeds, restored.OnRollNeeds);
-        Assert.Equal(original.OpponentNeeds, restored.OpponentNeeds);
         Assert.Equal(original.CubeSize, restored.CubeSize);
         Assert.Equal(original.CubeOwner, restored.CubeOwner);
-        Assert.Equal(original.IsCrawford, restored.IsCrawford);
+        var match = Assert.IsType<MatchSession>(restored.Session);
+        Assert.Equal((7, 3, 5, false), (match.Length, match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
     }
 
     [Theory]
-    [InlineData(null)]
     [InlineData(true)]
     [InlineData(false)]
-    public void PositionData_IsJacoby_RoundTrips(bool? isJacoby)
+    public void PositionData_MoneySessionsJacobyRule_RoundTrips(bool isJacoby)
     {
-        // Three states on the wire, not two: null is "the producer did not
-        // supply the fact", which ProblemKey's no-key rung reads on a money
-        // record (halheinrich/backgammon#120).
-        var original = TestRecords.Position(isJacoby: isJacoby);
+        // Rewritten from PositionData_IsJacoby_RoundTrips: two states, not
+        // three. The rule is the money session's, and every money session
+        // states it — "not supplied" is gone with the stand-in it served.
+        var original = TestRecords.Position(session: TestRecords.MoneySession(isJacoby: isJacoby));
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PositionData>(json, Options)!;
 
-        Assert.Equal(isJacoby, restored.IsJacoby);
+        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(restored.Session).IsJacoby);
     }
 
     [Fact]
-    public void PositionData_IsJacoby_AbsentFromJson_ReadsAsNotSupplied()
+    public void PositionData_MoneySessionWithoutItsJacobyRule_IsRefused_BothPaths()
     {
-        // A position without the fact must read back as null — "unknown" —
-        // never as a silent "off", which on a money record would key it
-        // wrongly.
-        var restored = ReadWithout(
-            TestRecords.Position(cubeOwner: CubeOwner.Centered, isJacoby: true), "IsJacoby");
+        // Rewritten from PositionData_IsJacoby_AbsentFromJson_ReadsAsNotSupplied:
+        // a money session without its rule used to read as "unknown", the
+        // no-key rung's input. The rule is required now, so the absence is
+        // refused rather than read as anything.
+        var document = WirePaths.Document(TestRecords.Position(session: TestRecords.MoneySession()));
+        document["Session"]!.AsObject().Remove("IsJacoby");
 
-        Assert.Null(restored.IsJacoby);
+        WirePaths.AssertRefused<PositionData>(document.ToJsonString());
     }
 
     [Fact]
-    public void PositionData_IsJacoby_SerializesUnderItsOwnName()
+    public void PositionData_MoneySessionsJacobyRule_SerializesUnderItsOwnName_InsideTheSession()
     {
-        var json = JsonSerializer.Serialize(TestRecords.Position(isJacoby: true), Options);
+        // Rewritten from PositionData_IsJacoby_SerializesUnderItsOwnName.
+        var json = JsonSerializer.Serialize(TestRecords.Position(session: TestRecords.MoneySession(isJacoby: true)), Options);
 
-        Assert.Contains("\"IsJacoby\":true", json);
+        Assert.Contains("\"Session\":{\"Kind\":\"Money\",\"IsJacoby\":true}", json);
     }
 
     // -----------------------------------------------------------------------
@@ -681,8 +681,9 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void DescriptiveData_RoundTrip_AllNullableFieldsNull()
     {
+        // Rewritten: the match length left the category for the match
+        // session (halheinrich/backgammon#273).
         var original = TestRecords.Descriptive(
-            matchLength: 11,
             onRollName: "Mochy",
             opponentName: "Falafel",
             title: null,
@@ -693,7 +694,6 @@ public class BgDecisionDataSerializationTests
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DescriptiveData>(json, Options)!;
 
-        Assert.Equal(original.MatchLength, restored.MatchLength);
         Assert.Equal(original.OnRollName, restored.OnRollName);
         Assert.Equal(original.OpponentName, restored.OpponentName);
         Assert.Null(restored.Title);
@@ -706,7 +706,6 @@ public class BgDecisionDataSerializationTests
     public void DescriptiveData_RoundTrip_DateOnly()
     {
         var original = TestRecords.Descriptive(
-            matchLength: 7,
             onRollName: "Player A",
             opponentName: "Player B",
             date: new DateOnly(2024, 11, 15),
@@ -765,11 +764,9 @@ public class BgDecisionDataSerializationTests
         var original = TestRecords.CheckerPlay(
             position: TestRecords.Position(
                 mop: new BoardPosition(mop),
-                onRollNeeds: 2,
-                opponentNeeds: 4,
                 cubeSize: 4,
                 cubeOwner: CubeOwner.Centered,
-                isCrawford: false),
+                session: TestRecords.MatchSession(length: 5, onRollNeeds: 2, opponentNeeds: 4)),
             decision: TestRecords.CheckerPlayData(
                 dice: [6, 4],
                 plays: [
@@ -777,7 +774,6 @@ public class BgDecisionDataSerializationTests
                     TestRecords.Candidate(play: [new(24, 18), new(13, 9)],  equity: 0.198)
                 ]),
             descriptive: TestRecords.Descriptive(
-                matchLength: 5,
                 onRollName: "Hal",
                 opponentName: "Bot",
                 title: "Opening Run",
@@ -788,6 +784,7 @@ public class BgDecisionDataSerializationTests
 
         Assert.Equal(original.Position.Mop, restored.Position.Mop);
         Assert.Equal(original.Position.CubeOwner, restored.Position.CubeOwner);
+        Assert.Equal(5, Assert.IsType<MatchSession>(restored.Session).Length);
         Assert.Equal(original.Decision.Dice, restored.Decision.Dice);
         Assert.Equal(2, restored.Decision.Plays.Count);
         Assert.Equal(0.211 - 0.198, restored.Decision.RankedBy(PlayRanking.Equity).ForCandidate(1).Error);
@@ -968,12 +965,11 @@ public class BgDecisionDataSerializationTests
         var mop = new int[26];
         mop[1] = 2; mop[6] = -5;
 
+        // Rewritten: the view's away scores and Crawford flag are its match
+        // session's.
+        var session = TestRecords.MatchSession(onRollNeeds: 3, opponentNeeds: 5, isCrawford: false);
         IDecisionFilterData data = TestRecords.CheckerPlay(
-            position: TestRecords.Position(
-                mop: new BoardPosition(mop),
-                onRollNeeds: 3,
-                opponentNeeds: 5,
-                isCrawford: false),
+            position: TestRecords.Position(mop: new BoardPosition(mop), session: session),
             decision: TestRecords.CheckerPlayData(
                 plays: [TestRecords.Candidate(play: [new(1, 0), new(1, 0)])],
                 userPlayIndex: null,
@@ -982,9 +978,7 @@ public class BgDecisionDataSerializationTests
 
         Assert.Equal("Hal", data.Player);
         Assert.Equal(DecisionKind.CheckerPlay, data.Kind);
-        Assert.Equal(3, data.OnRollNeeds);
-        Assert.Equal(5, data.OpponentNeeds);
-        Assert.False(data.IsCrawford);
+        Assert.Same(session, data.Session);
         Assert.Equal(PlayerResult.Unstated(0.034), data.PlayerResult);
         Assert.Equal(new BoardPosition(mop), data.Board);
     }
@@ -1034,108 +1028,98 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void BgDecisionData_IDecisionFilterData_MatchLength()
     {
+        // Rewritten: a match's length is its session's, which the view is.
         IDecisionFilterData data = TestRecords.CheckerPlay(
-            descriptive: TestRecords.Descriptive(matchLength: 11)).ViewFor(PlayRanking.Equity);
+            position: TestRecords.Position(session: TestRecords.MatchSession(length: 11))).ViewFor(PlayRanking.Equity);
 
-        Assert.Equal(11, data.MatchLength);
+        Assert.Equal(11, Assert.IsType<MatchSession>(data.Session).Length);
     }
 
     [Fact]
-    public void BgDecisionData_IDecisionFilterData_IsMoneyGame_MoneySession()
+    public void BgDecisionData_IDecisionFilterData_MoneySession_IsItsKind()
     {
-        // The view declares no IsMoneyGame of its own — the interface default
-        // (MatchLength == 0) is what answers there; the record's own states
-        // the same rule.
+        // Rewritten from BgDecisionData_IDecisionFilterData_IsMoneyGame_MoneySession:
+        // money is the session's kind, never a match length of 0 — there is
+        // no IsMoneyGame left to derive from one.
         IDecisionFilterData data = TestRecords.CheckerPlay(
-            descriptive: TestRecords.Descriptive(matchLength: 0)).ViewFor(PlayRanking.Equity);
+            position: TestRecords.Position(session: TestRecords.MoneySession())).ViewFor(PlayRanking.Equity);
 
-        Assert.True(data.IsMoneyGame);
-        Assert.True(TestRecords.CheckerPlay(descriptive: TestRecords.Descriptive(matchLength: 0)).IsMoneyGame);
+        Assert.Equal(SessionKind.Money, data.Session.Kind);
+        Assert.IsType<MoneySession>(data.Session);
     }
 
     [Theory]
     [InlineData(1)]  // shortest possible match
     [InlineData(11)]
-    public void BgDecisionData_IDecisionFilterData_IsMoneyGame_FalseForAnyMatchLength(int matchLength)
+    public void BgDecisionData_IDecisionFilterData_AMatchOfAnyLength_IsAMatch(int length)
     {
+        // Rewritten from BgDecisionData_IDecisionFilterData_IsMoneyGame_FalseForAnyMatchLength.
         IDecisionFilterData data = TestRecords.CheckerPlay(
-            descriptive: TestRecords.Descriptive(matchLength: matchLength)).ViewFor(PlayRanking.Equity);
+            position: TestRecords.Position(session: TestRecords.MatchSession(length: length, onRollNeeds: 1, opponentNeeds: 1)))
+            .ViewFor(PlayRanking.Equity);
 
-        Assert.False(data.IsMoneyGame);
+        Assert.Equal(SessionKind.Match, data.Session.Kind);
     }
 
     // -----------------------------------------------------------------------
-    //  IDecisionFilterData — IsJacoby forwarding (tri-state)
+    //  IDecisionFilterData — the Jacoby rule, a money session's
     // -----------------------------------------------------------------------
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void BgDecisionData_IDecisionFilterData_IsJacoby_MoneyRecord_CarriesTheValue(bool isJacoby)
+    public void BgDecisionData_IDecisionFilterData_MoneySession_CarriesItsJacobyRule(bool isJacoby)
     {
+        // Rewritten from BgDecisionData_IDecisionFilterData_IsJacoby_MoneyRecord_CarriesTheValue.
         IDecisionFilterData data = TestRecords.CheckerPlay(
-            position: TestRecords.Position(onRollNeeds: 0, opponentNeeds: 0, isJacoby: isJacoby),
-            descriptive: TestRecords.Descriptive(matchLength: 0)).ViewFor(PlayRanking.Equity);
+            position: TestRecords.Position(session: TestRecords.MoneySession(isJacoby: isJacoby))).ViewFor(PlayRanking.Equity);
 
-        Assert.True(data.IsMoneyGame);
-        Assert.Equal(isJacoby, data.IsJacoby);
+        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(data.Session).IsJacoby);
     }
 
     [Fact]
-    public void BgDecisionData_IDecisionFilterData_IsJacoby_MatchRecord_IsNull()
+    public void BgDecisionData_IDecisionFilterData_AMatch_HasNoJacobyRuleToRead()
     {
-        // A match record carries null because the question does not arise —
-        // the producer stamps the fact onto money records only.
-        IDecisionFilterData data = TestRecords.CheckerPlay(
-            position: TestRecords.Position(onRollNeeds: 3, opponentNeeds: 5),
-            descriptive: TestRecords.Descriptive(matchLength: 9)).ViewFor(PlayRanking.Equity);
+        // Rewritten from BgDecisionData_IDecisionFilterData_IsJacoby_MatchRecord_IsNull,
+        // and in place of BgDecisionData_IDecisionFilterData_IsJacoby_ForwardsPositionVerbatim,
+        // which pinned a stray stamp on a match passing through: a match
+        // carries no Jacoby rule at all, so neither a null nor a stray stamp
+        // is expressible — the member is not on the match's type.
+        IDecisionFilterData data = TestRecords.CheckerPlay().ViewFor(PlayRanking.Equity);
 
-        Assert.False(data.IsMoneyGame);
-        Assert.Null(data.IsJacoby);
+        var match = Assert.IsType<MatchSession>(data.Session);
+        Assert.Null(match.GetType().GetProperty("IsJacoby"));
     }
 
     [Fact]
-    public void BgDecisionData_IDecisionFilterData_IsJacoby_MoneyRecordUnstamped_IsNull()
+    public void BgDecisionData_IDecisionFilterData_AMoneySessionWithoutItsRule_CannotBeBuilt()
     {
-        // The unknown rung: a money record whose rule was never stamped. The
-        // forwarder reports null rather than defaulting to either rule — which
-        // is what makes it match neither money score token downstream.
-        IDecisionFilterData data = TestRecords.CheckerPlay(
-            position: TestRecords.Position(onRollNeeds: 0, opponentNeeds: 0),
-            descriptive: TestRecords.Descriptive(matchLength: 0)).ViewFor(PlayRanking.Equity);
+        // Rewritten from BgDecisionData_IDecisionFilterData_IsJacoby_MoneyRecordUnstamped_IsNull:
+        // the unknown rung is gone. A money session states its rule — the
+        // member is required — so a money view under an unknown rule cannot
+        // exist to be matched by neither money token.
+        var isJacoby = typeof(MoneySession).GetProperty(nameof(MoneySession.IsJacoby))!;
 
-        Assert.True(data.IsMoneyGame);
-        Assert.Null(data.IsJacoby);
+        Assert.Equal(typeof(bool), isJacoby.PropertyType);
+        Assert.True(isJacoby.IsDefined(typeof(System.Runtime.CompilerServices.RequiredMemberAttribute), inherit: false));
     }
 
     [Fact]
-    public void BgDecisionData_IDecisionFilterData_IsJacoby_ForwardsPositionVerbatim()
+    public void BgDecisionData_TheSessionIsOnTheWire_InsideThePosition_AndNoMatchLengthStandsInForMoney()
     {
-        // A stray non-null stamp on a match record is tolerated, not rejected
-        // (PositionData.IsJacoby's contract). The forwarder passes it through
-        // unchanged rather than nulling it out — the interface is a view of
-        // the stored fact, not a second place the rule is decided.
-        IDecisionFilterData data = TestRecords.CheckerPlay(
-            position: TestRecords.Position(onRollNeeds: 3, opponentNeeds: 5, isJacoby: true),
-            descriptive: TestRecords.Descriptive(matchLength: 9)).ViewFor(PlayRanking.Equity);
-
-        Assert.True(data.IsJacoby);
-    }
-
-    [Fact]
-    public void BgDecisionData_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire()
-    {
-        // Interface default implementations never reach the JSON — the wire
-        // shape carries Descriptive.MatchLength only.
-        var data = TestRecords.CheckerPlay(descriptive: TestRecords.Descriptive(matchLength: 0));
+        // Rewritten from BgDecisionData_IsMoneyGame_NotSerialized_MatchLengthRemainsTheWire:
+        // the wire states money as the session's kind, never as
+        // Descriptive.MatchLength 0, and no predicate derived from a 0 is left.
+        var data = TestRecords.CheckerPlay(position: TestRecords.Position(session: TestRecords.MoneySession()));
         var json = JsonSerializer.Serialize<BgDecisionData>(data, Options);
 
         Assert.DoesNotContain("IsMoneyGame", json);
-        Assert.Contains("\"MatchLength\":0", json);
+        Assert.DoesNotContain("MatchLength", json);
+        Assert.Contains("\"Session\":{\"Kind\":\"Money\",", json);
 
         var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
-        Assert.True(restored.IsMoneyGame);
-        Assert.True(restored.ViewFor(PlayRanking.Equity).IsMoneyGame);
+        Assert.IsType<MoneySession>(restored.Session);
+        Assert.IsType<MoneySession>(restored.ViewFor(PlayRanking.Equity).Session);
     }
 
     // -----------------------------------------------------------------------
