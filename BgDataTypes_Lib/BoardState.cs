@@ -26,11 +26,13 @@ namespace BgDataTypes_Lib;
 /// built on it), from raw counts (<see cref="FromMop"/>, which validates
 /// them), or from another board (<see cref="Copy"/>, <see cref="FlippedCopy"/>)
 /// — and then changes only through the raw pair
-/// <see cref="ApplyMove(Move)"/> / <see cref="UndoMove(Move)"/> and through
-/// <see cref="ApplyPlay(Play)"/> / <see cref="TryApplyPlay(Play)"/>. So the
-/// board is always a well-formed position (<see cref="BoardPosition"/>'s
-/// invariant): every way in is one, the play rule keeps it one, and the raw
-/// pair keeps it one under its stated preconditions. The class is sealed: a
+/// <see cref="ApplyMove(Move)"/> / <see cref="UndoMove(Move)"/>, through
+/// <see cref="ApplyPlay(Play)"/> / <see cref="TryApplyPlay(Play)"/>, and
+/// through <see cref="SetPosition"/>, which replaces the whole board with a
+/// position value. So the board is always a well-formed position
+/// (<see cref="BoardPosition"/>'s invariant): every way in is one, the play
+/// rule keeps it one, a reset sets it to one, and the raw pair keeps it one
+/// under its stated preconditions. The class is sealed: a
 /// type that guards an invariant is not open to subclasses.
 /// </para>
 ///
@@ -82,7 +84,24 @@ public sealed class BoardState
     /// position value, which every other way in goes through.
     /// </summary>
     /// <param name="position">The position to start from; well-formed by its own invariant.</param>
-    public BoardState(BoardPosition position)
+    public BoardState(BoardPosition position) => SetPosition(position);
+
+    /// <summary>
+    /// Replace the whole board with <paramref name="position"/> and recompute
+    /// <see cref="HighPointOccupied"/> — the reset, for a caller that reuses
+    /// one board across positions rather than building one per position (the
+    /// move generator's interop does). Validated by its argument: a
+    /// <see cref="BoardPosition"/> is well-formed by its own invariant, so the
+    /// board stays one. Allocation-free.
+    /// </summary>
+    /// <remarks>
+    /// The one write of a whole position: construction, the flip behind
+    /// <see cref="ApplyPlay(Play)"/> and <see cref="FlippedCopy"/>, and
+    /// committing a play all go through it. <see cref="ToPosition"/> is its
+    /// read.
+    /// </remarks>
+    /// <param name="position">The position the board holds from now on.</param>
+    public void SetPosition(BoardPosition position)
     {
         position.CopyTo(_points);
         RecalcHighPoint();
@@ -137,8 +156,8 @@ public sealed class BoardState
     public BoardPosition ToPosition() => BoardPosition.FromWellFormed(_points);
 
     /// <summary>
-    /// Recompute <see cref="HighPointOccupied"/> from scratch, after the
-    /// board is built or flipped.
+    /// Recompute <see cref="HighPointOccupied"/> from scratch, after a whole
+    /// position is written (<see cref="SetPosition"/>).
     /// </summary>
     private void RecalcHighPoint()
     {
@@ -305,19 +324,18 @@ public sealed class BoardState
     /// <summary>
     /// The one body of <see cref="ApplyPlay"/> and <see cref="TryApplyPlay"/>:
     /// computes the position <paramref name="play"/> reaches by the play rule
-    /// and, when it is valid, commits it and flips. On a fault nothing is
-    /// written — the rule computes into scratch space, never into
-    /// <see cref="Points"/>.
+    /// and, when it is valid, sets the board to it seen from the other side
+    /// (the value's flip) in one write. On a fault nothing is written — the
+    /// rule computes into scratch space, never into <see cref="Points"/>.
+    /// The reached board is well-formed because this one is and the rule
+    /// keeps it so, which is what lets the value skip its outside-data check.
     /// </summary>
     private PlayFault Advance(in Play play, out Move culprit)
     {
         Span<int> reached = stackalloc int[26];
         var fault = Reach(_points, in play, reached, out culprit);
         if (fault == PlayFault.None)
-        {
-            reached.CopyTo(_points);
-            Flip();
-        }
+            SetPosition(BoardPosition.FromWellFormed(reached).Flipped());
         return fault;
     }
 
@@ -602,21 +620,17 @@ public sealed class BoardState
     /// Flip perspective in place, by <see cref="BoardPosition.Flipped"/> —
     /// the one statement of the rule (points mirror, bars swap, signs
     /// invert); this board states none of its own. Implementation mechanics
-    /// for <see cref="ApplyPlay(Play)"/>, <see cref="TryApplyPlay(Play)"/> and
-    /// <see cref="FlippedCopy"/> — never exposed publicly. Callers should
-    /// always reason in on-roll POV; <see cref="ApplyPlay(Play)"/> performs
-    /// the flip atomically with the move application, and
-    /// <see cref="FlippedCopy"/> flips a copy for other-frame queries.
+    /// for <see cref="FlippedCopy"/> — never exposed publicly. Callers should
+    /// always reason in on-roll POV: <see cref="ApplyPlay(Play)"/> and
+    /// <see cref="TryApplyPlay(Play)"/> flip atomically with the move
+    /// application (setting the board to the reached position's flip in one
+    /// write), and <see cref="FlippedCopy"/> flips a copy for other-frame
+    /// queries.
     ///
     /// Borne-off counts are not tracked on <see cref="BoardState"/> (checkers
     /// simply leave the board), so nothing else needs swapping.
     /// </summary>
-    private void Flip()
-    {
-        ToPosition().Flipped().CopyTo(_points);
-        // Flip changed which point is "high"; recompute from scratch.
-        RecalcHighPoint();
-    }
+    private void Flip() => SetPosition(ToPosition().Flipped());
 
     // ── Derived properties ────────────────────────────────────────
 

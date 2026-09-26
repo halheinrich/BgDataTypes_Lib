@@ -432,7 +432,19 @@ below keeps it one.
   not reach it. Two boards are compared through it, never through
   `Points`, and it is what the move generator deduplicates by.
 
-Three layers of mutation, in increasing scope:
+After construction a board changes three ways — the reset, the raw pair
+and the turn boundary — with `Flip()` the private mechanic behind
+`FlippedCopy()`:
+
+- **`SetPosition(BoardPosition)`** — the whole-board reset: replaces every
+  slot with the position's counts and recomputes `HighPointOccupied`,
+  allocation-free. It is the door for a caller that reuses one board across
+  positions rather than building one per position (BgMoveGen's interop,
+  which used to reset its board with raw writes), and it needs no check of
+  its own: its argument is well-formed by the value's invariant. It is also
+  the one write of a whole position inside the type — the constructor,
+  `Flip()`, and committing a play all go through it — and `ToPosition()` is
+  its read.
 
 - **`ApplyMove(Move)` / `UndoMove(Move)`** — hot-path primitives, zero
   allocation, used by `BgMoveGen`'s move generator to recurse through
@@ -447,17 +459,18 @@ Three layers of mutation, in increasing scope:
 - **`ApplyPlay(Play)`** / **`TryApplyPlay(Play)`** — turn-boundary
   primitive. Applies the play through the one play rule (see "Play
   identity") then flips perspective so the state is re-expressed from the
-  next mover's POV. An invalid play is refused — `ApplyPlay` throws
+  next mover's POV — one write, `SetPosition` of the reached position's
+  `Flipped()`. An invalid play is refused — `ApplyPlay` throws
   `ArgumentException`, `TryApplyPlay` returns false — and the board is
   left untouched. Empty plays still flip — they represent a forced pass.
   This is the only public way to advance past a turn boundary; callers
   reasoning in on-roll POV never need to flip explicitly.
 
-- **`Flip()`** — `private`. Implementation mechanic for `ApplyPlay`,
-  `TryApplyPlay` and `FlippedCopy()`. It states no rule of its own: it
-  flips the board's position by `BoardPosition.Flipped()` (point `i` ↔
-  point `25-i`, the bars swapping, the signs inverting), writes it back, and
-  recomputes `HighPointOccupied` from scratch. Stays private: live-state flips
+- **`Flip()`** — `private`. Implementation mechanic for `FlippedCopy()`.
+  It states no rule of its own: it sets the board, through `SetPosition`,
+  to its position flipped by `BoardPosition.Flipped()` (point `i` ↔ point
+  `25-i`, the bars swapping, the signs inverting), which recomputes
+  `HighPointOccupied` from scratch. Stays private: live-state flips
   happen only inside `ApplyPlay`, so callers advancing state always
   reason in on-roll POV. `FlippedCopy()` is the public flipped-*copy*
   primitive for querying a position from the other player's frame
@@ -1213,8 +1226,10 @@ public sealed class BoardState                    // sealed: it guards an invari
     public BoardState Copy();
     public BoardState FlippedCopy();              // copy from opponent's perspective; receiver untouched
 
-    // The snapshot: how a board is compared and stored
-    public BoardPosition ToPosition();            // allocation-free; later changes do not reach it
+    // The whole position, out and in
+    public BoardPosition ToPosition();            // the snapshot: allocation-free; later changes do not reach it
+    public void SetPosition(BoardPosition position);   // the whole-board reset: allocation-free; recomputes
+                                                       //   HighPointOccupied; the one whole-position write
 
     // Apply / undo (hot-path primitives)
     public void ApplyMove(Move move);

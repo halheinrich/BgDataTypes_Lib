@@ -226,6 +226,65 @@ public class BoardStateTests
         Assert.Equal(viaOneHop.ToPosition().GetHashCode(), viaPlay.ToPosition().GetHashCode());
     }
 
+    // ── Reset ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void SetPosition_ReplacesTheWholeBoard_AndRecomputesHighPointOccupied()
+    {
+        // From a board with a checker on each bar (high point 25) to a
+        // bear-off (high point 5): every slot, both bars included, is
+        // replaced, and the high point follows.
+        var s = BoardState.FromMop(
+            [-1, 0, 2, -1, 2, 2, 2, 1, 2, -1, 0, 1, -2, 0, 0, 0, -2, 0, 0, -2, -2, 1, -2, 0, -1, 1]);
+        Assert.Equal(25, s.HighPointOccupied);
+        int[] bearOff = [0, 3, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -4, 0, 0, -2, 0, 0, 0];
+
+        s.SetPosition(new BoardPosition(bearOff));
+
+        Assert.Equal(bearOff, s.Points);
+        Assert.Equal(new BoardPosition(bearOff), s.ToPosition());
+        Assert.Equal(5, s.HighPointOccupied);
+    }
+
+    [Fact]
+    public void SetPosition_ReusedBoard_HoldsExactlyEachPosition()
+    {
+        // The interop's pattern: one board, reset per position, whatever the
+        // previous position left behind (here, moves applied on top of it).
+        var s = BoardState.Standard();
+        s.ApplyMove(new Move(13, 7));
+        s.ApplyMove(new Move(8, 5));
+
+        foreach (var position in new[] { BoardPosition.Nackgammon, BoardPosition.Empty, BoardPosition.Standard })
+        {
+            s.SetPosition(position);
+
+            var fresh = new BoardState(position);
+            Assert.Equal(position, s.ToPosition());
+            Assert.Equal(fresh.HighPointOccupied, s.HighPointOccupied);
+        }
+    }
+
+    [Fact]
+    public void SetPosition_AllocatesNothing()
+    {
+        var s = BoardState.Standard();
+        var a = BoardPosition.Nackgammon;
+        var b = BoardPosition.Standard;
+        s.SetPosition(a);   // warm
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            s.SetPosition(a);
+            s.SetPosition(b);
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(0, allocated);
+        Assert.Equal(b, s.ToPosition());
+    }
+
     // ── Read-only to callers (halheinrich/backgammon#281) ─────────
 
     [Fact]
