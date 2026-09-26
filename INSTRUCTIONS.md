@@ -225,7 +225,7 @@ Design points:
   `PlayOutcomeData` and `DecisionRow`; `DecisionRow.SourceFile` and
   `IsJacoby`. Every other serialized member is required, the record halves
   and `Xgid` included. `WireAbsenceTests` walks the graph from the context's
-  own metadata (98 members across eight types) and pins both halves of the
+  own metadata (94 members across eight types) and pins both halves of the
   rule on both paths, plus that every member is exactly one kind.
 - **`Unknown` is a value, not an absence.** `AnalysisMode`/`AnalysisLevel`
   (on candidates, cube analyses and rows) are required: "not recorded" is
@@ -269,7 +269,7 @@ what a board is compared and stored as.
 |---|---|
 | `PositionData` | `Mop`, `OnRollNeeds`, `OpponentNeeds`, `OnRollPipCount`, `OpponentPipCount`, `CubeSize`, `CubeOwner`, `IsCrawford`, `IsJacoby?` |
 | `DecisionData` | `Dice`, `Plays`, `BestPlayIndex`, `UserPlayIndex`, `UserPlayError?`, `IsCube`, `CubeDepth`, `CubeDepthAbbreviation`, `CubeDepthRank`, `CubeAnalysisMode`, `CubeAnalysisLevel`, cube equity/pct fields, `UserDoubleError?`, `UserTakeError?`, `UserDoublerAction?`, `UserTakerAction?` |
-| `DescriptiveData` | `MatchLength`, `OnRollName`, `OpponentName`, `Title`, `Date`, `Event`, `SourceFile`, `MoveNumber`, `IsStandardStart` |
+| `DescriptiveData` | `MatchLength`, `OnRollName`, `OpponentName`, `Title`, `Date`, `Event`, `SourceFile`, `IsStandardStart`, `Comment`, `Flagged` — the game and move number are the `Id`'s (see "DecisionId") |
 | `PlayOutcomeData` | `AfterBestBoard?`, `AfterPlayerBoard?` |
 
 ### Shared types
@@ -600,6 +600,17 @@ within an XG-family source file:
 - `XgDecisionId(Filename, Game, MoveNumber, IsCube)` — colon-separated tuple
   for `.xg` multi-game files. `IsCube` disambiguates the cube row from the
   checker-play row XG emits at the same `MoveNumber`.
+
+**The one stored place of a decision's game and move number**
+(halheinrich/backgammon#124). A standalone `.xgp` position belongs to no
+game, so it has no game or move number — not a stamped 1, which the
+converter used to write and every consumer then read as a real number. The
+records store no copy: `BgDecisionData.Game` / `MoveNumber` and
+`DecisionRow.Game` / `MoveNumber` are `int?`, derived from `Id` through the
+internal `DecisionId.GameInFile` / `MoveInGame` — the `XgDecisionId`'s
+numbers, or `null` for an `XgpDecisionId`. A number therefore cannot
+disagree with the identifier, and a standalone position has nowhere to
+carry one. The row's CSV writes an empty cell for each.
 
 The bare filename is a unique key for `.xgp` not because XG writes one decision
 per file — it does not. XG always writes a cube pane alongside the move pane,
@@ -1119,7 +1130,7 @@ public interface IDecisionFilterData
     int MatchLength { get; }
     bool IsMoneyGame => MatchLength == 0;         // the interface's only default implementation
     bool? IsJacoby { get; }                       // tri-state; null on a money record matches neither money token
-    int MoveNumber { get; }                       // 1-based within the game
+    int? MoveNumber { get; }                      // 1-based within the game; null for a standalone position
     bool IsStandardStart { get; }                 // false for non-standard openings
     AnalysisMode AnalysisMode { get; }            // cube analysis for cubes, best-play candidate for checkers
     AnalysisLevel AnalysisLevel { get; }          // level axis of the same analysis AnalysisMode reports

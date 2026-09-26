@@ -52,8 +52,12 @@ public interface IDecisionFilterData
     /// </summary>
     bool? IsJacoby { get; }
 
-    /// <summary>1-based move number within the game.</summary>
-    int MoveNumber { get; }
+    /// <summary>
+    /// 1-based move number within the game; <see langword="null"/> for a
+    /// decision in a standalone position, which belongs to no game — "no move
+    /// number", never move 1 (halheinrich/backgammon#124).
+    /// </summary>
+    int? MoveNumber { get; }
 
     /// <summary>True if the game started from the canonical opening position.
     /// Move-number filtering is only meaningful when this is true; non-standard starts

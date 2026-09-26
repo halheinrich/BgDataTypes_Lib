@@ -97,6 +97,29 @@ public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<Decisio
     }
 
     // -----------------------------------------------------------------------
+    //  Where the decision sits in its file (halheinrich/backgammon#124)
+    //
+    //  The identifier is the one stored place of a decision's game and move
+    //  number: an XgDecisionId carries both, and an XgpDecisionId — a
+    //  standalone position, which belongs to no game — carries neither. The
+    //  records derive their Game and MoveNumber from here and store no copy,
+    //  so a number cannot disagree with the identifier or be stamped on a
+    //  standalone position.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The 1-based number of the game the decision was played in, or
+    /// <see langword="null"/> for a decision in a standalone position.
+    /// </summary>
+    internal int? GameInFile => this is XgDecisionId xg ? xg.Game : null;
+
+    /// <summary>
+    /// The 1-based number of the decision's move within its game, or
+    /// <see langword="null"/> for a decision in a standalone position.
+    /// </summary>
+    internal int? MoveInGame => this is XgDecisionId xg ? xg.MoveNumber : null;
+
+    // -----------------------------------------------------------------------
     //  Parse / TryParse — span overloads are the primary implementation;
     //  string overloads delegate to them for parity.
     // -----------------------------------------------------------------------

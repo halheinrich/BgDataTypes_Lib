@@ -46,8 +46,9 @@ public class ProblemKeyTests
         CubeOwner cubeOwner = CubeOwner.Centered,
         bool? isJacoby = null,
         int[]? dice = null,
-        DescriptiveData? descriptive = null) => TestRecords.Record(
-        id: new XgpDecisionId("fixture.xgp"),
+        DescriptiveData? descriptive = null,
+        DecisionId? id = null) => TestRecords.Record(
+        id: id ?? new XgpDecisionId("fixture.xgp"),
         xgid: "XGID=not-consulted-by-derivation",
         position: TestRecords.Position(
             mop: new BoardPosition(mop ?? StandardMop()),
@@ -68,8 +69,9 @@ public class ProblemKeyTests
         int cubeSize = 2,
         CubeOwner cubeOwner = CubeOwner.OnRoll,
         bool? isJacoby = null,
-        DescriptiveData? descriptive = null) => TestRecords.Record(
-        id: new XgpDecisionId("fixture.xgp"),
+        DescriptiveData? descriptive = null,
+        DecisionId? id = null) => TestRecords.Record(
+        id: id ?? new XgpDecisionId("fixture.xgp"),
         xgid: "XGID=not-consulted-by-derivation",
         position: TestRecords.Position(
             mop: new BoardPosition(mop ?? StandardMop()),
@@ -417,20 +419,22 @@ public class ProblemKeyTests
     [Fact]
     public void TryDerive_IgnoresProvenanceXgidAndDescriptive()
     {
-        var a = PlayDecision(descriptive: TestRecords.Descriptive(
-            matchLength: 7,
-            onRollName: "Alice",
-            opponentName: "Bob",
-            sourceFile: "one.xg",
-            game: 1,
-            moveNumber: 4));
-        var b = PlayDecision(descriptive: TestRecords.Descriptive(
-            matchLength: 7,
-            onRollName: "Carol",
-            opponentName: "Dave",
-            sourceFile: "two.xgp",
-            game: 3,
-            moveNumber: 17));
+        // The game and move number are the Id's (halheinrich/backgammon#124),
+        // so the Id is what differs in them now.
+        var a = PlayDecision(
+            id: new XgDecisionId("one.xg", Game: 1, MoveNumber: 4, IsCube: false),
+            descriptive: TestRecords.Descriptive(
+                matchLength: 7,
+                onRollName: "Alice",
+                opponentName: "Bob",
+                sourceFile: "one.xg"));
+        var b = PlayDecision(
+            id: new XgpDecisionId("two.xgp"),
+            descriptive: TestRecords.Descriptive(
+                matchLength: 7,
+                onRollName: "Carol",
+                opponentName: "Dave",
+                sourceFile: "two.xgp"));
 
         Assert.Equal(Derive(a), Derive(b));
     }
@@ -456,16 +460,12 @@ public class ProblemKeyTests
         // with the seats swapped presents identical on-roll-relative facts —
         // turn/seat is normalized away by the Mop convention, so only the
         // descriptive frame differs and the keys must unify.
-        var seatsA = CubeDecision(descriptive: TestRecords.Descriptive(
-            onRollName: "Alice",
-            opponentName: "Bob",
-            game: 2,
-            moveNumber: 6));
-        var seatsB = CubeDecision(descriptive: TestRecords.Descriptive(
-            onRollName: "Bob",
-            opponentName: "Alice",
-            game: 5,
-            moveNumber: 11));
+        var seatsA = CubeDecision(
+            id: new XgDecisionId("m.xg", Game: 2, MoveNumber: 6, IsCube: true),
+            descriptive: TestRecords.Descriptive(onRollName: "Alice", opponentName: "Bob"));
+        var seatsB = CubeDecision(
+            id: new XgDecisionId("m.xg", Game: 5, MoveNumber: 11, IsCube: true),
+            descriptive: TestRecords.Descriptive(onRollName: "Bob", opponentName: "Alice"));
 
         Assert.Equal(Derive(seatsA), Derive(seatsB));
     }

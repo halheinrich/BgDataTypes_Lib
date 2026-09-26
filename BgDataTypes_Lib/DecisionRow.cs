@@ -73,11 +73,24 @@ public sealed class DecisionRow : IDecisionFilterData
     /// Null when none was recorded.</summary>
     public string? SourceFile { get; init; }
 
-    /// <summary>Game number within the match (1-based).</summary>
-    public required int Game { get; init; }
+    /// <summary>
+    /// The 1-based number of the game this decision was played in, within
+    /// its source file; <see langword="null"/> for a decision in a standalone
+    /// position, which belongs to no game (halheinrich/backgammon#124) — an
+    /// empty CSV cell, never a stamped 1. Derived from <see cref="Id"/>, as
+    /// <see cref="BgDecisionData.Game"/> is, so excluded from JSON;
+    /// <see cref="Id"/> is the wire form.
+    /// </summary>
+    [JsonIgnore]
+    public int? Game => Id.GameInFile;
 
-    /// <summary>Move number within the game (1-based).</summary>
-    public required int MoveNumber { get; init; }
+    /// <summary>
+    /// The 1-based move number within the game; <see langword="null"/> for a
+    /// decision in a standalone position — derived from <see cref="Id"/> as
+    /// <see cref="Game"/> is.
+    /// </summary>
+    [JsonIgnore]
+    public int? MoveNumber => Id.MoveInGame;
 
     /// <summary>True if the game started from the canonical opening position.</summary>
     public required bool IsStandardStart { get; init; }

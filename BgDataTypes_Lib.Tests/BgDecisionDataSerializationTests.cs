@@ -17,6 +17,12 @@ public class BgDecisionDataSerializationTests
         WriteIndented = false,
     };
 
+    // The source-generated path, for the pins that hold on both.
+    private static readonly JsonSerializerOptions ContextOptions = new()
+    {
+        TypeInfoResolver = BgDataTypesJsonContext.Default
+    };
+
     // -----------------------------------------------------------------------
     //  Absence (halheinrich/backgammon#222). The "defaults to" pins below
     //  were rewritten into these two shapes: a required member's absence is
@@ -1310,45 +1316,55 @@ public class BgDecisionDataSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  Game, MoveNumber and IsStandardStart — DescriptiveData and BgDecisionData
+    //  Game, MoveNumber and IsStandardStart — derived from the Id
+    //  (halheinrich/backgammon#124) and DescriptiveData
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DescriptiveData_Game_RoundTrip()
+    public void BgDecisionData_GameAndMoveNumber_MatchPosition_KeepTheIdsNumbers_BothPaths()
     {
-        var original = TestRecords.Descriptive(
-            onRollName: "Mochy",
-            opponentName: "Falafel",
-            game: 4);
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DescriptiveData>(json, Options)!;
-        Assert.Equal(4, restored.Game);
+        // Rewritten from DescriptiveData_Game_RoundTrip and
+        // DescriptiveData_MoveNumber_RoundTrip: the numbers are the Id's, and
+        // round-trip with it.
+        var original = TestRecords.Record(id: new XgDecisionId("match.xg", Game: 4, MoveNumber: 17, IsCube: false));
+
+        foreach (var options in new[] { Options, ContextOptions })
+        {
+            var restored = JsonSerializer.Deserialize<BgDecisionData>(
+                JsonSerializer.Serialize(original, options), options)!;
+            Assert.Equal(4, restored.Game);
+            Assert.Equal(17, restored.MoveNumber);
+        }
     }
 
     [Fact]
-    public void DescriptiveData_Game_AbsentIsRefused()
+    public void BgDecisionData_GameAndMoveNumber_StandalonePosition_AreNone_BothPaths()
     {
-        // Rewritten from DescriptiveData_Game_DefaultsToZero.
-        AssertAbsentIsRefused(TestRecords.Descriptive(game: 3), "Game");
+        // Rewritten from DescriptiveData_Game_AbsentIsRefused and
+        // DescriptiveData_MoveNumber_AbsentIsRefused. A standalone position
+        // belongs to no game: no game or move number, never a stamped 1
+        // (halheinrich/backgammon#124) — and there is nowhere to stamp one.
+        var original = TestRecords.Record(id: new XgpDecisionId("position.xgp"));
+        Assert.Null(original.Game);
+        Assert.Null(original.MoveNumber);
+
+        foreach (var options in new[] { Options, ContextOptions })
+        {
+            var json = JsonSerializer.Serialize(original, options);
+            var restored = JsonSerializer.Deserialize<BgDecisionData>(json, options)!;
+            Assert.Null(restored.Game);
+            Assert.Null(restored.MoveNumber);
+            Assert.DoesNotContain("\"Game\"", json);
+            Assert.DoesNotContain("\"MoveNumber\"", json);
+        }
     }
 
     [Fact]
-    public void DescriptiveData_MoveNumber_RoundTrip()
+    public void DescriptiveData_StoresNoGameOrMoveNumber()
     {
-        var original = TestRecords.Descriptive(
-            onRollName: "Mochy",
-            opponentName: "Falafel",
-            moveNumber: 17);
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DescriptiveData>(json, Options)!;
-        Assert.Equal(17, restored.MoveNumber);
-    }
-
-    [Fact]
-    public void DescriptiveData_MoveNumber_AbsentIsRefused()
-    {
-        // Rewritten from DescriptiveData_MoveNumber_DefaultsToZero.
-        AssertAbsentIsRefused(TestRecords.Descriptive(moveNumber: 12), "MoveNumber");
+        // The stored copies are gone: the one stored place is the Id.
+        Assert.Null(typeof(DescriptiveData).GetProperty("Game"));
+        Assert.Null(typeof(DescriptiveData).GetProperty("MoveNumber"));
     }
 
     [Fact]
@@ -1375,10 +1391,9 @@ public class BgDecisionDataSerializationTests
     public void BgDecisionData_IDecisionFilterData_MoveNumberAndIsStandardStart()
     {
         IDecisionFilterData data = TestRecords.Record(
-            id: new XgpDecisionId("test.xgp"),
+            id: new XgDecisionId("match.xg", Game: 1, MoveNumber: 12, IsCube: false),
             descriptive: TestRecords.Descriptive(
                 onRollName: "Hal",
-                moveNumber: 12,
                 isStandardStart: true));
 
         Assert.Equal(12, data.MoveNumber);
@@ -1386,16 +1401,16 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void BgDecisionData_IDecisionFilterData_MoveNumberAndIsStandardStart_ForwardZeroAndFalse()
+    public void BgDecisionData_IDecisionFilterData_MoveNumber_StandalonePosition_IsNone()
     {
-        // Rewritten from ..._MoveNumberAndIsStandardStart_Defaults: the view
-        // forwards the stated zero and false, which are values now, not
-        // defaults.
+        // Rewritten from ..._MoveNumberAndIsStandardStart_ForwardZeroAndFalse:
+        // a standalone position has no move number for the view to forward
+        // (halheinrich/backgammon#124).
         IDecisionFilterData data = TestRecords.Record(
             id: new XgpDecisionId("test.xgp"),
-            descriptive: TestRecords.Descriptive(moveNumber: 0, isStandardStart: false));
+            descriptive: TestRecords.Descriptive(isStandardStart: false));
 
-        Assert.Equal(0, data.MoveNumber);
+        Assert.Null(data.MoveNumber);
         Assert.False(data.IsStandardStart);
     }
 
@@ -1511,7 +1526,6 @@ public class BgDecisionDataSerializationTests
             descriptive: TestRecords.Descriptive(
                 matchLength: 9,
                 onRollName: "Hal",
-                moveNumber: 12,
                 isStandardStart: true),
             outcome: TestRecords.Outcome(afterBestBoard: new BoardPosition(mop), afterPlayerBoard: new BoardPosition(mop)));
 

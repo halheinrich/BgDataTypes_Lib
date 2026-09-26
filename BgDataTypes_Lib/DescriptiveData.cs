@@ -2,11 +2,19 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// The provenance-and-metadata category of a <see cref="BgDecisionData"/>:
-/// who was playing, where the decision came from, and where it sits within
-/// its match. Producer-supplied from the source file's headers (see
+/// who was playing, where the decision came from, and the match it belongs
+/// to. Producer-supplied from the source file's headers (see
 /// <c>ConvertXgToJson_Lib</c>). The nullable members' <see langword="null"/>
 /// means none was recorded; every other member is <c>required</c>, per the
 /// wire rule stated on <see cref="BgDataTypesJsonContext"/>.
+///
+/// <para>
+/// The decision's game and move number are not here: the record's
+/// <see cref="BgDecisionData.Id"/> carries them, and the record derives
+/// <see cref="BgDecisionData.Game"/> and <see cref="BgDecisionData.MoveNumber"/>
+/// from it — <see langword="null"/> for a standalone position, never a
+/// stamped 1 (halheinrich/backgammon#124).
+/// </para>
 /// </summary>
 public class DescriptiveData
 {
@@ -34,12 +42,6 @@ public class DescriptiveData
 
     /// <summary>Originating file name including extension (e.g. "match.xg", "session.xgp"). No directory.</summary>
     public string? SourceFile { get; init; }
-
-    /// <summary>Game number within the match (1-based).</summary>
-    public required int Game { get; init; }
-
-    /// <summary>1-based move number within the game.</summary>
-    public required int MoveNumber { get; init; }
 
     /// <summary>True if the game started from the canonical opening position.
     /// False for non-standard starts (custom positions, problem setups, Bg960 variants).</summary>

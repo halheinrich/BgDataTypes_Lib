@@ -94,8 +94,6 @@ public class BgDataTypesJsonContextTests
                 date: new DateOnly(2024, 11, 15),
                 @event: "Monte Carlo 2024",
                 sourceFile: "mochy-falafel.xg",
-                game: 4,
-                moveNumber: 22,
                 isStandardStart: true,
                 comment: "Blitz or prime?",
                 flagged: true),
@@ -147,9 +145,7 @@ public class BgDataTypesJsonContextTests
             matchLength: 0,
             onRollName: "Hal",
             opponentName: "Bot",
-            sourceFile: "hal-bot.xg",
-            game: 2,
-            moveNumber: 7),
+            sourceFile: "hal-bot.xg"),
         outcome: TestRecords.Outcome());   // a cube decision: both after-boards absent
 
     // Every member at the value it defaulted to before the wire rule
@@ -172,8 +168,6 @@ public class BgDataTypesJsonContextTests
             matchLength: 7,
             player: "Mochy",
             sourceFile: "match.xg",
-            game: 3,
-            moveNumber: 14,
             isStandardStart: true,
             roll: 52,
             analysisDepth: "3-ply",

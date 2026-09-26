@@ -172,9 +172,24 @@ public class BgDecisionData : IDecisionFilterData
     /// <inheritdoc/>
     [JsonIgnore]
     public int MatchLength => Descriptive.MatchLength;
-    /// <inheritdoc/>
+    /// <summary>
+    /// The 1-based number of the game this decision was played in, within
+    /// its source file; <see langword="null"/> for a decision in a standalone
+    /// position (an <c>.xgp</c> file), which belongs to no game — not a
+    /// stamped 1 (halheinrich/backgammon#124). Derived from
+    /// <see cref="Id"/>, the one place it is stored
+    /// (<see cref="XgDecisionId.Game"/>), so it cannot disagree with the
+    /// identifier.
+    /// </summary>
     [JsonIgnore]
-    public int MoveNumber => Descriptive.MoveNumber;
+    public int? Game => Id.GameInFile;
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Derived from <see cref="Id"/>, as <see cref="Game"/> is
+    /// (<see cref="XgDecisionId.MoveNumber"/>).
+    /// </remarks>
+    [JsonIgnore]
+    public int? MoveNumber => Id.MoveInGame;
     /// <inheritdoc/>
     [JsonIgnore]
     public bool IsStandardStart => Descriptive.IsStandardStart;

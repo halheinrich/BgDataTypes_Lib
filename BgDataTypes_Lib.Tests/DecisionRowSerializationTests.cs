@@ -52,7 +52,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_RoundTrip_CheckerPlay()
     {
         var original = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
+            id: new XgDecisionId("mochy-falafel.xg", Game: 2, MoveNumber: 7, IsCube: false),
             xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:63:0:0:3:0:10",
             error: 0.023,
             matchLength: 9,
@@ -62,8 +62,6 @@ public class DecisionRowSerializationTests
             isJacoby: null,
             player: "Mochy",
             sourceFile: "mochy-falafel.xg",
-            game: 2,
-            moveNumber: 7,
             roll: 63,
             analysisDepth: "3-ply",
             equity: -0.142,
@@ -81,8 +79,8 @@ public class DecisionRowSerializationTests
         Assert.Equal(original.IsJacoby, restored.IsJacoby);
         Assert.Equal(original.Player, restored.Player);
         Assert.Equal(original.SourceFile, restored.SourceFile);
-        Assert.Equal(original.Game, restored.Game);
-        Assert.Equal(original.MoveNumber, restored.MoveNumber);
+        Assert.Equal(2, restored.Game);
+        Assert.Equal(7, restored.MoveNumber);
         Assert.Equal(original.Roll, restored.Roll);
         Assert.Equal(original.AnalysisDepth, restored.AnalysisDepth);
         Assert.Equal(original.Equity, restored.Equity);
@@ -99,8 +97,6 @@ public class DecisionRowSerializationTests
             equity: 0.312,
             player: "Falafel",
             sourceFile: "mochy-falafel.xg",
-            game: 1,
-            moveNumber: 3,
             analysisDepth: "Rollout: 1296 trials. 3-ply",
             matchLength: 9,
             onRollNeeds: 1,
@@ -742,24 +738,36 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  MoveNumber and IsStandardStart
+    //  Game, MoveNumber (derived from the Id, halheinrich/backgammon#124)
+    //  and IsStandardStart
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_MoveNumber_RoundTrip()
+    public void DecisionRow_GameAndMoveNumber_MatchPosition_KeepTheIdsNumbers()
     {
-        var original = TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, moveNumber: 17);
+        // Rewritten from DecisionRow_MoveNumber_RoundTrip: the numbers are the
+        // Id's, and round-trip with it.
+        var original = TestRecords.Row(
+            id: new XgDecisionId("m.xg", Game: 2, MoveNumber: 17, IsCube: false), roll: 31);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        Assert.Equal(2, restored.Game);
         Assert.Equal(17, restored.MoveNumber);
     }
 
     [Fact]
-    public void DecisionRow_MoveNumber_AbsentIsRefused()
+    public void DecisionRow_GameAndMoveNumber_StandalonePosition_AreNone()
     {
-        // Rewritten from DecisionRow_MoveNumber_DefaultsToZero.
-        AssertAbsentIsRefused(TestRecords.Row(id: new XgpDecisionId("test.xgp"), roll: 31, moveNumber: 12),
-            "MoveNumber");
+        // Rewritten from DecisionRow_MoveNumber_AbsentIsRefused: a standalone
+        // position has no game or move number, and the row stores no copy of
+        // either (halheinrich/backgammon#124).
+        var original = TestRecords.Row(id: new XgpDecisionId("position.xgp"), roll: 31);
+        var json = JsonSerializer.Serialize(original, Options);
+        var restored = JsonSerializer.Deserialize<DecisionRow>(json, Options)!;
+        Assert.Null(restored.Game);
+        Assert.Null(restored.MoveNumber);
+        Assert.DoesNotContain("\"Game\"", json);
+        Assert.DoesNotContain("\"MoveNumber\"", json);
     }
 
     [Fact]
@@ -783,10 +791,8 @@ public class DecisionRowSerializationTests
     public void DecisionRow_ToCsvLine_MoveNumberInColumnOrder()
     {
         var row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
+            id: new XgDecisionId("m.xg", Game: 2, MoveNumber: 17, IsCube: false),
             player: "Mochy",
-            game: 2,
-            moveNumber: 17,
             roll: 63);
         var line = row.ToCsvLine();
         // CSV header is: ...Player,SourceFile,Game,MoveNumber,Roll,...
@@ -795,12 +801,20 @@ public class DecisionRowSerializationTests
     }
 
     [Fact]
+    public void DecisionRow_ToCsvLine_StandalonePosition_GameAndMoveNumberAreEmptyCells()
+    {
+        var row = TestRecords.Row(id: new XgpDecisionId("position.xgp"), player: "Mochy", roll: 63);
+
+        // Neither a 1 nor a 0: no game applies (halheinrich/backgammon#124).
+        Assert.Contains(",Mochy,,,,63,", row.ToCsvLine());
+    }
+
+    [Fact]
     public void DecisionRow_IDecisionFilterData_MoveNumberAndIsStandardStart()
     {
         IDecisionFilterData row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"),
+            id: new XgDecisionId("m.xg", Game: 1, MoveNumber: 12, IsCube: false),
             roll: 31,
-            moveNumber: 12,
             isStandardStart: true);
 
         Assert.Equal(12, row.MoveNumber);
@@ -808,14 +822,14 @@ public class DecisionRowSerializationTests
     }
 
     [Fact]
-    public void DecisionRow_IDecisionFilterData_MoveNumberAndIsStandardStart_ForwardZeroAndFalse()
+    public void DecisionRow_IDecisionFilterData_MoveNumber_StandalonePosition_IsNone()
     {
-        // Rewritten from ..._MoveNumberAndIsStandardStart_Defaults: the view
-        // forwards the stated zero and false, which are values now.
+        // Rewritten from ..._MoveNumberAndIsStandardStart_ForwardZeroAndFalse:
+        // a standalone position has no move number (halheinrich/backgammon#124).
         IDecisionFilterData row = TestRecords.Row(
-            id: new XgpDecisionId("test.xgp"), roll: 31, moveNumber: 0, isStandardStart: false);
+            id: new XgpDecisionId("test.xgp"), roll: 31, isStandardStart: false);
 
-        Assert.Equal(0, row.MoveNumber);
+        Assert.Null(row.MoveNumber);
         Assert.False(row.IsStandardStart);
     }
 
