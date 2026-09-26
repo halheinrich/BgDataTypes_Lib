@@ -189,6 +189,27 @@ public class BgDataTypesJsonContextTests
     }
 
     [Fact]
+    public void HeaderTypes_AsTheBaseAndAsTheirKinds_ContextMatchesReflection()
+    {
+        // Added (halheinrich/backgammon#273, the umbrella's review): a
+        // header's terms and standing are wire units a producer's header
+        // embeds, each kind written as the base and as itself.
+        var moneyTerms = new MoneyTerms { IsJacoby = true, IsBeaver = false, CubeLimit = 1024 };
+        var matchTerms = new MatchTerms { Length = 7 };
+        var moneyStanding = new MoneyStanding { Score1 = 2, Score2 = 0 };
+        var matchStanding = new MatchStanding { Away1 = 3, Away2 = 5, IsCrawford = false };
+
+        AssertContextMatchesReflection<SessionTerms>(moneyTerms);
+        AssertContextMatchesReflection<SessionTerms>(matchTerms);
+        AssertContextMatchesReflection(moneyTerms);
+        AssertContextMatchesReflection(matchTerms);
+        AssertContextMatchesReflection<GameStanding>(moneyStanding);
+        AssertContextMatchesReflection<GameStanding>(matchStanding);
+        AssertContextMatchesReflection(moneyStanding);
+        AssertContextMatchesReflection(matchStanding);
+    }
+
+    [Fact]
     public void Play_ContextMatchesReflection()
         => AssertContextMatchesReflection<Play>([new(13, 10), new(10, -8), new(25, 24), new(6, 0)]);
 
@@ -372,6 +393,8 @@ public class BgDataTypesJsonContextTests
         [
             typeof(BgDecisionData), typeof(CheckerPlayDecision), typeof(CubeDecision),
             typeof(Session), typeof(MoneySession), typeof(MatchSession), typeof(SessionKind),
+            typeof(SessionTerms), typeof(MoneyTerms), typeof(MatchTerms),
+            typeof(GameStanding), typeof(MoneyStanding), typeof(MatchStanding),
             typeof(DecisionRow), typeof(DecisionKind),
             typeof(Play), typeof(Move), typeof(DecisionId),
             typeof(ProblemKey), typeof(DiceRoll), typeof(BoardPosition),
@@ -515,6 +538,7 @@ public sealed class ConsumerDocument
 /// </summary>
 [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(ConsumerDocument))]
+[JsonSerializable(typeof(ConsumerHeader))]
 internal sealed partial class ConsumerContext : JsonSerializerContext
 {
 }

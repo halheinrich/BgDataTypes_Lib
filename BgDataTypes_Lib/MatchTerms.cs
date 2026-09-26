@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text.Json.Serialization;
+
 namespace BgDataTypes_Lib;
 
 /// <summary>
@@ -7,19 +10,41 @@ namespace BgDataTypes_Lib;
 /// (99999) is a money session's <see cref="MoneyTerms"/>, never a match.
 /// </summary>
 /// <remarks>
+/// <para>
 /// <b>No cube limit</b> (decided at the umbrella's review of
 /// halheinrich/backgammon#273, 2026-09-26): a match's length already bounds
 /// what its cube can win, so the limit is a money session's alone
 /// (<see cref="MoneyTerms.CubeLimit"/>). A producer refuses a match header
 /// stating one; the XGID's field for it is a constant for every match
 /// (the internal encoder states it, with the corpus evidence).
+/// </para>
+/// <para>
+/// <b>Well-formed by construction.</b> The length is at least 1; its init
+/// setter refuses a breach with an <see cref="ArgumentOutOfRangeException"/>
+/// naming the member, and a document breaking it gets a
+/// <see cref="System.Text.Json.JsonException"/> carrying it. A document
+/// stating a member these terms do not have — a money rule — is refused,
+/// never read with the member dropped.
+/// </para>
 /// </remarks>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class MatchTerms : SessionTerms
 {
     private readonly int _length;
 
     /// <summary>Creates match terms; the member is set by the initializer.</summary>
     public MatchTerms() : base(SessionKind.Match)
+    {
+    }
+
+    /// <summary>
+    /// The serializer's constructor. It binds the document's
+    /// <paramref name="kind"/>, which must be <see cref="SessionKind.Match"/>;
+    /// why the pattern exists is stated once, on
+    /// <see cref="BgDataTypesJsonContext"/> ("The serializer constructors").
+    /// </summary>
+    [JsonConstructor]
+    internal MatchTerms(SessionKind kind) : base(SessionKind.Match, kind)
     {
     }
 
@@ -30,8 +55,11 @@ public sealed class MatchTerms : SessionTerms
         get => _length;
         init
         {
-            if (!SessionRules.LengthHolds(value))
-                throw new ArgumentOutOfRangeException(nameof(Length), value, SessionRules.LengthMessage);
+            Guard(() =>
+            {
+                if (!SessionRules.LengthHolds(value))
+                    throw new ArgumentOutOfRangeException(nameof(Length), value, SessionRules.LengthMessage);
+            });
             _length = value;
         }
     }
@@ -41,6 +69,9 @@ public sealed class MatchTerms : SessionTerms
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, Length);
+
+    /// <summary>The terms for a reader — <c>"match to 7"</c> — for a test failure or a log; not a wire form.</summary>
+    public override string ToString() => string.Create(CultureInfo.InvariantCulture, $"match to {Length}");
 
     /// <inheritdoc/>
     public override TResult Match<TResult>(Func<MoneyTerms, TResult> money, Func<MatchTerms, TResult> match)

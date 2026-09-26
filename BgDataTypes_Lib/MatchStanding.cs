@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text.Json.Serialization;
+
 namespace BgDataTypes_Lib;
 
 /// <summary>
@@ -14,8 +17,12 @@ namespace BgDataTypes_Lib;
 /// game exactly one player is 1-away. The length is the match's terms'
 /// (<see cref="MatchTerms"/>), not the game's, so no upper bound is checked
 /// here. Each guard is order-independent, naming the member that completed
-/// the contradiction.
+/// the contradiction; a document breaking one gets a
+/// <see cref="System.Text.Json.JsonException"/> carrying it, whatever order
+/// it states the members in. A document stating a member this standing does
+/// not have — a money score — is refused, never read with the member dropped.
 /// </remarks>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class MatchStanding : GameStanding
 {
     // Null only while construction is still stating the member.
@@ -28,6 +35,17 @@ public sealed class MatchStanding : GameStanding
     {
     }
 
+    /// <summary>
+    /// The serializer's constructor. It binds the document's
+    /// <paramref name="kind"/>, which must be <see cref="SessionKind.Match"/>;
+    /// why the pattern exists is stated once, on
+    /// <see cref="BgDataTypesJsonContext"/> ("The serializer constructors").
+    /// </summary>
+    [JsonConstructor]
+    internal MatchStanding(SessionKind kind) : base(SessionKind.Match, kind)
+    {
+    }
+
     /// <summary>The points player 1 still needs to win the match; at least 1.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is below 1.</exception>
     /// <exception cref="ArgumentException">Thrown on init when this is the Crawford game and the value leaves not exactly one player 1-away.</exception>
@@ -36,7 +54,7 @@ public sealed class MatchStanding : GameStanding
         get => _away1.GetValueOrDefault();
         init
         {
-            CheckAway(value, _away2, nameof(Away1));
+            Guard(() => CheckAway(value, _away2, nameof(Away1)));
             _away1 = value;
         }
     }
@@ -49,7 +67,7 @@ public sealed class MatchStanding : GameStanding
         get => _away2.GetValueOrDefault();
         init
         {
-            CheckAway(value, _away1, nameof(Away2));
+            Guard(() => CheckAway(value, _away1, nameof(Away2)));
             _away2 = value;
         }
     }
@@ -61,8 +79,11 @@ public sealed class MatchStanding : GameStanding
         get => _isCrawford.GetValueOrDefault();
         init
         {
-            if (value && _away1 is int away1 && _away2 is int away2 && !SessionRules.CrawfordStandingHolds(away1, away2))
-                throw new ArgumentException(SessionRules.CrawfordStandingMessage, nameof(IsCrawford));
+            Guard(() =>
+            {
+                if (value && _away1 is int away1 && _away2 is int away2 && !SessionRules.CrawfordStandingHolds(away1, away2))
+                    throw new ArgumentException(SessionRules.CrawfordStandingMessage, nameof(IsCrawford));
+            });
             _isCrawford = value;
         }
     }
@@ -73,6 +94,14 @@ public sealed class MatchStanding : GameStanding
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, Away1, Away2, IsCrawford);
+
+    /// <summary>
+    /// The standing for a reader — <c>"match, 3-away/5-away, Crawford"</c>,
+    /// player 1's first — for a test failure or a log; not a wire form.
+    /// </summary>
+    public override string ToString() => string.Create(
+        CultureInfo.InvariantCulture,
+        $"match, {Away1}-away/{Away2}-away{(IsCrawford ? ", Crawford" : "")}");
 
     /// <inheritdoc/>
     public override TResult Match<TResult>(Func<MoneyStanding, TResult> money, Func<MatchStanding, TResult> match)

@@ -90,10 +90,11 @@ and `Directory.Packages.props` (Central Package Management — no inline
 - **JSON converters and the serializer context** — `PlayJsonConverter`,
   `DiceRollJsonConverter`, `DecisionIdJsonConverter`,
   `ProblemKeyJsonConverter`, `BoardPositionJsonConverter`, and
-  `StrictJsonStringEnumConverter<TEnum>` (all ten enums). Each is bundled
+  `StrictJsonStringEnumConverter<TEnum>` (every enum). Each is bundled
   onto its type by a type-level `[JsonConverter]` attribute; consumers
-  register nothing. `BgDecisionDataJsonConverter` and `SessionJsonConverter`
-  are the two that dispatch rather than write: each finds a document's kind
+  register nothing. `BgDecisionDataJsonConverter`, `SessionJsonConverter`,
+  `SessionTermsJsonConverter` and `GameStandingJsonConverter` dispatch
+  rather than write: each finds a document's kind
   and delegates the document to that kind's generated contract. How a kind
   is found, and a document without exactly one known kind refused, is
   stated once, on the internal `KindDispatch`; each dispatching converter
@@ -166,7 +167,9 @@ attributes: `StrictJsonStringEnumConverter<TEnum>` on `CubeOwner`,
 `ProblemKey`, `DiceRollJsonConverter` on `DiceRoll`, and
 `BoardPositionJsonConverter` on `BoardPosition`, `DecisionKind` and
 `SessionKind` on the strict enum converter too, `BgDecisionDataJsonConverter`
-on `BgDecisionData`, and `SessionJsonConverter` on `Session`. Consumers do not need to register any of these converters on their
+on `BgDecisionData`, `SessionJsonConverter` on `Session`,
+`SessionTermsJsonConverter` on `SessionTerms`, and
+`GameStandingJsonConverter` on `GameStanding`. Consumers do not need to register any of these converters on their
 `JsonSerializerOptions` — the attributes carry the contract on the types
 themselves.
 
@@ -177,18 +180,21 @@ source-generated `JsonSerializerContext` over this library's wire surface:
 trim-safe serializer metadata produced at compile time, byte-identical to
 the reflection path (pinned by `BgDataTypesJsonContextTests`), every
 bundled converter honored. Its `[JsonSerializable]` roots are the wire
-units — the document roots (`BgDecisionData`, `DecisionRow`) and the
-converter-bearing token types (`Play`, `Move`, `DecisionId`, `ProblemKey`,
-`DiceRoll`, `BoardPosition`, the ten enums — `CubeClaim` declared ahead of its first
+units — the document roots (`BgDecisionData`, `DecisionRow`), the two
+header types a producer's serialized header embeds (`SessionTerms`,
+`GameStanding`), and the converter-bearing token types (`Play`, `Move`,
+`DecisionId`, `ProblemKey`, `DiceRoll`, `BoardPosition`, every enum —
+`CubeClaim` declared ahead of its first
 embedding document so the claim vocabulary is born source-genned and
 downstream contexts chain rather than re-cover it); composite parts ride
-the generator's graph walk. Three converters stop that walk, so what lies
+the generator's graph walk. Converters stop that walk, so what lies
 past them is declared explicitly and resolved through the active options
 at runtime: `Move` (past `Play`'s converter), the two decision kinds
 `CheckerPlayDecision` and `CubeDecision` (past
-`BgDecisionDataJsonConverter`, which reads `DecisionKind` to choose), and
-the two session kinds `MoneySession` and `MatchSession` (past
-`SessionJsonConverter`, which reads `SessionKind`). A completeness test (the halheinrich/backgammon#144
+`BgDecisionDataJsonConverter`, which reads `DecisionKind` to choose), and,
+each read by `SessionKind`, the two kinds of session (`MoneySession`,
+`MatchSession`), of terms (`MoneyTerms`, `MatchTerms`) and of standing
+(`MoneyStanding`, `MatchStanding`), past their families' converters. A completeness test (the halheinrich/backgammon#144
 intersection pattern) walks the serialized-property closure of the roots
 by reflection and asserts the context resolves every member.
 
@@ -1593,14 +1599,25 @@ scopes — a session's terms, a game's standing (seat-anchored, since both
 players roll within a game), a decision's `Session` (both, from the player
 on roll's side) — are three closed pairs, each matched exhaustively
 (`Match`/`Switch`), each a value (equality over the kind and its facts),
-sharing `SessionKind` and the rules of the internal `SessionRules`. The
-terms and the standing are not records: no JSON contract, no serializer
-constructors; their guards throw the rule's exception directly.
+sharing `SessionKind` and the rules of the internal `SessionRules`.
 
-Both are minimal **by design** — members are added on demand, never
-mirrored wholesale from a producer. They carry no JSON contract (nothing
-serializes an `IMatchInfo`); they are purely the shape a consumer needs
-to decide "skip this match / skip this game".
+**The terms and the standing are wire types** (the umbrella's review of
+halheinrich/backgammon#273). A producer serializes its header types — the
+converter's `XgMatchInfo` and `XgGameInfo` are in its own context — so an
+abstract member with no contract would be written with its facts dropped
+and could not be read back. Each family is a kinded document read through
+the one dispatch, as a record and a session are: `"Kind"` written first and
+read wherever it sits (`SessionTermsJsonConverter`,
+`GameStandingJsonConverter`, both on `KindDispatch`), each kind disallowing
+the other's members, every member required, and every refusal a
+`JsonException` on both paths, read as the base or as the kind. Each kind
+has the internal serializer constructor binding its `Kind`, so a rule a
+document breaks is refused as a `JsonException` carrying the guard's
+exception.
+
+Both contracts are minimal **by design** — members are added on demand,
+never mirrored wholesale from a producer; they are purely the shape a
+consumer needs to decide "skip this match / skip this game".
 
 ### Named documents: the persistence trio and the named collection
 
@@ -1797,19 +1814,22 @@ public interface IGameInfo
 }
 
 // The terms and the standing: closed pairs, matched exhaustively, values;
-// no JSON contract. The kind as a value is SessionKind.
+// kinded wire documents, dispatched on "Kind" as a record is. The kind as
+// a value is SessionKind.
+[JsonConverter(typeof(SessionTermsJsonConverter))]
 public abstract class SessionTerms : IEquatable<SessionTerms>, IEqualityOperators<SessionTerms, SessionTerms, bool>
 {
-    public SessionKind Kind { get; }
+    [JsonInclude, JsonRequired] public SessionKind Kind { get; internal init; }  // written first; the type's
     public abstract TResult Match<TResult>(Func<MoneyTerms, TResult> money, Func<MatchTerms, TResult> match);
     public abstract void Switch(Action<MoneyTerms> money, Action<MatchTerms> match);
 }
 public sealed class MoneyTerms : SessionTerms { public required bool IsJacoby, IsBeaver; public required int CubeLimit; }  // limit a power of two
 public sealed class MatchTerms : SessionTerms { public required int Length; }                                 // >= 1
 
+[JsonConverter(typeof(GameStandingJsonConverter))]
 public abstract class GameStanding : IEquatable<GameStanding>, IEqualityOperators<GameStanding, GameStanding, bool>
 {
-    public SessionKind Kind { get; }
+    [JsonInclude, JsonRequired] public SessionKind Kind { get; internal init; }  // written first; the type's
     public abstract TResult Match<TResult>(Func<MoneyStanding, TResult> money, Func<MatchStanding, TResult> match);
     public abstract void Switch(Action<MoneyStanding> money, Action<MatchStanding> match);
 }
@@ -2348,10 +2368,12 @@ number array; a malformed board is a `JsonException`; an optional board is
 a `BoardPosition?`, `null` or that form); `DecisionKind` and `SessionKind`
 bundle the strict enum converter, `BgDecisionData` bundles
 `BgDecisionDataJsonConverter` (see "The decision kinds") and `Session`
-bundles `SessionJsonConverter` (see "Money and match: the session kinds").
+bundles `SessionJsonConverter` (see "Money and match: the session kinds"),
+and `SessionTerms` and `GameStanding` bundle `SessionTermsJsonConverter`
+and `GameStandingJsonConverter` (see "Shared consumer contracts").
 Tested without any options-level registration in
 `BgDecisionDataSerializationTests`, `DecisionRowSerializationTests`,
-`DecisionKindTests`, `SessionKindTests`, `DiceRollTests`, `ProblemKeyTests`, and
+`DecisionKindTests`, `SessionKindTests`, `HeaderWireTests`, `DiceRollTests`, `ProblemKeyTests`, and
 `BoardWireTests`; `DocumentRefusalTests` reads every rule's breach as each
 type that can hold it, on both paths. The bytes of a full record and row of each kind are
 pinned by `WireGoldenTests`, beside the retired shapes it refuses; absence
@@ -2366,8 +2388,8 @@ by downstream contexts — roots, the composition rules (public converters,
 metadata-only generation), and the trim posture are in "Source generation
 & trimming" above.
 
-The ten enums are **string-token-exact in both directions**: they write their
-declared member names and read only those names — a numeric ordinal is a
+Every enum is **string-token-exact in both directions**: each writes its
+declared member names and reads only those names — a numeric ordinal is a
 `JsonException`, not a value. `AnalysisLevel`'s declaration order is contractual
 and its members interleave, so an inserted member renumbers everything after it;
 a reader that accepted ordinals would re-couple stored JSON to that numbering

@@ -1,4 +1,6 @@
 using System.Numerics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
@@ -21,20 +23,73 @@ namespace BgDataTypes_Lib;
 /// <see cref="SessionRules"/>, stated once.
 /// </para>
 /// <para>
-/// <b>A closed pair, a value.</b> The constructor is not reachable outside
+/// <b>A closed pair, a value.</b> The constructors are not reachable outside
 /// this library, <see cref="Match{TResult}"/> and <see cref="Switch"/> take
 /// one branch per kind, and two terms are equal exactly when they are the
-/// same kind with the same facts. No JSON contract: a producer's
-/// <see cref="IMatchInfo"/> is read in process, never serialized.
+/// same kind with the same facts.
+/// </para>
+/// <para>
+/// <b>On the wire</b> the terms are a kinded document, read and written as
+/// a session's and a record's are: the kind is a real member,
+/// <c>"Kind"</c>, written first and read wherever it sits, and
+/// <see cref="SessionTermsJsonConverter"/> hands the document to that kind's
+/// generated contract through the one dispatch (the internal
+/// <see cref="KindDispatch"/>). Every refusal — a missing, duplicated or
+/// unknown kind, a member of the other kind, a missing member, a rule
+/// broken — is a <see cref="JsonException"/> on both paths, whether the terms
+/// are read as <see cref="SessionTerms"/> or as their kind. A producer that
+/// serializes its <see cref="IMatchInfo"/> implementer (the converter's
+/// header types are) writes the terms this way with nothing to register.
 /// </para>
 /// </remarks>
+[JsonConverter(typeof(SessionTermsJsonConverter))]
 public abstract class SessionTerms : IEquatable<SessionTerms>, IEqualityOperators<SessionTerms, SessionTerms, bool>
 {
-    /// <summary>The kind is fixed here, by the two kinds in this library only.</summary>
-    private protected SessionTerms(SessionKind kind) => Kind = kind;
+    private readonly SessionKind _kind;
 
-    /// <summary>The session's kind: every <see cref="MoneyTerms"/> is <see cref="SessionKind.Money"/>, every <see cref="MatchTerms"/> <see cref="SessionKind.Match"/>.</summary>
-    public SessionKind Kind { get; }
+    // True for terms being read from a document: set only by the serializer's
+    // constructor, before any member is set, so each kind's rules refuse a
+    // breach as a JsonException rather than the guard's own ArgumentException
+    // (DocumentRefusal).
+    private readonly bool _read;
+
+    /// <summary>The constructor code builds terms through: the kind is fixed here, by the two kinds in this library only.</summary>
+    private protected SessionTerms(SessionKind kind) => _kind = kind;
+
+    /// <summary>
+    /// The constructor a document is read through, reachable only from each
+    /// kind's serializer constructor: the kind is fixed as for code, the terms
+    /// are marked as read, and the kind the document states is held to it —
+    /// all before any other member is set.
+    /// </summary>
+    /// <exception cref="JsonException"><paramref name="statedKind"/> is not <paramref name="kind"/>.</exception>
+    private protected SessionTerms(SessionKind kind, SessionKind statedKind)
+    {
+        _kind = kind;
+        _read = true;
+        Kind = statedKind;
+    }
+
+    /// <summary>
+    /// The session's kind: every <see cref="MoneyTerms"/> is
+    /// <see cref="SessionKind.Money"/>, every <see cref="MatchTerms"/>
+    /// <see cref="SessionKind.Match"/>. A real wire member, written first;
+    /// code never sets it, and a document may only state the terms' own kind.
+    /// </summary>
+    /// <exception cref="JsonException">
+    /// Thrown on read when the document states the other kind — reachable
+    /// only from JSON, through the kind's serializer constructor.
+    /// </exception>
+    [JsonInclude, JsonRequired, JsonPropertyOrder(-1)]
+    public SessionKind Kind
+    {
+        get => _kind;
+        internal init
+        {
+            if (value != _kind)
+                throw new JsonException($"The document states Kind {value} for {_kind} terms.");
+        }
+    }
 
     /// <summary>The result of the branch for this kind — one branch per kind, so a new kind breaks every call at compile time.</summary>
     /// <typeparam name="TResult">The type both branches return.</typeparam>
@@ -65,4 +120,21 @@ public abstract class SessionTerms : IEquatable<SessionTerms>, IEqualityOperator
 
     /// <summary>Whether the two are not equal terms.</summary>
     public static bool operator !=(SessionTerms? left, SessionTerms? right) => !(left == right);
+
+    /// <summary>
+    /// Runs <paramref name="check"/>, a guard of one of the kind's rules, and
+    /// refuses its breach as a document's <see cref="JsonException"/> when the
+    /// terms are being read (<see cref="DocumentRefusal"/>).
+    /// </summary>
+    private protected void Guard(Action check)
+    {
+        try
+        {
+            check();
+        }
+        catch (ArgumentException fault) when (_read)
+        {
+            throw DocumentRefusal.Of(fault);
+        }
+    }
 }

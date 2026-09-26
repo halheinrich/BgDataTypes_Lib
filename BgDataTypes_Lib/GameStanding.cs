@@ -1,4 +1,6 @@
 using System.Numerics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
@@ -22,20 +24,74 @@ namespace BgDataTypes_Lib;
 /// <see cref="SessionRules"/>, stated once.
 /// </para>
 /// <para>
-/// <b>A closed pair, a value.</b> The constructor is not reachable outside
+/// <b>A closed pair, a value.</b> The constructors are not reachable outside
 /// this library, <see cref="Match{TResult}"/> and <see cref="Switch"/> take
 /// one branch per kind, and two standings are equal exactly when they are
-/// the same kind with the same facts. No JSON contract: a producer's
-/// <see cref="IGameInfo"/> is read in process, never serialized.
+/// the same kind with the same facts.
+/// </para>
+/// <para>
+/// <b>On the wire</b> a standing is a kinded document, as
+/// <see cref="SessionTerms"/> are: the kind is a real member,
+/// <c>"Kind"</c>, written first and read wherever it sits, and
+/// <see cref="GameStandingJsonConverter"/> hands the document to that kind's
+/// generated contract through the one dispatch (the internal
+/// <see cref="KindDispatch"/>). Every refusal — a missing, duplicated or
+/// unknown kind, a member of the other kind, a missing member, a rule
+/// broken — is a <see cref="JsonException"/> on both paths, whether the
+/// standing is read as <see cref="GameStanding"/> or as its kind. A producer
+/// that serializes its <see cref="IGameInfo"/> implementer (the converter's
+/// header types are) writes the standing this way with nothing to register.
 /// </para>
 /// </remarks>
+[JsonConverter(typeof(GameStandingJsonConverter))]
 public abstract class GameStanding : IEquatable<GameStanding>, IEqualityOperators<GameStanding, GameStanding, bool>
 {
-    /// <summary>The kind is fixed here, by the two kinds in this library only.</summary>
-    private protected GameStanding(SessionKind kind) => Kind = kind;
+    private readonly SessionKind _kind;
 
-    /// <summary>The session's kind: every <see cref="MoneyStanding"/> is <see cref="SessionKind.Money"/>, every <see cref="MatchStanding"/> <see cref="SessionKind.Match"/>.</summary>
-    public SessionKind Kind { get; }
+    // True for a standing being read from a document: set only by the
+    // serializer's constructor, before any member is set, so each kind's rules
+    // refuse a breach as a JsonException rather than the guard's own
+    // ArgumentException (DocumentRefusal).
+    private readonly bool _read;
+
+    /// <summary>The constructor code builds a standing through: the kind is fixed here, by the two kinds in this library only.</summary>
+    private protected GameStanding(SessionKind kind) => _kind = kind;
+
+    /// <summary>
+    /// The constructor a document is read through, reachable only from each
+    /// kind's serializer constructor: the kind is fixed as for code, the
+    /// standing is marked as read, and the kind the document states is held to
+    /// it — all before any other member is set.
+    /// </summary>
+    /// <exception cref="JsonException"><paramref name="statedKind"/> is not <paramref name="kind"/>.</exception>
+    private protected GameStanding(SessionKind kind, SessionKind statedKind)
+    {
+        _kind = kind;
+        _read = true;
+        Kind = statedKind;
+    }
+
+    /// <summary>
+    /// The session's kind: every <see cref="MoneyStanding"/> is
+    /// <see cref="SessionKind.Money"/>, every <see cref="MatchStanding"/>
+    /// <see cref="SessionKind.Match"/>. A real wire member, written first;
+    /// code never sets it, and a document may only state the standing's own
+    /// kind.
+    /// </summary>
+    /// <exception cref="JsonException">
+    /// Thrown on read when the document states the other kind — reachable
+    /// only from JSON, through the kind's serializer constructor.
+    /// </exception>
+    [JsonInclude, JsonRequired, JsonPropertyOrder(-1)]
+    public SessionKind Kind
+    {
+        get => _kind;
+        internal init
+        {
+            if (value != _kind)
+                throw new JsonException($"The document states Kind {value} for a {_kind} standing.");
+        }
+    }
 
     /// <summary>The result of the branch for this kind — one branch per kind, so a new kind breaks every call at compile time.</summary>
     /// <typeparam name="TResult">The type both branches return.</typeparam>
@@ -66,4 +122,21 @@ public abstract class GameStanding : IEquatable<GameStanding>, IEqualityOperator
 
     /// <summary>Whether the two are not equal standings.</summary>
     public static bool operator !=(GameStanding? left, GameStanding? right) => !(left == right);
+
+    /// <summary>
+    /// Runs <paramref name="check"/>, a guard of one of the kind's rules, and
+    /// refuses its breach as a document's <see cref="JsonException"/> when the
+    /// standing is being read (<see cref="DocumentRefusal"/>).
+    /// </summary>
+    private protected void Guard(Action check)
+    {
+        try
+        {
+            check();
+        }
+        catch (ArgumentException fault) when (_read)
+        {
+            throw DocumentRefusal.Of(fault);
+        }
+    }
 }

@@ -153,6 +153,31 @@ public class DocumentRefusalTests
         yield return ("a cube above the limit", typeof(PositionData),
             TestRecords.Position(session: TestRecords.MoneySession(cubeLimit: 2)),
             d => d["CubeSize"] = 4, typeof(ArgumentOutOfRangeException));
+        // Added: a header's terms and standing, now wire types, read on their
+        // own as the base and as the kind (the umbrella's review of
+        // halheinrich/backgammon#273).
+        yield return ("money terms' cube limit that is not a power of two", typeof(SessionTerms),
+            new MoneyTerms { IsJacoby = true, IsBeaver = false, CubeLimit = 1024 },
+            d => d["CubeLimit"] = 1000, typeof(ArgumentOutOfRangeException));
+        yield return ("money terms' cube limit of 0, read as the kind", typeof(MoneyTerms),
+            new MoneyTerms { IsJacoby = true, IsBeaver = false, CubeLimit = 1024 },
+            d => d["CubeLimit"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("match terms of length 0", typeof(SessionTerms), new MatchTerms { Length = 7 },
+            d => d["Length"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("match terms of a negative length, read as the kind", typeof(MatchTerms), new MatchTerms { Length = 7 },
+            d => d["Length"] = -1, typeof(ArgumentOutOfRangeException));
+        yield return ("a standing's away score of 0", typeof(GameStanding),
+            new MatchStanding { Away1 = 3, Away2 = 5, IsCrawford = false },
+            d => d["Away1"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("a Crawford standing with no player 1-away, read as the kind", typeof(MatchStanding),
+            new MatchStanding { Away1 = 3, Away2 = 5, IsCrawford = false },
+            d => d["IsCrawford"] = true, typeof(ArgumentException));
+        yield return ("a money standing's negative score", typeof(GameStanding),
+            new MoneyStanding { Score1 = 0, Score2 = 0 },
+            d => d["Score2"] = -1, typeof(ArgumentOutOfRangeException));
+        yield return ("a money standing's negative score, read as the kind", typeof(MoneyStanding),
+            new MoneyStanding { Score1 = 0, Score2 = 0 },
+            d => d["Score1"] = -3, typeof(ArgumentOutOfRangeException));
     }
 
     [Fact]
@@ -236,6 +261,10 @@ public class DocumentRefusalTests
     [InlineData(typeof(PositionData))]
     [InlineData(typeof(MoneySession))]
     [InlineData(typeof(MatchSession))]
+    [InlineData(typeof(MoneyTerms))]
+    [InlineData(typeof(MatchTerms))]
+    [InlineData(typeof(MoneyStanding))]
+    [InlineData(typeof(MatchStanding))]
     public void TheSerializersConstructor_IsInternal_AndCodesIsPublicAndParameterless(Type type)
     {
         // The read mode is set only by the constructor the serializer uses,
