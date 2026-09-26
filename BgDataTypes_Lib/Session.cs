@@ -22,6 +22,14 @@ namespace BgDataTypes_Lib;
 /// player on roll's and the opponent's.
 /// </para>
 /// <para>
+/// <b>The decision's scope of three.</b> A session's header states its terms
+/// (<see cref="SessionTerms"/>, <see cref="IMatchInfo.Terms"/>) and a game's
+/// header its standing, seat by seat (<see cref="GameStanding"/>,
+/// <see cref="IGameInfo.Standing"/>); a decision's session is both, seen from
+/// the player on roll. The three share <see cref="SessionKind"/> and the
+/// rules of the internal <see cref="SessionRules"/>, stated once.
+/// </para>
+/// <para>
 /// <b>A closed pair.</b> The constructor is not reachable outside this
 /// library, so these two kinds are the only ones there are, and
 /// <see cref="Match{TResult}"/> and <see cref="Switch"/> take one branch per

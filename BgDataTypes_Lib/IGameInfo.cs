@@ -7,9 +7,15 @@ namespace BgDataTypes_Lib;
 /// it, filter layers consume it without referencing any producer's concrete
 /// types, and members are added on demand rather than mirrored wholesale
 /// from a producer.
-/// Money sessions: <see cref="Away1"/> = 0, <see cref="Away2"/> = 0,
-/// <see cref="IsCrawfordGame"/> = false.
 /// </summary>
+/// <remarks>
+/// <b>Money versus match is the standing's kind</b>
+/// (halheinrich/backgammon#273, Hal's ruling of 2026-09-26):
+/// <see cref="Standing"/> is a money session's scores or a match's away
+/// scores and Crawford flag. The money convention it replaces — away scores
+/// of 0 and a Crawford flag always false, which a consumer read money off —
+/// is gone with the members it held.
+/// </remarks>
 public interface IGameInfo
 {
     /// <summary>
@@ -20,17 +26,10 @@ public interface IGameInfo
     bool IsStandardStart { get; }
 
     /// <summary>
-    /// Points still needed by player 1 to win the match.
-    /// 0 for money sessions.
+    /// Where the players stand as the game begins, player 1 and player 2: in a
+    /// money session the points each has won (<see cref="MoneyStanding"/>),
+    /// in a match what each still needs and whether this is the Crawford game
+    /// (<see cref="MatchStanding"/>).
     /// </summary>
-    int Away1 { get; }
-
-    /// <summary>
-    /// Points still needed by player 2 to win the match.
-    /// 0 for money sessions.
-    /// </summary>
-    int Away2 { get; }
-
-    /// <summary>True if the Crawford rule applies to this game.</summary>
-    bool IsCrawfordGame { get; }
+    GameStanding Standing { get; }
 }

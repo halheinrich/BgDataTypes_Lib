@@ -2,13 +2,24 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// Match-level metadata contract — the shape a consumer needs to decide
-/// whether to skip an entire match before any of its decisions are produced.
-/// Parallel in spirit to <see cref="IDecisionFilterData"/>: producers (e.g.
-/// the XG parser's match-info type) implement it, and filter layers consume
-/// it without referencing any producer's concrete types. Minimal by design —
-/// members are added on demand, not mirrored wholesale from a producer.
+/// whether to skip an entire match (or money session) before any of its
+/// decisions are produced. Parallel in spirit to
+/// <see cref="IDecisionFilterData"/>: producers (e.g. the XG parser's
+/// match-info type) implement it, and filter layers consume it without
+/// referencing any producer's concrete types. Minimal by design — members are
+/// added on demand, not mirrored wholesale from a producer.
 /// See <see cref="IGameInfo"/> for the game-scope companion.
 /// </summary>
+/// <remarks>
+/// <b>Money versus match is the terms' kind</b> (halheinrich/backgammon#273,
+/// Hal's ruling of 2026-09-26): <see cref="Terms"/> is a money session's
+/// rules or a match's length. The match length of 0 that spelled money, and
+/// the <c>IsMoneyGame</c> derived from it, are gone: a consumer matches on
+/// the terms' kind (<see cref="SessionTerms.Match{TResult}"/>), and a
+/// producer states which kind the header is — XG's raw money sentinel (a
+/// length of 99999) is read at the parse boundary as money terms, never
+/// surfaced as a length.
+/// </remarks>
 public interface IMatchInfo
 {
     /// <summary>Name of player 1 (bottom player in XG).</summary>
@@ -18,19 +29,9 @@ public interface IMatchInfo
     string Player2 { get; }
 
     /// <summary>
-    /// Match length (points to win). 0 = unlimited / money session.
-    /// Producer contract: raw sentinel lengths (XG stores unlimited sessions
-    /// as 99999) are normalized to 0 at the parse boundary, before this
-    /// contract ever sees them — implementations never surface the sentinel.
+    /// The terms the session is played on: a money session's rules
+    /// (<see cref="MoneyTerms"/> — the Jacoby and beaver rules and the cube
+    /// limit) or a match's length (<see cref="MatchTerms"/>).
     /// </summary>
-    int MatchLength { get; }
-
-    /// <summary>
-    /// True for an unlimited (money) session. This default implementation is
-    /// the contract's single spelling of the money-game rule — derived from
-    /// <see cref="MatchLength"/> (valid because of the sentinel normalization
-    /// documented there). Implementers inherit it rather than restating the
-    /// rule, and must never redeclare it with a different derivation.
-    /// </summary>
-    bool IsMoneyGame => MatchLength == 0;
+    SessionTerms Terms { get; }
 }

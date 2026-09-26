@@ -82,10 +82,11 @@ and `Directory.Packages.props` (Central Package Management — no inline
 - **Shared consumer contracts** — `IDecisionFilterData`, the filter-layer
   view implemented by a record's view and by `DecisionRow`, carrying the
   score context a filter needs as the decision's `Session` (a money
-  session with its Jacoby rule, or a match with its length, away scores and
-  Crawford flag);
+  session with its Jacoby and beaver rules, cube limit and scores, or a
+  match with its length, away scores and Crawford flag);
   `IGameInfo` and `IMatchInfo`, implemented by producers so filter layers
-  never reference a producer's concrete types.
+  never reference a producer's concrete types, stating money versus match
+  as the kind of their `GameStanding` and `SessionTerms`.
 - **JSON converters and the serializer context** — `PlayJsonConverter`,
   `DiceRollJsonConverter`, `DecisionIdJsonConverter`,
   `ProblemKeyJsonConverter`, `BoardPositionJsonConverter`, and
@@ -1565,16 +1566,29 @@ scopes where a consumer can skip whole units before any decision is
 produced.
 
 - **`IMatchInfo`** — match scope: `Player1`, `Player2` (bottom/top player
-  in XG), `MatchLength` (0 = money session), and the default-implemented
-  `IsMoneyGame => MatchLength == 0` — the contract's single spelling of
-  the money-game rule. Producer contract: XG's raw sentinel for unlimited
-  sessions (99999) is normalized to 0 at the parse boundary, before the
-  contract ever sees it — which is what makes the `IsMoneyGame`
-  derivation valid.
+  in XG) and `Terms`, a `SessionTerms`: a money session's `MoneyTerms`
+  (`IsJacoby`, `IsBeaver`, `CubeLimit`) or a match's `MatchTerms`
+  (`Length`, at least 1). Producer contract: XG's raw sentinel for
+  unlimited sessions (a length of 99999) is read at the parse boundary as
+  money terms, never surfaced as a length.
 - **`IGameInfo`** — game scope: `IsStandardStart` (false for saved/custom
-  openings — the opening-move filter's input), `Away1`, `Away2` (points
-  still needed by each player), `IsCrawfordGame`. Money-session
-  convention: `Away1 == 0`, `Away2 == 0`, `IsCrawfordGame == false`.
+  openings — the opening-move filter's input) and `Standing`, a
+  `GameStanding`, player 1 and player 2: a money session's
+  `MoneyStanding` (`Score1`, `Score2`, each at least 0: the points each has
+  won in the session) or a match's `MatchStanding` (`Away1`, `Away2`, each
+  at least 1, and `IsCrawford`, with exactly one player 1-away when set).
+
+**Money versus match is the kind at every scope** (halheinrich/backgammon#273,
+Hal's ruling of 2026-09-26). The match length of 0, the `IsMoneyGame`
+derived from it, and the money convention of away scores 0 with
+`IsCrawfordGame` false are gone with the members that held them. The three
+scopes — a session's terms, a game's standing (seat-anchored, since both
+players roll within a game), a decision's `Session` (both, from the player
+on roll's side) — are three closed pairs, each matched exhaustively
+(`Match`/`Switch`), each a value (equality over the kind and its facts),
+sharing `SessionKind` and the rules of the internal `SessionRules`. The
+terms and the standing are not records: no JSON contract, no serializer
+constructors; their guards throw the rule's exception directly.
 
 Both are minimal **by design** — members are added on demand, never
 mirrored wholesale from a producer. They carry no JSON contract (nothing
@@ -1766,17 +1780,35 @@ public interface IMatchInfo
 {
     string Player1 { get; }                       // bottom player in XG
     string Player2 { get; }                       // top player in XG
-    int MatchLength { get; }                      // 0 = money (sentinel pre-normalized)
-    bool IsMoneyGame => MatchLength == 0;         // single spelling; never redeclare
+    SessionTerms Terms { get; }                   // MoneyTerms or MatchTerms
 }
 
 public interface IGameInfo
 {
     bool IsStandardStart { get; }                 // false for saved/custom openings
-    int Away1 { get; }                            // 0 for money sessions
-    int Away2 { get; }                            // 0 for money sessions
-    bool IsCrawfordGame { get; }                  // false for money sessions
+    GameStanding Standing { get; }                // MoneyStanding or MatchStanding, player 1 and 2
 }
+
+// The terms and the standing: closed pairs, matched exhaustively, values;
+// no JSON contract. The kind as a value is SessionKind.
+public abstract class SessionTerms : IEquatable<SessionTerms>, IEqualityOperators<SessionTerms, SessionTerms, bool>
+{
+    public SessionKind Kind { get; }
+    public abstract TResult Match<TResult>(Func<MoneyTerms, TResult> money, Func<MatchTerms, TResult> match);
+    public abstract void Switch(Action<MoneyTerms> money, Action<MatchTerms> match);
+}
+public sealed class MoneyTerms : SessionTerms { public required bool IsJacoby, IsBeaver; public required int CubeLimit; }  // limit a power of two
+public sealed class MatchTerms : SessionTerms { public required int Length; }                                 // >= 1
+
+public abstract class GameStanding : IEquatable<GameStanding>, IEqualityOperators<GameStanding, GameStanding, bool>
+{
+    public SessionKind Kind { get; }
+    public abstract TResult Match<TResult>(Func<MoneyStanding, TResult> money, Func<MatchStanding, TResult> match);
+    public abstract void Switch(Action<MoneyStanding> money, Action<MatchStanding> match);
+}
+public sealed class MoneyStanding : GameStanding { public required int Score1, Score2; }                        // >= 0
+public sealed class MatchStanding : GameStanding { public required int Away1, Away2; public required bool IsCrawford; }
+                                                                                   // each away >= 1; Crawford: exactly one 1-away
 
 // Wire records: every stored member is required or nullable, never
 // defaulted (halheinrich/backgammon#222; the rule on BgDataTypesJsonContext).
@@ -2641,17 +2673,14 @@ measure" is not a valid comparison on this hardware.
   data. And they are *actions, never claims* —
   do not infer `CubeClaim` from a played action (see "Played cube actions
   on CubeDecisionData"); the rationale is a property of the analysis.
-- **`IMatchInfo.IsMoneyGame` has exactly one spelling — the interface's
-  default implementation.** Implementers inherit it; redeclaring it with a
-  different derivation forks the money-game rule. The derivation is valid
-  only because producers normalize XG's unlimited-session sentinel (99999)
-  to 0 at the parse boundary — an implementation surfacing the raw
-  sentinel would break every `IsMoneyGame` consumer silently.
-- **`IGameInfo` money conventions are contractual, not incidental.**
-  `Away1 == 0`, `Away2 == 0`, `IsCrawfordGame == false` for money
-  sessions. New implementers must honor them — filter layers key off the
-  zeros. (The decision-scope contract no longer does:
-  `IDecisionFilterData.Session` states money as its kind.)
+- **The skip-early contracts state money as a kind, never as 0s.** An
+  `IMatchInfo` implementer returns `MoneyTerms` for a money session — XG's
+  unlimited-session sentinel (a length of 99999) is read at the parse
+  boundary as money, never surfaced as a `MatchTerms` length, which refuses
+  anything below 1 anyway — and an `IGameInfo` implementer a
+  `MoneyStanding` for a money game. A consumer matches on the kind
+  (`Terms.Match`, `Standing.Match`), never on a length or away score of 0:
+  no member holds one.
 - **`default(CubeDecisionPair)` is non-meaningful.** A `record struct`
   cannot run its half-guards on `default`, so `default(CubeDecisionPair)`
   is `(NoDouble, NoDouble)` — whose `Taker` is not a valid taker action.

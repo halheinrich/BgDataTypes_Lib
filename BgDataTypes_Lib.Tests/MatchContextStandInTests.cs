@@ -24,23 +24,28 @@ public class MatchContextStandInTests
         [.. type.GetMembers(Public).Select(m => m.Name)
             .Concat(type.GetInterfaces().SelectMany(i => i.GetMembers(Public)).Select(m => m.Name))];
 
-    public static TheoryData<Type> RecordSurfaces =>
+    public static TheoryData<Type> Surfaces =>
     [
         typeof(PositionData), typeof(DescriptiveData),
         typeof(BgDecisionData), typeof(CheckerPlayDecision), typeof(CubeDecision),
-        typeof(IDecisionFilterData),
+        typeof(IDecisionFilterData), typeof(IMatchInfo), typeof(IGameInfo),
     ];
 
     [Theory]
-    [MemberData(nameof(RecordSurfaces))]
-    public void NoRecordSurface_HasAFlatMatchContextMember(Type surface)
+    [MemberData(nameof(Surfaces))]
+    public void NoSurface_HasAFlatMatchContextMember(Type surface)
     {
         // The flat members that spelled money with 0s — and the Jacoby fact
-        // a match record could carry — are gone from every record surface:
-        // the session is the one member stating the match context.
+        // a match record could carry — are gone from every record surface and
+        // from the skip-early contracts: a session, the terms or the standing
+        // is the one member stating the match context at each scope.
         var members = MembersOf(surface);
 
-        foreach (var retired in new[] { "MatchLength", "OnRollNeeds", "OpponentNeeds", "IsCrawford", "IsJacoby", "IsMoneyGame" })
+        foreach (var retired in new[]
+                 {
+                     "MatchLength", "OnRollNeeds", "OpponentNeeds", "IsCrawford", "IsJacoby", "IsMoneyGame",
+                     "Away1", "Away2", "IsCrawfordGame",
+                 })
             Assert.DoesNotContain(retired, members);
     }
 

@@ -3,12 +3,16 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// The rules that hold a session's facts, and the cube's, to the game of
 /// backgammon — each stated once, here, with the one sentence every refusal
-/// of it carries. <see cref="MatchSession"/>, <see cref="MoneySession"/> and
+/// of it carries — at every scope money versus match is stated. A record's
+/// <see cref="MatchSession"/>, <see cref="MoneySession"/> and
 /// <see cref="PositionData"/> hold their members to them in their init
 /// guards, refusing a breach from code with the guard's
 /// <see cref="ArgumentException"/> and from a document with a
 /// <see cref="System.Text.Json.JsonException"/> carrying it (the wire rule on
-/// <see cref="BgDataTypesJsonContext"/>).
+/// <see cref="BgDataTypesJsonContext"/>); the skip-early contracts'
+/// <see cref="MatchTerms"/>, <see cref="MoneyTerms"/>,
+/// <see cref="MatchStanding"/> and <see cref="MoneyStanding"/>, which are
+/// never read from a document, refuse it from code the same way.
 /// </summary>
 internal static class SessionRules
 {
