@@ -17,6 +17,33 @@ public class PlayNotationTests
 {
     private static string Notation(Play play) => play.ToNotation();
 
+    // The public route ----------------------------------------------------
+
+    [Fact]
+    public void PublicSurface_ToNotationIsTheOneWayToSpellAPlay_TheChainFormIsInternal()
+    {
+        // halheinrich/backgammon#273: a consumer spells a play with
+        // ToNotation and compares plays by position, so nothing public
+        // exposes the chain form. The compiler refuses a public member whose
+        // signature names an internal type, so the types' visibility is the
+        // whole pin for everything but ToCanonical, pinned by name.
+        var toNotation = typeof(Play).GetMethod(nameof(Play.ToNotation), Type.EmptyTypes);
+        Assert.NotNull(toNotation);
+        Assert.True(toNotation.IsPublic);
+        Assert.Equal(typeof(string), toNotation.ReturnType);
+
+        // Play.ToString stays the default: an encoding is more than its notation.
+        Assert.Equal(typeof(ValueType), typeof(Play).GetMethod(nameof(ToString), Type.EmptyTypes)!.DeclaringType);
+
+        Assert.False(typeof(CanonicalPlay).IsVisible);
+        Assert.False(typeof(PlayChain).IsVisible);
+        // ToCanonical exists (so the next line cannot pass vacuously) and is not public.
+        Assert.NotNull(typeof(Play).GetMethod(nameof(Play.ToCanonical),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
+        Assert.Null(typeof(Play).GetMethod(nameof(Play.ToCanonical),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public));
+    }
+
     // Regular moves --------------------------------------------------------
 
     [Fact]

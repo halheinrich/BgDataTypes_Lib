@@ -357,8 +357,9 @@ public sealed class BoardState
     /// hops, how sources pair with destinations (<c>25/10 20/15*</c> and
     /// <c>25/15* 20/10</c> with 5-5), and which checker carries a hit mark
     /// (<c>8/3* 7/3</c> and <c>8/3 7/3*</c>). A <see cref="Play"/> carries no
-    /// board, so no board-less comparison exists: neither <see cref="Play"/>
-    /// nor <see cref="CanonicalPlay"/> has equality.
+    /// board, so no board-less comparison exists: <see cref="Play"/> has no
+    /// equality, and its notation (<see cref="Play.ToNotation"/>) is display,
+    /// not identity.
     /// </para>
     /// <para>
     /// <b>The position a play reaches.</b> Each move is a hop of one of the

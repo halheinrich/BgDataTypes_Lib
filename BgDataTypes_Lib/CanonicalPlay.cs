@@ -9,6 +9,13 @@ namespace BgDataTypes_Lib;
 /// <c>*</c>) goes. Produced by <see cref="Play.ToCanonical"/>.
 ///
 /// <para>
+/// <b>Internal, with <see cref="PlayChain"/></b> (halheinrich/backgammon#273):
+/// a consumer spells a play with <see cref="Play.ToNotation"/> and compares
+/// plays with <see cref="BoardState.IsSamePlay"/>, and needs nothing of the
+/// chains in between. So the form can change without breaking a consumer.
+/// </para>
+///
+/// <para>
 /// <b>This is the display rule, not identity.</b> Whether two plays are the
 /// same play is <see cref="BoardState.IsSamePlay"/>, asked of the position
 /// they are played from; two encodings of one play can display differently
@@ -77,7 +84,7 @@ namespace BgDataTypes_Lib;
 /// adjacent by the canonical order, and the notation groups them.
 /// </para>
 /// </summary>
-public readonly struct CanonicalPlay
+internal readonly struct CanonicalPlay
 {
     // Fixed buffer: at most one chain per move, max 4 moves (doubles).
     private readonly PlayChain _c0, _c1, _c2, _c3;

@@ -269,7 +269,7 @@ public struct Play
     /// its notation shows and where the hit marks go (see
     /// <see cref="CanonicalPlay"/>). Not identity; see the type summary.
     /// </summary>
-    public readonly CanonicalPlay ToCanonical() => CanonicalPlay.FromPlay(in this);
+    internal readonly CanonicalPlay ToCanonical() => CanonicalPlay.FromPlay(in this);
 
     /// <summary>
     /// This play in standard backgammon notation — <c>"24/18* 13/9"</c>,

@@ -15,4 +15,14 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
   </PropertyGroup>
 
+  <!-- The chain form (CanonicalPlay, PlayChain, Play.ToCanonical) is
+       internal (halheinrich/backgammon#273): consumers spell a play with
+       Play.ToNotation and compare plays by position. The tests pin the chain
+       form itself — which chains, which one carries each hit — more
+       precisely than a notation string can, so they see internals. Only the
+       test project: the benchmarks measure the public surface. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="BgDataTypes_Lib.Tests" />
+  </ItemGroup>
+
 </Project>

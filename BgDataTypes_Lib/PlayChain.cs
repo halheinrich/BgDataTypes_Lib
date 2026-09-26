@@ -29,4 +29,4 @@ namespace BgDataTypes_Lib;
 /// <see cref="CanonicalPlay.ToString"/> for identical chains) and is not play
 /// identity, which is <see cref="BoardState.IsSamePlay"/>.
 /// </summary>
-public readonly record struct PlayChain(int FrPt, int ToPt);
+internal readonly record struct PlayChain(int FrPt, int ToPt);
