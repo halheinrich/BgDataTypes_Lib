@@ -613,7 +613,7 @@ public class BgDecisionDataSerializationTests
         // Rewritten from PositionData_IsJacoby_SerializesUnderItsOwnName.
         var json = JsonSerializer.Serialize(TestRecords.Position(session: TestRecords.MoneySession(isJacoby: true)), Options);
 
-        Assert.Contains("\"Session\":{\"Kind\":\"Money\",\"IsJacoby\":true}", json);
+        Assert.Contains("\"Session\":{\"Kind\":\"Money\",\"IsJacoby\":true,", json);
     }
 
     // -----------------------------------------------------------------------
@@ -1490,8 +1490,9 @@ public class BgDecisionDataSerializationTests
         // the fields added after documents existed read as empty and zero
         // when absent; they are required now (halheinrich/backgammon#222),
         // each at its own level of the record — the cubeless equities on the
-        // cube decision's category, their one home.
-        AssertAbsentIsRefused<BgDecisionData>(TestRecords.Cube(xgid: "XGID=x"), "Xgid");
+        // cube decision's category, their one home. Rewritten again: the XGID
+        // left the wire — it is derived — so its absence is nothing to refuse
+        // (BgDecisionData_Xgid_IsDerived_NotOnTheWire).
         AssertAbsentIsRefused(TestRecords.Descriptive(comment: "note", flagged: true), "Flagged");
         // Rewritten: the comment's absence is "none recorded" now — null, its
         // one spelling — not a refusal.
@@ -1505,7 +1506,6 @@ public class BgDecisionDataSerializationTests
     public void BgDecisionData_NewDecisionFields_RoundTrip()
     {
         var original = TestRecords.Cube(
-            xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:00:0:0:0:0:10",
             decision: TestRecords.CubeData(
                 noDoubleEquity: 0.312,
                 doubleTakeEquity: 0.287,
@@ -1520,8 +1520,10 @@ public class BgDecisionDataSerializationTests
         var json = JsonSerializer.Serialize<BgDecisionData>(original, Options);
         var restored = Assert.IsType<CubeDecision>(JsonSerializer.Deserialize<BgDecisionData>(json, Options));
 
-        // Xgid serializes at the top level, not inside Position.
-        Assert.Contains("\"Xgid\":\"XGID=-b----E-C---eE---c-e----B-:0:0:1:00:0:0:0:0:10\"", json);
+        // Rewritten: the XGID no longer serializes — it is derived, from the
+        // members that do, so the record read back derives the same one.
+        Assert.DoesNotContain("Xgid", json);
+        Assert.Equal("XGID=-BBCCCB------------ddcbaa-:0:0:1:00:0:0:0:7:10", restored.Xgid);
         Assert.Equal(original.Xgid, restored.Xgid);
 
         Assert.Equal(original.Descriptive.Comment, restored.Descriptive.Comment);
@@ -1544,7 +1546,8 @@ public class BgDecisionDataSerializationTests
         // would write top-level duplicates with no read-back path. This pins
         // the top-level wire shape of each kind as exactly its stored members,
         // the kind first — a forwarding member added without [JsonIgnore]
-        // fails here, and so does the retired Outcome.
+        // fails here, and so does the retired Outcome. Rewritten again: five
+        // members, the XGID derived now (halheinrich/backgammon#273).
         foreach (BgDecisionData record in new BgDecisionData[] { TestRecords.CheckerPlay(), TestRecords.Cube() })
         {
             foreach (var (_, options) in WirePaths.Both)
@@ -1553,7 +1556,7 @@ public class BgDecisionDataSerializationTests
                 var topLevelNames = doc.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
 
                 Assert.Equal(
-                    ["Kind", "Id", "Xgid", "Position", "Descriptive", "Decision"],
+                    ["Kind", "Id", "Position", "Descriptive", "Decision"],
                     topLevelNames);
             }
         }

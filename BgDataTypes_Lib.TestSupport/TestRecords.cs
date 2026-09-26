@@ -41,12 +41,6 @@ public static class TestRecords
     private static readonly BoardPosition RacePosition = new(
         [0, 2, 2, 3, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -4, -4, -3, -2, -1, -1, 0]);
 
-    /// <summary>The standard start with a 3-1 to play, at 0-0 in a 7-point match.</summary>
-    private const string OpeningXgid = "XGID=-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10";
-
-    /// <summary>The race, the cube centred, the player on roll to decide on doubling.</summary>
-    private const string RaceXgid = "XGID=-BBCCCB------------ddcbaa-:0:0:1:00:0:0:0:7:10";
-
     private static PlayCandidate[] OpeningCandidates() =>
     [
         Candidate(),
@@ -71,7 +65,6 @@ public static class TestRecords
     /// </summary>
     public static CheckerPlayDecision CheckerPlay(
         DecisionId? id = null,
-        string xgid = OpeningXgid,
         PositionData? position = null,
         CheckerPlayDecisionData? decision = null,
         DescriptiveData? descriptive = null)
@@ -81,7 +74,6 @@ public static class TestRecords
         return new CheckerPlayDecision
         {
             Id = id,
-            Xgid = xgid,
             Position = position,
             Decision = decision ?? (position.Mop == BoardPosition.Standard
                 ? CheckerPlayData()
@@ -97,7 +89,6 @@ public static class TestRecords
     /// </summary>
     public static CubeDecision Cube(
         DecisionId? id = null,
-        string xgid = RaceXgid,
         PositionData? position = null,
         CubeDecisionData? decision = null,
         DescriptiveData? descriptive = null)
@@ -106,7 +97,6 @@ public static class TestRecords
         return new CubeDecision
         {
             Id = id,
-            Xgid = xgid,
             Position = position ?? Position(mop: RacePosition),
             Decision = decision ?? CubeData(),
             Descriptive = descriptive ?? DescriptiveFor(id),
@@ -163,12 +153,22 @@ public static class TestRecords
 
     /// <summary>
     /// A money session, as it stands at the decision; each argument is the
-    /// member of the same name. By default under the Jacoby rule, XG's
-    /// default for a money session.
+    /// member of the same name. By default XG's defaults for a money session —
+    /// the Jacoby rule, no beaver rule, a cube limit of 1024 — at the
+    /// session's start, 0-0.
     /// </summary>
-    public static MoneySession MoneySession(bool isJacoby = true) => new()
+    public static MoneySession MoneySession(
+        bool isJacoby = true,
+        bool isBeaver = false,
+        int cubeLimit = 1024,
+        int onRollScore = 0,
+        int opponentScore = 0) => new()
     {
         IsJacoby = isJacoby,
+        IsBeaver = isBeaver,
+        CubeLimit = cubeLimit,
+        OnRollScore = onRollScore,
+        OpponentScore = opponentScore,
     };
 
     /// <summary>

@@ -184,20 +184,20 @@ public sealed class ProblemKey :
     /// </param>
     /// <returns>
     /// <see langword="false"/> — no key, per the ratified no-key rung —
-    /// when the facts are malformed or degenerate: an empty board (the board
-    /// is otherwise well-formed by its type, <see cref="BoardPosition"/>); a
-    /// cube size that is not a positive power of two; or an undefined
-    /// <see cref="CubeOwner"/> value. Otherwise <see langword="true"/>. The
-    /// score is no rung: the record's <see cref="Session"/> is well-formed by
-    /// its kind — a match's away scores at least 1, its Crawford game with a
-    /// 1-away side, a money session's Jacoby rule always stated — so the
-    /// score rules the parse door still enforces (<see cref="AreValidFacts"/>)
-    /// hold of every record by construction. The money rung that withheld a
-    /// key from a money record with no Jacoby fact is gone with the fact's
-    /// absence (halheinrich/backgammon#273). (A checker play's dice are no
-    /// rung either: they are two faces 1–6 by construction,
-    /// <see cref="CheckerPlayDecisionData.Dice"/>.) Never throws on bad facts
-    /// (degrade, never block).
+    /// when the board is empty (it is otherwise well-formed by its type,
+    /// <see cref="BoardPosition"/>): the one rung a record can still reach.
+    /// Otherwise <see langword="true"/>. The score and the cube are no rungs
+    /// for a record (halheinrich/backgammon#273): its <see cref="Session"/> is
+    /// well-formed by its kind — a match's away scores at least 1, its
+    /// Crawford game with a 1-away side, a money session's Jacoby rule always
+    /// stated — and its position holds the cube to a positive power of two and
+    /// a defined owner, so the rules the parse door still enforces
+    /// (<see cref="AreValidFacts"/>) hold of every record by construction,
+    /// and still run here. The money rung that withheld a key from a money
+    /// record with no Jacoby fact is gone with the fact's absence. (A checker
+    /// play's dice are no rung either: they are two faces 1–6 by
+    /// construction, <see cref="CheckerPlayDecisionData.Dice"/>.) Never throws
+    /// on bad facts (degrade, never block).
     /// </returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="data"/> is <see langword="null"/> — a
@@ -283,9 +283,9 @@ public sealed class ProblemKey :
     /// <summary>
     /// The no-key rung's fact validation (dice are validated separately at
     /// each door, before a <see cref="DiceRoll"/> can exist). A record's
-    /// session keeps the score rules by its kind, so only the board and the
-    /// cube can fail here for a record (<see cref="TryDerive"/>); the parse
-    /// door reaches every rule.
+    /// session keeps the score rules by its kind and its position the cube's,
+    /// so only an empty board can fail here for a record
+    /// (<see cref="TryDerive"/>); the parse door reaches every rule.
     /// </summary>
     private static bool AreValidFacts(BoardPosition board, Score score, int cubeSize, CubeOwner cubeOwner)
     {

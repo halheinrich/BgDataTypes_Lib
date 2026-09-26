@@ -44,7 +44,6 @@ public class BgDataTypesJsonContextTests
         // other — and the after-boards are derived, not stated.
         return TestRecords.CheckerPlay(
             id: new XgDecisionId("match.xg", Game: 4, MoveNumber: 22, IsCube: false),
-            xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:64:0:0:0:0:10",
             // The Crawford game at 1-away to 5-away: the fixture used to state
             // it at 3-away to 5-away, which no match can reach and the match
             // session now refuses (halheinrich/backgammon#273).
@@ -89,7 +88,6 @@ public class BgDataTypesJsonContextTests
 
     private static BgDecisionData FullCubeDecision() => TestRecords.Cube(
         id: new XgDecisionId("session.xg", Game: 2, MoveNumber: 7, IsCube: true),
-        xgid: "XGID=-b----E-C---eE---c-e----B-:1:1:1:00:0:0:1:0:10",
         position: TestRecords.Position(
             mop: BoardPosition.Empty,
             cubeSize: 2,

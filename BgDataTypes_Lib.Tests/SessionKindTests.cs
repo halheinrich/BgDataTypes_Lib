@@ -206,6 +206,10 @@ public class SessionKindTests
         { "Money", "OpponentNeeds" },
         { "Money", "IsCrawford" },
         { "Match", "IsJacoby" },
+        { "Match", "IsBeaver" },
+        { "Match", "CubeLimit" },
+        { "Match", "OnRollScore" },
+        { "Match", "OpponentScore" },
     };
 
     [Theory]
@@ -217,7 +221,7 @@ public class SessionKindTests
         // the other kind has is never read with the member dropped.
         Session session = kind == "Money" ? TestRecords.MoneySession() : TestRecords.MatchSession();
         var (alone, inRecord) = Edited(session, document =>
-            document[member] = member is "IsJacoby" or "IsCrawford" ? JsonValue.Create(false) : JsonValue.Create(1));
+            document[member] = member is "IsJacoby" or "IsCrawford" or "IsBeaver" ? JsonValue.Create(false) : JsonValue.Create(1));
 
         Assert.Contains(member, WirePaths.AssertRefused<Session>(alone).Message);
         WirePaths.AssertRefused<BgDecisionData>(inRecord);
@@ -260,7 +264,7 @@ public class SessionKindTests
         var money = PublicMembers(typeof(MoneySession)).Except(shared).Order().ToArray();
         var match = PublicMembers(typeof(MatchSession)).Except(shared).Order().ToArray();
 
-        Assert.Equal(["IsJacoby"], money);
+        Assert.Equal(["CubeLimit", "IsBeaver", "IsJacoby", "OnRollScore", "OpponentScore"], money);
         Assert.Equal(["IsCrawford", "Length", "OnRollNeeds", "OpponentNeeds"], match);
     }
 

@@ -113,12 +113,17 @@ public class MatchContextStandInTests
     {
         // The flat row keeps one column per fact; each is nullable, and the
         // other kind's is empty — the money row's MatchLength is null, never 0.
-        foreach (var column in new[] { "MatchLength", "OnRollNeeds", "OpponentNeeds", "IsCrawford", "IsJacoby" })
+        foreach (var column in new[]
+                 {
+                     "MatchLength", "OnRollNeeds", "OpponentNeeds", "IsCrawford",
+                     "IsJacoby", "IsBeaver", "CubeLimit", "OnRollScore", "OpponentScore",
+                 })
             Assert.NotNull(Nullable.GetUnderlyingType(typeof(DecisionRow).GetProperty(column)!.PropertyType));
 
         var money = TestRecords.Row(TestRecords.CheckerPlay(position: TestRecords.Position(session: TestRecords.MoneySession())));
         Assert.Equal((null, null, null, null), (money.MatchLength, money.OnRollNeeds, money.OpponentNeeds, money.IsCrawford));
-        Assert.Null(TestRecords.Row().IsJacoby);
+        var match = TestRecords.Row();
+        Assert.Equal((null, null, null, null, null), (match.IsJacoby, match.IsBeaver, match.CubeLimit, match.OnRollScore, match.OpponentScore));
         Assert.Null(typeof(DecisionRow).GetProperty("IsMoneyGame"));
     }
 

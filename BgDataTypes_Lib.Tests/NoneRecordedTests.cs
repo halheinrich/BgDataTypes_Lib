@@ -29,7 +29,9 @@ public class NoneRecordedTests
         yield return ("Title", text => TestRecords.Descriptive(title: text));
         yield return ("Event", text => TestRecords.Descriptive(@event: text));
         yield return ("Comment", text => TestRecords.Descriptive(comment: text));
-        yield return ("Xgid", text => TestRecords.CheckerPlay(xgid: text));
+        // The record's XGID left this list when it became derived
+        // (halheinrich/backgammon#273): code cannot state one, empty or not;
+        // the row's column refuses empty text on read (DecisionRowSerializationTests).
         yield return ("filename", text => new XgpDecisionId(text));
         yield return ("filename", text => new XgDecisionId(text, 1, 1, IsCube: false));
     }
@@ -80,7 +82,7 @@ public class NoneRecordedTests
         var play = TestRecords.CheckerPlay(descriptive: TestRecords.Descriptive(title: "t", @event: "e", comment: "c"));
         foreach (var member in new[] { "OnRollName", "OpponentName", "Title", "Event", "Comment" })
             yield return (play, ["Descriptive", member]);
-        yield return (play, ["Xgid"]);
+        // The record's XGID left: it is derived, not stated (halheinrich/backgammon#273).
         yield return (play, ["Id"]);
     }
 
@@ -106,7 +108,7 @@ public class NoneRecordedTests
     {
         foreach (var (record, path) in RecordTextMembers())
         {
-            if (path[^1] is "Xgid" or "Id")
+            if (path[^1] is "Id")
                 continue;   // never none, so null spells nothing for them
             string json = RecordWith(record, path, null);
             foreach (var (name, options) in WirePaths.Both)

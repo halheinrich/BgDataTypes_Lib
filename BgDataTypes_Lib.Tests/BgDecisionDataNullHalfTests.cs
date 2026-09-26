@@ -27,7 +27,6 @@ public class BgDecisionDataNullHalfTests
         var ex = Assert.Throws<ArgumentNullException>(() => new CubeDecision
         {
             Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
-            Xgid = "XGID=x",
             Position = null!,
             Decision = TestRecords.CubeData(),
             Descriptive = TestRecords.Descriptive(),
@@ -44,7 +43,6 @@ public class BgDecisionDataNullHalfTests
         var cube = Assert.Throws<ArgumentNullException>(() => new CubeDecision
         {
             Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
-            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = null!,
             Descriptive = TestRecords.Descriptive(),
@@ -52,7 +50,6 @@ public class BgDecisionDataNullHalfTests
         var play = Assert.Throws<ArgumentNullException>(() => new CheckerPlayDecision
         {
             Id = new XgDecisionId("m.xg", 1, 1, IsCube: false),
-            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = null!,
             Descriptive = TestRecords.Descriptive(),
@@ -70,7 +67,6 @@ public class BgDecisionDataNullHalfTests
         var id = Assert.Throws<ArgumentNullException>(() => new CubeDecision
         {
             Id = null!,
-            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = TestRecords.CubeData(),
             Descriptive = TestRecords.Descriptive(),
@@ -78,7 +74,6 @@ public class BgDecisionDataNullHalfTests
         var descriptive = Assert.Throws<ArgumentNullException>(() => new CubeDecision
         {
             Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
-            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = TestRecords.CubeData(),
             Descriptive = null!,
@@ -89,12 +84,19 @@ public class BgDecisionDataNullHalfTests
     }
 
     [Fact]
-    public void Xgid_Null_ThrowsNamingXgid()
+    public void Xgid_CannotBeStated_ItIsDerived()
     {
-        // Added: the XGID is not nullable, and its guard refuses a null the
-        // way the others do — before, a null XGID was stored.
-        var ex = Assert.Throws<ArgumentNullException>(() => TestRecords.Cube(xgid: null!));
-        Assert.Equal("Xgid", ex.ParamName);
+        // Rewritten from Xgid_Null_ThrowsNamingXgid: the XGID is derived from
+        // the record now (halheinrich/backgammon#273, the match-context leg),
+        // so there is no member to state a null in — and a document stating
+        // one reads with it ignored, the derivation standing.
+        Assert.Null(typeof(BgDecisionData).GetProperty(nameof(BgDecisionData.Xgid))!.SetMethod);
+
+        var document = WirePaths.Document<BgDecisionData>(TestRecords.Cube());
+        document["Xgid"] = null;
+        foreach (var (_, options) in WirePaths.Both)
+            Assert.Equal(TestRecords.Cube().Xgid,
+                System.Text.Json.JsonSerializer.Deserialize<BgDecisionData>(document.ToJsonString(), options)!.Xgid);
     }
 
     // ---------------------------------------------------------------------
@@ -120,7 +122,6 @@ public class BgDecisionDataNullHalfTests
 
     [Theory]
     [InlineData("Id")]
-    [InlineData("Xgid")]
     [InlineData("Position")]
     [InlineData("Decision")]
     [InlineData("Descriptive")]
@@ -128,7 +129,9 @@ public class BgDecisionDataNullHalfTests
     {
         // Rewritten from Deserialize_NullHalf_Throws and
         // Deserialize_NullHalf_ThroughContext_Throws: the guard's
-        // ArgumentNullException now rides inside a JsonException.
+        // ArgumentNullException now rides inside a JsonException. The Xgid
+        // case left when the XGID became derived: a null there is an
+        // ignored member (Xgid_CannotBeStated_ItIsDerived).
         foreach (var json in Documents(member))
         {
             var ex = WirePaths.AssertRefused<BgDecisionData>(json);

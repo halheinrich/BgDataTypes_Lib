@@ -38,7 +38,6 @@ public class DecisionRowSerializationTests
     /// </summary>
     private static DecisionRow PlayRow(
         DecisionId? id = null,
-        string xgid = "XGID=x",
         double? error = null,
         string? player = "Alice",
         bool? isStandardStart = null,
@@ -57,7 +56,6 @@ public class DecisionRowSerializationTests
         Play play = mop == BoardPosition.Standard ? [new(8, 5), new(6, 5)] : [];
         return DecisionRow.From(TestRecords.CheckerPlay(
             id: id,
-            xgid: xgid,
             position: TestRecords.Position(mop: mop, session: session),
             decision: TestRecords.CheckerPlayData(
                 dice: dice ?? [3, 1],
@@ -88,7 +86,6 @@ public class DecisionRowSerializationTests
     /// </summary>
     private static DecisionRow CubeRow(
         DecisionId? id = null,
-        string xgid = "XGID=x",
         double? error = null,
         string? player = "Alice",
         bool? isStandardStart = null,
@@ -102,7 +99,6 @@ public class DecisionRowSerializationTests
         id ??= new XgDecisionId("match.xg", 1, 2, IsCube: true);
         return DecisionRow.From(TestRecords.Cube(
             id: id,
-            xgid: xgid,
             position: TestRecords.Position(session: session),
             decision: error is null
                 ? TestRecords.CubeData(
@@ -161,7 +157,6 @@ public class DecisionRowSerializationTests
     {
         var original = PlayRow(
             id: new XgDecisionId("mochy-falafel.xg", Game: 2, MoveNumber: 7, IsCube: false),
-            xgid: "XGID=-b----E-C---eE---c-e----B-:0:0:1:63:0:0:3:0:10",
             error: 0.023,
             session: Match(9, 3, 5),
             player: "Mochy",
@@ -238,14 +233,29 @@ public class DecisionRowSerializationTests
         // "none recorded" — null does, its one spelling — so a player and a
         // depth label that were not recorded round-trip as null, and an empty
         // one cannot be stated. The XGID and the source file are never none.
+        // Rewritten for the derived XGID: the row carries the record's, which
+        // the record derives, so no fixture states one — an empty XGID is
+        // refused on the row's read instead (DecisionRow_Read_EmptyXgid_IsRefused_BothPaths).
         var restored = RoundTrip(PlayRow(player: null, analysisMode: AnalysisMode.Unknown, analysisLevel: AnalysisLevel.Unknown));
 
         Assert.Null(restored.Player);
         Assert.Null(restored.AnalysisDepth);
-        Assert.Equal("XGID=x", restored.Xgid);
+        Assert.Equal("XGID=-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10", restored.Xgid);
         Assert.Equal("match.xg", restored.SourceFile);
         Assert.Throws<ArgumentException>(() => PlayRow(player: ""));
-        Assert.Throws<ArgumentException>(() => PlayRow(xgid: ""));
+    }
+
+    [Fact]
+    public void DecisionRow_Read_EmptyXgid_IsRefused_BothPaths()
+    {
+        // Added: the XGID is never none, on the row as on the record.
+        foreach (var blank in new[] { "", " " })
+        {
+            var document = WirePaths.Document(PlayRow());
+            document["Xgid"] = blank;
+
+            Assert.Contains("Xgid", WirePaths.AssertRefused<DecisionRow>(document.ToJsonString()).Message);
+        }
     }
 
     [Fact]
@@ -437,6 +447,13 @@ public class DecisionRowSerializationTests
         { "match-away-past-length", "never more than the match's length" },
         { "match-zero-length", "at least one point" },
         { "crawford-with-no-player-1-away", "exactly one player is 1-away" },
+        // The money session's typed facts (the XGID derived): each stated on
+        // a money row, none on a match row, each held to its rule.
+        { "money-no-cube-limit", "A money row states its IsJacoby, IsBeaver, CubeLimit" },
+        { "match-with-beaver", "no money column" },
+        { "match-with-score", "no money column" },
+        { "money-bad-cube-limit", "A cube limit is a positive power of two" },
+        { "money-negative-score", "never negative" },
     };
 
     private static string Malformed(string name)
@@ -464,6 +481,11 @@ public class DecisionRowSerializationTests
             case "match-away-past-length": play["OpponentNeeds"] = 8; return play.ToJsonString();
             case "match-zero-length": play["MatchLength"] = 0; return play.ToJsonString();
             case "crawford-with-no-player-1-away": play["IsCrawford"] = true; return play.ToJsonString();
+            case "money-no-cube-limit": money.Remove("CubeLimit"); return money.ToJsonString();
+            case "match-with-beaver": play["IsBeaver"] = false; return play.ToJsonString();
+            case "match-with-score": play["OpponentScore"] = 0; return play.ToJsonString();
+            case "money-bad-cube-limit": money["CubeLimit"] = 3; return money.ToJsonString();
+            case "money-negative-score": money["OnRollScore"] = -1; return money.ToJsonString();
             case "play-no-roll": play.Remove("Roll"); return play.ToJsonString();
             case "play-bad-roll": play["Roll"] = 70; return play.ToJsonString();
             case "play-no-afterbest": play["AfterBestBoard"] = null; return play.ToJsonString();
@@ -790,7 +812,7 @@ public class DecisionRowSerializationTests
         var row = PlayRow(
             error: 0.12345678, equity: -0.98765432, dice: [6, 3],
             session: Match(9, 3, 5));
-        const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity,Unstated";
+        const string expected = "XGID=-b----E-C---eE---c-e----B-:0:0:1:63:6:4:0:9:10,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity,Unstated";
 
         var original = CultureInfo.CurrentCulture;
         try
@@ -812,10 +834,10 @@ public class DecisionRowSerializationTests
     {
         // Added: "no user decision recorded" is null, an empty cell — the
         // 0 the producer used to write in its place was a stand-in.
-        var row = PlayRow(xgid: "XGID=x", error: null, userPlayIndex: null);
+        var row = PlayRow(error: null, userPlayIndex: null);
 
         Assert.Null(row.Error);
-        Assert.StartsWith("XGID=x,,", row.ToCsvLine());
+        Assert.StartsWith("XGID=-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10,,", row.ToCsvLine());
     }
 
     [Fact]
@@ -1350,7 +1372,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_ToCsvLine_IsJacoby_RidesTheMatchScoreColumn(bool isJacoby, string expectedToken)
     {
         // Rewritten: the rule-unknown "money" case is gone.
-        var row = PlayRow(xgid: "XGID=x", session: Money(isJacoby));
+        var row = PlayRow(session: Money(isJacoby));
         var line = row.ToCsvLine();
 
         // Header: Xgid,Error,MatchScore,MatchLength,... — MatchScore is column

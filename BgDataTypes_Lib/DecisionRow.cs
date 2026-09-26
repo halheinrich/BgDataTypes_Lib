@@ -100,9 +100,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
         // The session's own columns, the other kind's empty.
         var session = record.Session;
-        var (length, onRollNeeds, opponentNeeds, isCrawford, isJacoby) = session.Match(
-            static money => ((int?)null, (int?)null, (int?)null, (bool?)null, (bool?)money.IsJacoby),
-            static match => ((int?)match.Length, (int?)match.OnRollNeeds, (int?)match.OpponentNeeds, (bool?)match.IsCrawford, (bool?)null));
+        var match = session as MatchSession;
+        var money = session as MoneySession;
 
         var row = new DecisionRow
         {
@@ -120,11 +119,15 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             AnalysisLevel = view.AnalysisLevel,
             Equity = equity,
             SessionKind = session.Kind,
-            MatchLength = length,
-            OnRollNeeds = onRollNeeds,
-            OpponentNeeds = opponentNeeds,
-            IsCrawford = isCrawford,
-            IsJacoby = isJacoby,
+            MatchLength = match?.Length,
+            OnRollNeeds = match?.OnRollNeeds,
+            OpponentNeeds = match?.OpponentNeeds,
+            IsCrawford = match?.IsCrawford,
+            IsJacoby = money?.IsJacoby,
+            IsBeaver = money?.IsBeaver,
+            CubeLimit = money?.CubeLimit,
+            OnRollScore = money?.OnRollScore,
+            OpponentScore = money?.OpponentScore,
             Board = record.Board,
             AfterBestBoard = view.AfterBestBoard,
             AfterPlayerBoard = view.AfterPlayerBoard,
@@ -149,7 +152,12 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// </summary>
     public required DecisionId Id { get; init; }
 
-    /// <summary>XGID position string (<see cref="BgDecisionData.Xgid"/>); never empty text.</summary>
+    /// <summary>
+    /// The decision's XGID (<see cref="BgDecisionData.Xgid"/>): the record
+    /// derives it, and the row carries it as a column, taken from the record
+    /// when the row is built — as the after-boards are, since the row holds
+    /// no cube column to derive it from. Never empty text.
+    /// </summary>
     public required string Xgid { get; init; }
 
     /// <summary>
@@ -283,7 +291,9 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// decides which kind's session columns are present — a match's
     /// <see cref="MatchLength"/>, <see cref="OnRollNeeds"/>,
     /// <see cref="OpponentNeeds"/> and <see cref="IsCrawford"/>, or a money
-    /// session's <see cref="IsJacoby"/> — the other kind's being empty.
+    /// session's <see cref="IsJacoby"/>, <see cref="IsBeaver"/>,
+    /// <see cref="CubeLimit"/>, <see cref="OnRollScore"/> and
+    /// <see cref="OpponentScore"/> — the other kind's being empty.
     /// </summary>
     public required SessionKind SessionKind { get; init; }
 
@@ -312,6 +322,18 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// match score.
     /// </summary>
     public bool? IsJacoby { get; init; }
+
+    /// <summary>Whether a money session's beaver rule was in force (<see cref="MoneySession.IsBeaver"/>); <see langword="null"/> for a match row.</summary>
+    public bool? IsBeaver { get; init; }
+
+    /// <summary>A money session's cube limit (<see cref="MoneySession.CubeLimit"/>); <see langword="null"/> for a match row, which has none.</summary>
+    public int? CubeLimit { get; init; }
+
+    /// <summary>The points the player on roll had won in a money session before the game (<see cref="MoneySession.OnRollScore"/>); <see langword="null"/> for a match row.</summary>
+    public int? OnRollScore { get; init; }
+
+    /// <summary>The points the opponent had won in a money session before the game (<see cref="MoneySession.OpponentScore"/>); <see langword="null"/> for a match row.</summary>
+    public int? OpponentScore { get; init; }
 
     /// <summary>
     /// The session columns as the record's kind (<see cref="IDecisionFilterData.Session"/>):
@@ -452,17 +474,22 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// Why the session columns are not one kind's — its own stated, the other
     /// kind's empty — or <see langword="null"/> when they are.
     /// </summary>
-    private string? SessionColumnsFault() => SessionKind switch
+    private string? SessionColumnsFault()
     {
-        SessionKind.Match when MatchLength is null || OnRollNeeds is null || OpponentNeeds is null || IsCrawford is null
-            || IsJacoby is not null =>
-            "A match row states its MatchLength, OnRollNeeds, OpponentNeeds and IsCrawford, and no money column: IsJacoby is empty.",
-        SessionKind.Money when IsJacoby is null
-            || MatchLength is not null || OnRollNeeds is not null || OpponentNeeds is not null || IsCrawford is not null =>
-            "A money row states its IsJacoby, and no match column: MatchLength, OnRollNeeds, OpponentNeeds and IsCrawford are empty.",
-        SessionKind.Match or SessionKind.Money => null,
-        _ => $"Unknown session kind {SessionKind}.",
-    };
+        bool anyMatch = MatchLength is not null || OnRollNeeds is not null || OpponentNeeds is not null || IsCrawford is not null;
+        bool allMatch = MatchLength is not null && OnRollNeeds is not null && OpponentNeeds is not null && IsCrawford is not null;
+        bool anyMoney = IsJacoby is not null || IsBeaver is not null || CubeLimit is not null || OnRollScore is not null || OpponentScore is not null;
+        bool allMoney = IsJacoby is not null && IsBeaver is not null && CubeLimit is not null && OnRollScore is not null && OpponentScore is not null;
+        return SessionKind switch
+        {
+            SessionKind.Match when !allMatch || anyMoney =>
+                "A match row states its MatchLength, OnRollNeeds, OpponentNeeds and IsCrawford, and no money column: IsJacoby, IsBeaver, CubeLimit, OnRollScore and OpponentScore are empty.",
+            SessionKind.Money when !allMoney || anyMatch =>
+                "A money row states its IsJacoby, IsBeaver, CubeLimit, OnRollScore and OpponentScore, and no match column: MatchLength, OnRollNeeds, OpponentNeeds and IsCrawford are empty.",
+            SessionKind.Match or SessionKind.Money => null,
+            _ => $"Unknown session kind {SessionKind}.",
+        };
+    }
 
     /// <summary>
     /// The session the columns state, built as a record's session is, so its
@@ -476,7 +503,14 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             OpponentNeeds = OpponentNeeds!.Value,
             IsCrawford = IsCrawford!.Value,
         }
-        : new MoneySession { IsJacoby = IsJacoby!.Value };
+        : new MoneySession
+        {
+            IsJacoby = IsJacoby!.Value,
+            IsBeaver = IsBeaver!.Value,
+            CubeLimit = CubeLimit!.Value,
+            OnRollScore = OnRollScore!.Value,
+            OpponentScore = OpponentScore!.Value,
+        };
 
     private static bool IsTwoFaces(int roll) =>
         roll / 10 is >= 1 and <= 6 && roll % 10 is >= 1 and <= 6;

@@ -49,7 +49,6 @@ public class ProblemKeyTests
         DescriptiveData? descriptive = null,
         DecisionId? id = null) => TestRecords.CheckerPlay(
         id: id ?? new XgDecisionId("fixture.xg", Game: 1, MoveNumber: 1, IsCube: false),
-        xgid: "XGID=not-consulted-by-derivation",
         position: TestRecords.Position(
             mop: new BoardPosition(mop ?? StandardMop()),
             cubeSize: cubeSize,
@@ -68,7 +67,6 @@ public class ProblemKeyTests
         DescriptiveData? descriptive = null,
         DecisionId? id = null) => TestRecords.Cube(
         id: id ?? new XgDecisionId("fixture.xg", Game: 1, MoveNumber: 2, IsCube: true),
-        xgid: "XGID=not-consulted-by-derivation",
         position: TestRecords.Position(
             mop: new BoardPosition(mop ?? StandardMop()),
             cubeSize: cubeSize,
@@ -637,20 +635,31 @@ public class ProblemKeyTests
         Assert.False(ProblemKey.TryParse(StandardBoardToken + "/0a0crj/1c/31", null, out _));
     }
 
+    // The two cube rungs below were TryDerive pins until the position held
+    // its cube to the rules the derived XGID needs (halheinrich/backgammon#273):
+    // a record can no longer hold such a cube, so each is rewritten to pin
+    // the refusal at the two doors that remain.
+
     [Theory]
     [InlineData(0)]
     [InlineData(-2)]
     [InlineData(3)]
     [InlineData(6)]
-    public void NoKey_InvalidCubeSize(int cubeSize)
+    public void InvalidCubeSize_CannotBeBuilt_AndItsKeyDoesNotParse(int cubeSize)
     {
-        AssertNoKey(CubeDecision(cubeSize: cubeSize));
+        // Rewritten from NoKey_InvalidCubeSize.
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => CubeDecision(cubeSize: cubeSize));
+        Assert.Equal("CubeSize", ex.ParamName);
+        Assert.False(ProblemKey.TryParse(StandardBoardToken + $"/5a2/{cubeSize}o", null, out _));
     }
 
     [Fact]
-    public void NoKey_UndefinedCubeOwner()
+    public void UndefinedCubeOwner_CannotBeBuilt_AndNoKeySpellsIt()
     {
-        AssertNoKey(CubeDecision(cubeOwner: (CubeOwner)99));
+        // Rewritten from NoKey_UndefinedCubeOwner.
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => CubeDecision(cubeOwner: (CubeOwner)99));
+        Assert.Equal("CubeOwner", ex.ParamName);
+        Assert.False(ProblemKey.TryParse(StandardBoardToken + "/5a2/2x", null, out _));
     }
 
     // -----------------------------------------------------------------------
@@ -734,31 +743,23 @@ public class ProblemKeyTests
     }
 
     [Fact]
-    public void Jacoby_DerivationNeverReadsTheXgidString()
+    public void Jacoby_TheKeyAndTheXgid_SpellTheOneRule()
     {
-        // SSOT pin: bit 0 of XGID field 7 holds the same information, and the
-        // factory must not consult it. Contradictory XGIDs over one stamped
-        // fact yield one key; one XGID over two stamped facts yields two.
-        const string jacobyBitSet = "XGID=-b----E-C---eE---c-e----B-:0:0:1:31:0:0:1:0:10";
-        const string jacobyBitClear = "XGID=-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:0:10";
+        // Rewritten from Jacoby_DerivationNeverReadsTheXgidString, which pinned
+        // the key ignoring a stored XGID that could contradict the record's
+        // Jacoby fact. The XGID is derived from the record now
+        // (halheinrich/backgammon#273), so no XGID can contradict it: the key's
+        // suffix and bit 0 of the XGID's field 8 both spell the money
+        // session's one rule, and a different rule changes both.
+        foreach (bool isJacoby in new[] { true, false })
+        {
+            var record = MoneyPlay(isJacoby);
+            int crawfordJacoby = int.Parse(record.Xgid.Split(':')[7], CultureInfo.InvariantCulture);
 
-        Assert.Equal(
-            Derive(WithXgid(MoneyPlay(isJacoby: true), jacobyBitClear)),
-            Derive(WithXgid(MoneyPlay(isJacoby: true), jacobyBitSet)));
-        Assert.NotEqual(
-            Derive(WithXgid(MoneyPlay(isJacoby: true), jacobyBitSet)),
-            Derive(WithXgid(MoneyPlay(isJacoby: false), jacobyBitSet)));
+            Assert.Equal(isJacoby, (crawfordJacoby & 1) == 1);
+            Assert.EndsWith(isJacoby ? "/0a0j/1c/31" : "/0a0nj/1c/31", Derive(record).ToString());
+        }
     }
-
-    /// <summary>
-    /// Rebuilds a fixture under a different <see cref="BgDecisionData.Xgid"/>,
-    /// leaving every decomposed fact untouched.
-    /// </summary>
-    private static BgDecisionData WithXgid(BgDecisionData data, string xgid) => data.Match<BgDecisionData>(
-        play => TestRecords.CheckerPlay(
-            id: play.Id, xgid: xgid, position: play.Position, decision: play.Decision, descriptive: play.Descriptive),
-        cube => TestRecords.Cube(
-            id: cube.Id, xgid: xgid, position: cube.Position, decision: cube.Decision, descriptive: cube.Descriptive));
 
     [Fact]
     public void TryParse_RetiredV2MoneySpelling_Rejected()

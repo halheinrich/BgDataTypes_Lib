@@ -11,9 +11,10 @@ namespace BgDataTypes_Lib;
 /// carrying only its own fields, so code that reads one kind's field off the
 /// other does not compile and no member holds a value standing for "not
 /// applicable". This base holds what every decision has — its
-/// <see cref="Kind"/>, <see cref="Id"/>, <see cref="Xgid"/>, the
-/// <see cref="Position"/> it was made in and the <see cref="Descriptive"/>
-/// provenance — and each kind adds its own <c>Decision</c> category.
+/// <see cref="Kind"/>, <see cref="Id"/>, the <see cref="Position"/> it was
+/// made in and the <see cref="Descriptive"/> provenance — and each kind adds
+/// its own <c>Decision</c> category. The decision's XGID is derived from
+/// them (<see cref="Xgid"/>).
 ///
 /// <para>
 /// <b>A closed pair.</b> The constructor is not reachable outside this
@@ -101,7 +102,6 @@ public abstract class BgDecisionData
     // rejects an explicit null (halheinrich/backgammon#221). The guards below
     // read an unset member as "nothing to agree with yet".
     private readonly DecisionId? _id;
-    private readonly string? _xgid;
     private readonly PositionData? _position;
     private readonly DescriptiveData? _descriptive;
 
@@ -193,35 +193,19 @@ public abstract class BgDecisionData
     }
 
     /// <summary>
-    /// XGID position string. Lives at the top level rather than inside
-    /// <see cref="Position"/> because it is a digest of the whole decision
-    /// context (position, cube/match state, and the decision itself), not a
-    /// property of the minimal derived <see cref="PositionData"/>. Mirrors
-    /// <see cref="DecisionRow.Xgid"/>. Source data, not a copy: it carries the
-    /// cube limit, the beaver rule and a money game's header scores, which no
-    /// other member holds (INSTRUCTIONS.md, "Stored or derived"). Every
-    /// decision has one, so it is never null or empty text.
+    /// The decision's XGID — the position string eXtreme Gammon reads —
+    /// derived from the record on each read, never stored
+    /// (halheinrich/backgammon#273, the match-context leg): the board, the cube
+    /// and its owner (<see cref="Position"/>), the session's standing and rules
+    /// (<see cref="PositionData.Session"/>, where the cube limit, the beaver
+    /// rule and a money session's scores are typed members now), and a checker
+    /// play's roll. The format, field by field, is stated on the internal
+    /// <c>XgidEncoder</c>. Allocates the string on each read. Not on the wire;
+    /// a document still stating it reads with the member ignored.
     /// </summary>
-    /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
-    [JsonPropertyOrder(-3)]
-    public required string Xgid
-    {
-        get => _xgid!;
-        init
-        {
-            try
-            {
-                ArgumentNullException.ThrowIfNull(value, nameof(Xgid));
-                StatedText.Check(value, nameof(Xgid));
-            }
-            catch (ArgumentException fault) when (_read)
-            {
-                throw DocumentRefusal.Of(fault);
-            }
-            _xgid = value;
-        }
-    }
+    [JsonIgnore]
+    public string Xgid => XgidEncoder.Encode(
+        Position, Match<DiceRoll?>(static play => play.Dice, static _ => null));
 
     /// <summary>
     /// Board, score context and cube state at the moment of the decision.

@@ -1,16 +1,54 @@
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// The rules that hold a session's facts to the game of backgammon — each
-/// stated once, here, with the one sentence every refusal of it carries.
-/// <see cref="MatchSession"/> holds its members to them in its init guards,
-/// refusing a breach from code with the guard's
+/// The rules that hold a session's facts, and the cube's, to the game of
+/// backgammon — each stated once, here, with the one sentence every refusal
+/// of it carries. <see cref="MatchSession"/>, <see cref="MoneySession"/> and
+/// <see cref="PositionData"/> hold their members to them in their init
+/// guards, refusing a breach from code with the guard's
 /// <see cref="ArgumentException"/> and from a document with a
 /// <see cref="System.Text.Json.JsonException"/> carrying it (the wire rule on
 /// <see cref="BgDataTypesJsonContext"/>).
 /// </summary>
 internal static class SessionRules
 {
+    // -----------------------------------------------------------------------
+    //  The cube's values
+    //
+    //  The cube starts at 1 and each double doubles it, so its value — and a
+    //  limit on it — is a positive power of two; the XGID states each as its
+    //  exponent. A money session's cube limit caps the cube, which never
+    //  exceeds it.
+    // -----------------------------------------------------------------------
+
+    /// <summary>The cube-size rule, in the one sentence every refusal carries.</summary>
+    internal const string CubeSizeMessage = "The cube's value is a positive power of two: 1, 2, 4, 8, …";
+
+    /// <summary>The cube-limit rule, in the one sentence every refusal carries.</summary>
+    internal const string CubeLimitMessage = "A cube limit is a positive power of two: the highest value the cube may reach.";
+
+    /// <summary>The rule binding the cube to its limit, in the one sentence every refusal carries.</summary>
+    internal const string CubeWithinLimitMessage = "The cube never exceeds the money session's cube limit.";
+
+    /// <summary>The cube-owner rule, in the one sentence every refusal carries.</summary>
+    internal const string CubeOwnerMessage = "The cube is on roll's, the opponent's, or centred.";
+
+    /// <summary>Whether <paramref name="value"/> is a value the cube, or a limit on it, can take.</summary>
+    internal static bool CubeValueHolds(int value) => value >= 1 && (value & (value - 1)) == 0;
+
+    // -----------------------------------------------------------------------
+    //  A money session's scores
+    //
+    //  The points each player has won in the session before the game: never
+    //  negative.
+    // -----------------------------------------------------------------------
+
+    /// <summary>The money score rule, in the one sentence every refusal carries.</summary>
+    internal const string ScoreMessage = "A money session's score is the points a player has won in it: never negative.";
+
+    /// <summary>Whether <paramref name="score"/> is a money session's score.</summary>
+    internal static bool ScoreHolds(int score) => score >= 0;
+
     // -----------------------------------------------------------------------
     //  A match's length and its away scores
     //

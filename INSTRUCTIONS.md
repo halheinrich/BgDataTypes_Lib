@@ -52,8 +52,9 @@ and `Directory.Packages.props` (Central Package Management — no inline
   match's rules; see "Money and match: the session kinds");
   `DecisionRules`, the internal statement of the rules
   that bind a decision's members, `FiniteNumber`, the internal statement
-  of the rule every stored number keeps, and `DocumentRefusal`, the internal one
-  spelling of how a rule a document breaks is refused. The ranking —
+  of the rule every stored number keeps, `DocumentRefusal`, the internal one
+  spelling of how a rule a document breaks is refused, and `XgidEncoder`,
+  the internal derivation of a record's XGID. The ranking —
   `PlayRanking`, and `RankedPlays` of `RankedPlay`, what a checker play
   derives for one — the player's result, `PlayerResult` and
   `PlayerResultKind`, and the internal `DecisionView`, a record's filter
@@ -262,14 +263,15 @@ Design points:
   `IsStandardStart`, `Comment`; `PlayCandidate.RolloutTrials`,
   `BookEdition`, `UnrecognizedLevelCode` and its five stored probabilities; `DecisionRow.Error`, `Player`,
   `IsStandardStart`, `Roll`, `AnalysisDepth`, each session column
-  (`MatchLength`, `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, `IsJacoby`:
-  the other session kind's are empty) and both after-boards. Every other
+  (`MatchLength`, `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, `IsJacoby`,
+  `IsBeaver`, `CubeLimit`, `OnRollScore`, `OpponentScore`: the other session
+  kind's are empty) and both after-boards. Every other
   serialized member is required, each record's and each session's `Kind`
   included — through `[JsonRequired]`, since the type states it and code
   never does. A session's facts are all required: a money session's Jacoby
   rule has no "unknown" (the `PositionData.IsJacoby?` it replaced did).
   `WireAbsenceTests` walks the graph from the context's
-  own metadata, from each kind's contract and each session kind's (129
+  own metadata, from each kind's contract and each session kind's (139
   members across four documents — each record kind and each row kind, the
   play's a match and the cube's money — and eleven types; the previous
   count stated here, 124, was already stale at `ca83ab1`, which walked
@@ -284,7 +286,8 @@ Design points:
   member's the type refuses — its init guard's `ArgumentNullException`,
   which a document gets as a `JsonException` (see "The decision kinds" for
   how a type tells a document from code). The `Xgid` guard was the one
-  missing: a null XGID used to be stored. `RespectNullableAnnotations`
+  missing then: a null XGID used to be stored (the XGID is derived now, so
+  no record states one). `RespectNullableAnnotations`
   (.NET 9) was measured on .NET 10 before deciding (2026-09-25): set, it
   refuses such a `null` on both paths, but it is off by default and on the
   reflection path it is the caller's option, so nothing here depends on it
@@ -330,9 +333,9 @@ Every decision holds the two shared categories; each kind holds its own
 
 | Type | Held by | Fields |
 |---|---|---|
-| `PositionData` | both kinds | `Mop`, `CubeSize`, `CubeOwner`, `Session` (a `MoneySession` or a `MatchSession`: see "Money and match: the session kinds"); derived `OnRollPipCount`, `OpponentPipCount` (the board's, by `BoardState`'s one pip rule) |
+| `PositionData` | both kinds | `Mop`, `CubeSize` (a positive power of two, never above a money session's `CubeLimit`), `CubeOwner` (a defined owner), `Session` (a `MoneySession` or a `MatchSession`: see "Money and match: the session kinds"); derived `OnRollPipCount`, `OpponentPipCount` (the board's, by `BoardState`'s one pip rule) |
 | `MatchSession` | a match's `PositionData.Session` | `Length` (≥ 1), `OnRollNeeds`, `OpponentNeeds` (each 1 to the length), `IsCrawford` (exactly one player 1-away when set) |
-| `MoneySession` | a money session's `PositionData.Session` | `IsJacoby` |
+| `MoneySession` | a money session's `PositionData.Session` | `IsJacoby`, `IsBeaver`, `CubeLimit` (a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
 | `DescriptiveData` | both kinds | `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it), and a match's length is the match session's |
 | `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `UserPlay?`, and for a ranking `RankedBy(ranking)` — the order, the best play, each candidate's error and whether it is scored, the player's error (see "The ranking") |
 | `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `ProbOfOpponentErrorJustifyingDouble`, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?` and the scoring policy |
@@ -363,8 +366,8 @@ an `ArgumentException` naming the member and by a document with a
 `DescriptiveData`, a candidate's and the cube analysis's depth label and
 abbreviation (derived now, `null` where no depth is recorded), and the
 row's `Player` and `AnalysisDepth` are nullable; a
-member that is never none — the XGID, the id's file name — is refused
-empty the same way. `DepthRank` is `int?`: `null` where the depth is not
+member that is never none — the row's XGID column, the id's file name — is
+refused empty the same way (the record's XGID is derived, never stated). `DepthRank` is `int?`: `null` where the depth is not
 recorded (the mode, or an evaluation's level, `Unknown`), where the
 producer wrote the grid's floor 0. `Date` was already `DateOnly?`. The
 analysis enums keep `Unknown`, a member the producer states.
@@ -402,17 +405,18 @@ asked for it exhaustively). Derived, never stored:
 | `RankedBy(ranking).PlayerResult` | the played candidate: scored with its error, or not scored; otherwise unlisted with the stored `UnlistedPlayError`, or not recorded |
 | `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus: 16,932 of 16,959 doubler errors within 1e-5, the rest within 1e-4; all 830 taker errors equal) |
 | `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures matched within 9.5e-7 (273,592 candidates) and 2.4e-7 (17,158 cube decisions, each half) |
+| `BgDecisionData.Xgid` | the board, the cube and its owner, the session (its kind's facts) and a checker play's roll, by the format stated on the internal `XgidEncoder` (see "The XGID, derived") |
 | earlier: `Game`, `MoveNumber` (the `Id`), the after-boards (the play rule), `Notation` (the play), `Dice` (the roll), `MatchScore` | — |
 | gone, not derived: `IsMoneyGame` (it read money off a match length of 0; money is the session's kind now) | — |
 
 Stored, as source data:
 
-- **`Xgid`** carries three facts the record holds nowhere else: the cube
-  limit (field 10), the beaver rule (bit 2 of field 8, money only) and, for
-  a money session, the file's game-header scores (fields 6–7; a money
-  session has no away scores). Its other fields — position, cube, turn,
-  dice, match score, Crawford, Jacoby, match length — repeat record members
-  and are not checked against them: an unchecked partial copy, left open.
+- **The cube limit, the beaver rule and a money session's scores**
+  (`MoneySession.CubeLimit`, `IsBeaver`, `OnRollScore`, `OpponentScore`) —
+  the three facts only the stored XGID used to carry (its fields 10, 8 and
+  6–7), typed members now, from which, with the rest of the record, the
+  XGID is derived. The unchecked partial copy the stored string was is
+  gone.
 - **The typed depth facts** — `AnalysisMode`, `AnalysisLevel`,
   `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — from which the
   label, the abbreviation and the rank are derived.
@@ -1172,8 +1176,8 @@ so code that reads one kind's member off the other does not compile, and no
 member of either holds a value standing for "not applicable".
 
 ```
-BgDecisionData (abstract)       Kind, Id, Xgid, Position, Descriptive; Match, Switch;
-                                the shared members; ViewFor(ranking)
+BgDecisionData (abstract)       Kind, Id, Position, Descriptive; Match, Switch;
+                                the shared members; Xgid (derived); ViewFor(ranking)
 ├── CheckerPlayDecision         Decision : CheckerPlayDecisionData
 │                               Dice (canonical), AfterBoardOf(i), AfterBoardOfBest(ranking),
 │                               AfterPlayerBoard (derived)
@@ -1294,8 +1298,9 @@ Design points a maintainer needs before touching it:
   after-board for a ranking). `Game` and `MoveNumber` derive from `Id` (see
   "DecisionId"). Every derived member carries `[JsonIgnore]`
   (`halheinrich/backgammon#14`): the stored members are the wire, so a
-  record's top level is exactly `Kind`, `Id`, `Xgid`, `Position`,
-  `Descriptive`, `Decision`, pinned by test for each kind.
+  record's top level is exactly `Kind`, `Id`, `Position`, `Descriptive`,
+  `Decision`, pinned by test for each kind (the XGID left it when it became
+  derived: see "The XGID, derived").
 - **`CanBeTooGood` lives on `CubeDecision`**, the Too Good offerability of
   SPEC-scoring §3's 2026-09-02 amendment (`halheinrich/backgammon#187`) —
   see "Cube-decision scoring on CubeDecisionData". Only the record sees
@@ -1357,6 +1362,19 @@ Design points a maintainer needs before touching it:
   unknown-rule rungs it removes: `ProblemKey`'s no-key rung for a money
   record without the fact, the row's bare `money` token, and
   `CanBeTooGood`'s unknown-rule case.
+- **The facts only the XGID carried, placed by the same rule.** The beaver
+  rule is money's (XG spells it in the XGID for money only), and so is the
+  cube limit: XG keeps it among the match header's money-session settings
+  (beside the stakes and the automatic-double limit), and a match has no
+  cube limit — its length bounds what the cube can win. So `MoneySession`
+  carries `IsBeaver` and `CubeLimit` (a positive power of two, as XG's
+  default 1024), and its standing, `OnRollScore` and `OpponentScore` — the
+  game header's scores from the player on roll's side, each at least 0, the
+  counterpart of a match's away scores. All required. The position holds
+  its cube to them: `CubeSize` is a positive power of two, never above a
+  money session's `CubeLimit` (whichever of the two is set second refuses),
+  and `CubeOwner` is a defined owner — so the XGID derived from the record
+  can never be wrong for one that exists.
 - **A value.** A session is immutable and has value equality (the kind and
   its facts; `==`, `!=`, a consistent hash), so a record's view, its row
   and the row read back from JSON state one session, whatever instance each
@@ -1365,7 +1383,47 @@ Design points a maintainer needs before touching it:
   record's, the row's is built from its columns and held to the kind's
   rules on read); `DecisionRules.CrawfordAllows(kind, session)`;
   `CubeDecision.CanBeTooGood`; `ProblemKey.TryDerive`, whose text is
-  unchanged (see "ProblemKey"); `DecisionRow.MatchScore`.
+  unchanged (see "ProblemKey"); `DecisionRow.MatchScore`;
+  `BgDecisionData.Xgid`.
+
+### The XGID, derived
+
+**The XGID is derived from the record and never stored**
+(halheinrich/backgammon#273, the match-context leg). `BgDecisionData.Xgid`
+writes eXtreme Gammon's position string from the record's own members on
+each read, through the internal `XgidEncoder`, moved here from
+`ConvertXgToJson_Lib` (whose copy goes in its own leg). The stored string
+was an unchecked partial copy of the record, carrying three facts nothing
+else held; those are `MoneySession` members now (above), and every field is
+the record's. The format, field by field, is stated once, on
+`XgidEncoder`'s doc comment. Design points:
+
+- **Written from the player on roll's side**, as the record is: the
+  position in `Mop`'s layout, the turn always 1, the cube's owner 1, 0 or -1
+  from that side, the scores the player on roll's first.
+- **The roll high die first**, whatever order the record states it rolled
+  in: `CheckerPlayDecision.Dice`'s canonical token, which is how XG writes
+  it (no low-first roll among the corpus's 80,497 distinct XGIDs). A cube
+  decision's is `00`.
+- **The format's spellings of money are the encoder's alone.** For money it
+  writes a match length of 0 and the session's scores; for a match, its
+  length less each away score. Field 8 is Crawford for a match, Jacoby plus
+  twice beaver for money. A match's maxCube field is 10 (`2^10`), what XG
+  writes for every match (all 69,824 distinct match XGIDs in the corpus); a
+  money session's is its limit's exponent.
+- **Culture-invariant**: numbers are written invariant, so a culture's minus
+  sign (`sv-SE`'s U+2212) cannot change the opponent's `-1`. The converter's
+  copy formatted with the ambient culture.
+- **Off the wire.** `[JsonIgnore]`d; a document still stating one reads
+  with it ignored and the derivation standing. The row carries the record's
+  as its `Xgid` column (the row holds no cube column to derive it from).
+- **Measured against XG** (a scratch differential, not gating, 2026-09-26):
+  all 712 corpus samples that carry XG's XGID beside their record facts
+  derive it byte for byte, and 80,479 of the 80,497 distinct corpus XGIDs,
+  decoded into records and re-derived, are identical; the other 18 are
+  Crawford cube XGIDs, which a record refuses. No real state tripped any of
+  the new rules. `XgidDerivationTests` pins known strings — XG's own and the
+  two the builders once stored — as literals.
 
 ### After-boards (derived)
 
@@ -1447,7 +1505,8 @@ like `MatchScore`.
 **It carries the session's kind the same way** (halheinrich/backgammon#273):
 `SessionKind`, a required column, then one column per fact of each kind —
 a match's `MatchLength`, `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, a
-money session's `IsJacoby` — each nullable, and the other kind's empty,
+money session's `IsJacoby`, `IsBeaver`, `CubeLimit`, `OnRollScore`,
+`OpponentScore` — each nullable, and the other kind's empty,
 never zero: a money row's `MatchLength` is an empty CSV cell, not the 0 it
 used to write. `Session` is the columns typed as the record's kind,
 `[JsonIgnore]`d: a row from `From` holds the record's own session, and a
@@ -1739,7 +1798,11 @@ public abstract class Session : IEquatable<Session>, IEqualityOperators<Session,
 
 public sealed class MoneySession : Session       // unmapped members refused
 {
-    public required bool IsJacoby { get; init; }  // every money session states its rule
+    public required bool IsJacoby { get; init; }     // every money session states its rule
+    public required bool IsBeaver { get; init; }
+    public required int CubeLimit { get; init; }     // a positive power of two (XG's default 1024)
+    public required int OnRollScore { get; init; }   // >= 0: the session's score before the game
+    public required int OpponentScore { get; init; } // >= 0
 }
 
 public sealed class MatchSession : Session       // unmapped members refused
@@ -1757,7 +1820,6 @@ public abstract class BgDecisionData
 
     [JsonInclude, JsonRequired] public DecisionKind Kind { get; internal init; }  // written first; the type's
     public required DecisionId      Id          { get; init; }   // refuses an XgDecisionId naming the other kind
-    public required string          Xgid        { get; init; }
     public required PositionData    Position    { get; init; }   // a cube refuses a Crawford position
     public required DescriptiveData Descriptive { get; init; }   // IsStandardStart null exactly for an XgpDecisionId
     // Explicit null for Id, Position, Descriptive → ArgumentNullException (halheinrich/backgammon#221).
@@ -1768,6 +1830,7 @@ public abstract class BgDecisionData
 
     [JsonIgnore] public int? Game { get; }        // from Id; null for a standalone position
     [JsonIgnore] public string SourceFile { get; } // Id.Filename
+    [JsonIgnore] public string Xgid { get; }      // derived on each read (XgidEncoder); never stored
     // The members every kind has, public and [JsonIgnore]d: Player,
     // Session (the position's), MoveNumber, IsStandardStart, Board.
     public IDecisionFilterData ViewFor(PlayRanking ranking);   // the filter view for one ranking
@@ -1900,6 +1963,10 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     public int? OpponentNeeds { get; init; }                  //   likewise
     public bool? IsCrawford { get; init; }                    //   likewise
     public bool? IsJacoby { get; init; }                      // money's; null for a match
+    public bool? IsBeaver { get; init; }                      //   likewise
+    public int? CubeLimit { get; init; }                      //   likewise
+    public int? OnRollScore { get; init; }                    //   likewise
+    public int? OpponentScore { get; init; }                  //   likewise
     // Other flat columns required — see DecisionRow.cs.
     [JsonIgnore] public Session Session { get; }              // the session columns, typed as the record's kind
     [JsonIgnore] public int? Game { get; }                    // from Id, as MoveNumber
@@ -2135,10 +2202,10 @@ public sealed class ProblemKey :
     public bool IsCubeDecision { get; }           // decision kind rides on the dice field
 
     // The single derivation site in the ecosystem, reading the session by its
-    // kind. false = no key, per the no-key rung (malformed / degenerate facts:
-    // an empty board, a cube not a positive power of two, an undefined owner).
-    // Never throws on bad facts; throws ArgumentNullException on a null
-    // record (a caller bug).
+    // kind. false = no key, per the no-key rung: an empty board, the one a
+    // record can still reach (the session and the cube are well-formed by
+    // construction; their rules guard the parse door). Never throws on bad
+    // facts; throws ArgumentNullException on a null record (a caller bug).
     public static bool TryDerive(BgDecisionData data, out ProblemKey? key);
 
     public static ProblemKey Parse(string s, IFormatProvider? provider = null);

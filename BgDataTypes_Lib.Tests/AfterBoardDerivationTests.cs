@@ -125,12 +125,12 @@ public class AfterBoardDerivationTests
 
         var positionFirst = new CheckerPlayDecision
         {
-            Id = new XgDecisionId("m.xg", 1, 1, IsCube: false), Xgid = "XGID=x",
+            Id = new XgDecisionId("m.xg", 1, 1, IsCube: false),
             Position = position, Decision = decision, Descriptive = TestRecords.Descriptive(),
         };
         var decisionFirst = new CheckerPlayDecision
         {
-            Id = new XgDecisionId("m.xg", 1, 1, IsCube: false), Xgid = "XGID=x",
+            Id = new XgDecisionId("m.xg", 1, 1, IsCube: false),
             Decision = decision, Position = position, Descriptive = TestRecords.Descriptive(),
         };
 
@@ -211,12 +211,12 @@ public class AfterBoardDerivationTests
 
         var decisionSecond = Assert.Throws<ArgumentException>(() => new CheckerPlayDecision
         {
-            Id = new XgDecisionId("m.xg", 1, 1, IsCube: false), Xgid = "XGID=x",
+            Id = new XgDecisionId("m.xg", 1, 1, IsCube: false),
             Position = position, Decision = decision, Descriptive = TestRecords.Descriptive(),
         });
         var positionSecond = Assert.Throws<ArgumentException>(() => new CheckerPlayDecision
         {
-            Id = new XgDecisionId("m.xg", 1, 1, IsCube: false), Xgid = "XGID=x",
+            Id = new XgDecisionId("m.xg", 1, 1, IsCube: false),
             Decision = decision, Position = position, Descriptive = TestRecords.Descriptive(),
         });
 

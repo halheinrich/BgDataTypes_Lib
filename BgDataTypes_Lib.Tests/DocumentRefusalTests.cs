@@ -63,6 +63,15 @@ public class DocumentRefusalTests
             d => d["Position"]!["Session"]!["IsCrawford"] = true, typeof(ArgumentException));
         yield return ("a null session, inside a record", TestRecords.CheckerPlay(),
             d => d["Position"]!["Session"] = null, typeof(ArgumentNullException));
+        // Added with the derived XGID: the cube and the money session's facts.
+        yield return ("a cube that is not a power of two, inside a record", TestRecords.Cube(),
+            d => d["Position"]!["CubeSize"] = 3, typeof(ArgumentOutOfRangeException));
+        yield return ("a cube above the money session's limit, inside a record",
+            TestRecords.CheckerPlay(position: TestRecords.Position(session: TestRecords.MoneySession(cubeLimit: 4))),
+            d => d["Position"]!["CubeSize"] = 8, typeof(ArgumentOutOfRangeException));
+        yield return ("a money session's negative score, inside a record",
+            TestRecords.Cube(position: TestRecords.Position(session: TestRecords.MoneySession())),
+            d => d["Position"]!["Session"]!["OpponentScore"] = -2, typeof(ArgumentOutOfRangeException));
         yield return ("an identifier naming the other kind", TestRecords.Cube(),
             d => d["Id"] = "match.xg:g1:m2:play", typeof(ArgumentException));
         yield return ("a standalone position stating its start", TestRecords.Cube(),
@@ -135,6 +144,15 @@ public class DocumentRefusalTests
             d => d["IsCrawford"] = true, typeof(ArgumentException));
         yield return ("a null session", typeof(PositionData), TestRecords.Position(),
             d => d["Session"] = null, typeof(ArgumentNullException));
+        yield return ("a cube limit that is not a power of two", typeof(Session), TestRecords.MoneySession(),
+            d => d["CubeLimit"] = 1000, typeof(ArgumentOutOfRangeException));
+        yield return ("a negative money score, read as the kind", typeof(MoneySession), TestRecords.MoneySession(),
+            d => d["OnRollScore"] = -1, typeof(ArgumentOutOfRangeException));
+        yield return ("a cube of 0", typeof(PositionData), TestRecords.Position(),
+            d => d["CubeSize"] = 0, typeof(ArgumentOutOfRangeException));
+        yield return ("a cube above the limit", typeof(PositionData),
+            TestRecords.Position(session: TestRecords.MoneySession(cubeLimit: 2)),
+            d => d["CubeSize"] = 4, typeof(ArgumentOutOfRangeException));
     }
 
     [Fact]
