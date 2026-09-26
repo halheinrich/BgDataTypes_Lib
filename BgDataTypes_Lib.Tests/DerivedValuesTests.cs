@@ -213,9 +213,9 @@ public class DerivedValuesTests
             AnalysisMode = AnalysisMode.Evaluation, AnalysisLevel = AnalysisLevel.Ply3,
             NoDoubleEquity = 0.5, DoubleTakeEquity = 0.6, CubelessNoDoubleEquity = 0.4, CubelessDoubleTakeEquity = 0.4,
             WinPctAfterNoDouble = 0.7, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
-            LosePctAfterNoDouble = 0.3, LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
+            LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
             WinPctAfterDoubleTake = 0.7, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
-            LosePctAfterDoubleTake = 0.3, LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
+            LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
             ProbOfOpponentErrorJustifyingDouble = 0,
             UnstatedDoublerActionError = 0.05,
             UserDoublerAction = CubeAction.Double,
@@ -237,9 +237,9 @@ public class DerivedValuesTests
             AnalysisMode = AnalysisMode.Evaluation, AnalysisLevel = AnalysisLevel.Ply3,
             NoDoubleEquity = 0.5, DoubleTakeEquity = 0.6, CubelessNoDoubleEquity = 0.4, CubelessDoubleTakeEquity = 0.4,
             WinPctAfterNoDouble = 0.7, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
-            LosePctAfterNoDouble = 0.3, LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
+            LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
             WinPctAfterDoubleTake = 0.7, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
-            LosePctAfterDoubleTake = 0.3, LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
+            LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
             ProbOfOpponentErrorJustifyingDouble = 0,
             UnstatedTakerActionError = 0.06,
             UserTakerAction = CubeAction.Take,
@@ -252,6 +252,48 @@ public class DerivedValuesTests
         var ex = Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize<CubeDecisionData>(document.ToJsonString(), WirePaths.Reflection));
         Assert.Equal("UserTakerAction", Assert.IsType<ArgumentException>(ex.InnerException).ParamName);
+    }
+
+    // ── The loss probabilities, from the win probabilities ────────
+
+    [Fact]
+    public void LosePct_IsOneMinusWinPct_OnACandidate_AndNoneWhenNotEvaluated()
+    {
+        // Every game is won or lost, so the total loss is 1 − the total win:
+        // XG's stored figure matched it within 9.5e-7 over 273,592 corpus
+        // candidates (the umbrella's measurement, 2026-09-26).
+        Assert.Equal(1.0 - 0.5358, TestRecords.Candidate(winPct: 0.5358).LosePct);
+        Assert.Null(TestRecords.Candidate(winPct: null).LosePct);
+    }
+
+    [Fact]
+    public void LosePct_IsOneMinusWinPct_OnBothCubeHalves()
+    {
+        var data = TestRecords.CubeData(winPctAfterNoDouble: 0.709, winPctAfterDoubleTake: 0.612);
+
+        Assert.Equal(1.0 - 0.709, data.LosePctAfterNoDouble);
+        Assert.Equal(1.0 - 0.612, data.LosePctAfterDoubleTake);
+    }
+
+    [Fact]
+    public void TheLossProbabilities_AreNotOnTheWire_AndAStatedOneIsIgnored_BothPaths()
+    {
+        var candidate = WirePaths.Document(TestRecords.Candidate(winPct: 0.6));
+        var cube = WirePaths.Document(TestRecords.CubeData(winPctAfterNoDouble: 0.7, winPctAfterDoubleTake: 0.6));
+        Assert.False(candidate.ContainsKey("LosePct"));
+        Assert.False(cube.ContainsKey("LosePctAfterNoDouble"));
+        Assert.False(cube.ContainsKey("LosePctAfterDoubleTake"));
+
+        candidate["LosePct"] = 0.9;
+        cube["LosePctAfterNoDouble"] = 0.9;
+        cube["LosePctAfterDoubleTake"] = 0.9;
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            Assert.Equal(1.0 - 0.6, JsonSerializer.Deserialize<PlayCandidate>(candidate.ToJsonString(), options)!.LosePct);
+            var read = JsonSerializer.Deserialize<CubeDecisionData>(cube.ToJsonString(), options)!;
+            Assert.Equal(1.0 - 0.7, read.LosePctAfterNoDouble);
+            Assert.Equal(1.0 - 0.6, read.LosePctAfterDoubleTake);
+        }
     }
 
     // ── Retired copies on the wire ────────────────────────────────

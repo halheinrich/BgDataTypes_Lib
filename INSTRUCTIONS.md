@@ -238,7 +238,7 @@ Design points:
   after-boards. Every other serialized member is required, each record's
   `Kind` included — through `[JsonRequired]`, since the type states it and
   code never does. `WireAbsenceTests` walks the graph from the context's
-  own metadata, from each kind's contract (125 members across four
+  own metadata, from each kind's contract (122 members across four
   documents — each record kind and each row kind — and nine types; 137
   before the stored copies of derivable values left the wire) and pins
   both halves of the rule on both paths, plus that every member is exactly
@@ -300,7 +300,7 @@ Every decision holds the two shared categories; each kind holds its own
 | `PositionData` | both kinds | `Mop`, `OnRollNeeds`, `OpponentNeeds`, `CubeSize`, `CubeOwner`, `IsCrawford`, `IsJacoby?`; derived `OnRollPipCount`, `OpponentPipCount` (the board's, by `BoardState`'s one pip rule) |
 | `DescriptiveData` | both kinds | `MatchLength`, `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it) |
 | `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `BestPlayIndex` (the first candidate of the highest equity), `BestPlay`, `UserPlay?`, `EquityLoss(i)`, `UserPlayError?` |
-| `CubeDecisionData` | `CubeDecision` | `Depth?`, `DepthAbbreviation?`, `AnalysisMode`, `AnalysisLevel`, the cube equity and probability fields, `ProbOfOpponentErrorJustifyingDouble`, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `UserDoubleError?`, `UserTakeError?` and the scoring policy |
+| `CubeDecisionData` | `CubeDecision` | `Depth?`, `DepthAbbreviation?`, `AnalysisMode`, `AnalysisLevel`, the cube equity and probability fields, `ProbOfOpponentErrorJustifyingDouble`, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `UserDoubleError?`, `UserTakeError?` and the scoring policy |
 
 **No stored copy of a derivable value** (the umbrella's verdict on the
 records leg of `halheinrich/backgammon#273`). Every member the others
@@ -342,7 +342,8 @@ asked for it exhaustively). Derived, never stored:
 | `CheckerPlayDecisionData.BestPlayIndex` | the candidates' equities: the first of the highest |
 | `CheckerPlayDecisionData.EquityLoss(i)` | `BestPlay.Equity − Plays[i].Equity` |
 | `CheckerPlayDecisionData.UserPlayError` | `EquityLoss(UserPlayIndex)` for a listed play; otherwise the stored `UnlistedPlayError` |
-| `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error |
+| `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus: 16,932 of 16,959 doubler errors within 1e-5, the rest within 1e-4; all 830 taker errors equal) |
+| `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures matched within 9.5e-7 (273,592 candidates) and 2.4e-7 (17,158 cube decisions, each half) |
 | earlier: `Game`, `MoveNumber` (the `Id`), the after-boards (the play rule), `Notation` (the play), `Dice` (the roll), `MatchScore`, `IsMoneyGame` | — |
 
 Stored, as source data:
@@ -369,11 +370,11 @@ Stored, as source data:
   holds the two to agreement (`DecisionRules.IdAgrees`).
 - **`MatchLength` beside the away scores** — the money/match stand-in, its
   own leg.
-- **The equities and probabilities** — the analyser's outputs, verbatim.
-  Some are related in theory (a total loss probability is one minus the
-  total win's; a money game's cubeless equity follows from its
-  probabilities), but whether XG's stored figures satisfy those relations
-  exactly is unmeasured, so none is derived here.
+- **The equities and the win, gammon and backgammon probabilities** — the
+  analyser's outputs, verbatim; the total loss probabilities, measured as
+  copies (above), are derived. A money game's cubeless equity follows from
+  its probabilities in theory; that relation is unmeasured, so it is not
+  derived here.
 - **What was played** — `UserPlayIndex`, `UserDoublerAction`,
   `UserTakerAction` — and **the analyser's error where the record does not
   state what it scores**: `UnlistedPlayError`,
@@ -413,7 +414,7 @@ not build against this library.
 | `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
 | `PlayChain` | **internal** `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a route from a source to a landing point, which the notation writes as one `from/to`, joining consecutive moves and eliding the touch-down points between. It stops where its moves stop or at a hit point whose mark it carries, so it is not a checker's whole trajectory: an intermediate hit splits one trajectory into two chains (`13/10*/8` is written `13/10* 10/8`). Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | **internal** `readonly struct` (`halheinrich/backgammon#273`: consumers spell plays with `Play.ToNotation()` and compare them by position, so the chain form can change without breaking one), fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by the internal `Play.ToCanonical()` — no other constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `Play`, `Depth?`, `DepthAbbreviation?`, `AnalysisMode`, `AnalysisLevel`, `Equity` (finite), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation` and `DepthRank`. `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's loss against the best is the decision's (`CheckerPlayDecisionData.EquityLoss(i)`): it needs the other candidates. `EquityLoss(i) == 0` is the test for "is this a best play"; `BestPlayIndex` names the canonical single best, the first of the highest equity. |
+| `PlayCandidate` | `Play`, `Depth?`, `DepthAbbreviation?`, `AnalysisMode`, `AnalysisLevel`, `Equity` (finite), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's loss against the best is the decision's (`CheckerPlayDecisionData.EquityLoss(i)`): it needs the other candidates. `EquityLoss(i) == 0` is the test for "is this a best play"; `BestPlayIndex` names the canonical single best, the first of the highest equity. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 | `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `TryDerive` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. Both doors run the same fact validation, and facts that would force a guess get **no key** rather than a wrong one (see "ProblemKey" below and Pitfalls). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
@@ -1459,8 +1460,8 @@ public sealed class CheckerPlayDecisionData    // unmapped members refused
 public sealed class CubeDecisionData           // unmapped members refused
 {
     // Required: Depth, DepthAbbreviation, AnalysisMode, AnalysisLevel,
-    // NoDoubleEquity, DoubleTakeEquity, the cubeless equities, the twelve
-    // probabilities, ProbOfOpponentErrorJustifyingDouble.
+    // NoDoubleEquity, DoubleTakeEquity, the cubeless equities, the ten stored
+    // probabilities (each half's total loss is derived), ProbOfOpponentErrorJustifyingDouble.
     [JsonIgnore] public int? DepthRank { get; }          // derived from the mode and level; null = not recorded
 
     // Played cube actions — game facts, guarded per half on init (see

@@ -152,8 +152,9 @@ public class PlayCandidate
     // Outcome probabilities of this candidate, on-roll POV, fractions in
     // [0, 1] despite the Pct suffix, surfaced verbatim from XG's evaluation
     // vector. Null when the candidate was not evaluated (or the source
-    // predates these fields). Win/Lose are total win/loss probabilities; the
-    // gammon and backgammon fields are XG's G/B breakdown figures.
+    // predates these fields). Win is the total win probability, and the total
+    // loss is derived from it; the gammon and backgammon fields are XG's G/B
+    // breakdown figures, source data.
 
     /// <summary>Probability the on-roll player wins with this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? WinPct { get; init; }
@@ -161,8 +162,16 @@ public class PlayCandidate
     public double? WinGammonPct { get; init; }
     /// <summary>XG's backgammon-win figure (the "B" of its W/G/B breakdown) for this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? WinBgPct { get; init; }
-    /// <summary>Probability the on-roll player loses with this play. Fraction in [0, 1]; null when not evaluated.</summary>
-    public double? LosePct { get; init; }
+    /// <summary>
+    /// Probability the on-roll player loses with this play: <c>1 − </c><see cref="WinPct"/>,
+    /// derived and never stored — every game is won or lost.
+    /// <see langword="null"/> when the candidate was not evaluated. XG's
+    /// stored figure equals the derivation within 9.5e-7 over the 273,592
+    /// candidates of the local corpus (measured by the umbrella, 2026-09-26),
+    /// so it was a copy.
+    /// </summary>
+    [JsonIgnore]
+    public double? LosePct => 1.0 - WinPct;
     /// <summary>XG's gammon-loss figure for this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? LoseGammonPct { get; init; }
     /// <summary>XG's backgammon-loss figure for this play. Fraction in [0, 1]; null when not evaluated.</summary>

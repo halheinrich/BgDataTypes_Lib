@@ -53,11 +53,11 @@ public static class TestRecords
         Candidate(
             play: [new(13, 10), new(6, 5)], equity: -0.0127,
             winPct: 0.4987, winGammonPct: 0.1352, winBgPct: 0.0061,
-            losePct: 0.5013, loseGammonPct: 0.1398, loseBgPct: 0.0071),
+            loseGammonPct: 0.1398, loseBgPct: 0.0071),
         Candidate(
             play: [new(24, 23), new(13, 10)], equity: -0.0209,
             winPct: 0.4969, winGammonPct: 0.1307, winBgPct: 0.0055,
-            losePct: 0.5031, loseGammonPct: 0.1377, loseBgPct: 0.0069),
+            loseGammonPct: 0.1377, loseBgPct: 0.0069),
     ];
 
     // -----------------------------------------------------------------------
@@ -184,13 +184,11 @@ public static class TestRecords
         double winPctAfterNoDouble = 0.709,
         double gammonPctAfterNoDouble = 0.012,
         double bgPctAfterNoDouble = 0.0,
-        double losePctAfterNoDouble = 0.291,
         double loseGammonPctAfterNoDouble = 0.004,
         double loseBgPctAfterNoDouble = 0.0,
         double winPctAfterDoubleTake = 0.709,
         double gammonPctAfterDoubleTake = 0.012,
         double bgPctAfterDoubleTake = 0.0,
-        double losePctAfterDoubleTake = 0.291,
         double loseGammonPctAfterDoubleTake = 0.004,
         double loseBgPctAfterDoubleTake = 0.0,
         double probOfOpponentErrorJustifyingDouble = 0.0,
@@ -210,13 +208,11 @@ public static class TestRecords
         WinPctAfterNoDouble = winPctAfterNoDouble,
         GammonPctAfterNoDouble = gammonPctAfterNoDouble,
         BgPctAfterNoDouble = bgPctAfterNoDouble,
-        LosePctAfterNoDouble = losePctAfterNoDouble,
         LoseGammonPctAfterNoDouble = loseGammonPctAfterNoDouble,
         LoseBgPctAfterNoDouble = loseBgPctAfterNoDouble,
         WinPctAfterDoubleTake = winPctAfterDoubleTake,
         GammonPctAfterDoubleTake = gammonPctAfterDoubleTake,
         BgPctAfterDoubleTake = bgPctAfterDoubleTake,
-        LosePctAfterDoubleTake = losePctAfterDoubleTake,
         LoseGammonPctAfterDoubleTake = loseGammonPctAfterDoubleTake,
         LoseBgPctAfterDoubleTake = loseBgPctAfterDoubleTake,
         ProbOfOpponentErrorJustifyingDouble = probOfOpponentErrorJustifyingDouble,
@@ -272,7 +268,6 @@ public static class TestRecords
         double? winPct = 0.5358,
         double? winGammonPct = 0.1598,
         double? winBgPct = 0.0088,
-        double? losePct = 0.4642,
         double? loseGammonPct = 0.1253,
         double? loseBgPct = 0.0055) => new()
     {
@@ -285,7 +280,6 @@ public static class TestRecords
         WinPct = winPct,
         WinGammonPct = winGammonPct,
         WinBgPct = winBgPct,
-        LosePct = losePct,
         LoseGammonPct = loseGammonPct,
         LoseBgPct = loseBgPct,
     };

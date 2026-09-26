@@ -138,9 +138,10 @@ public sealed class CubeDecisionData
     public required double CubelessDoubleTakeEquity { get; init; }
 
     // Outcome-probability breakdown of the two cube evaluations, on-roll
-    // (doubler's) POV, fractions in [0, 1] surfaced verbatim from XG. Win/Lose
-    // are total win/loss probabilities; the gammon and backgammon fields are
-    // XG's G/B breakdown figures for the same evaluation.
+    // (doubler's) POV, fractions in [0, 1] surfaced verbatim from XG. Win is
+    // the total win probability, and the total loss is derived from it; the
+    // gammon and backgammon fields are XG's G/B breakdown figures for the
+    // same evaluation, source data.
 
     /// <summary>Probability the on-roll player wins, from the no-double evaluation. Fraction in [0, 1].</summary>
     public required double WinPctAfterNoDouble { get; init; }
@@ -148,8 +149,14 @@ public sealed class CubeDecisionData
     public required double GammonPctAfterNoDouble { get; init; }
     /// <summary>XG's backgammon-win figure (the "B" of its W/G/B breakdown) from the no-double evaluation. Fraction in [0, 1].</summary>
     public required double BgPctAfterNoDouble { get; init; }
-    /// <summary>Probability the on-roll player loses, from the no-double evaluation. Fraction in [0, 1].</summary>
-    public required double LosePctAfterNoDouble { get; init; }
+    /// <summary>
+    /// Probability the on-roll player loses, from the no-double evaluation:
+    /// <c>1 − </c><see cref="WinPctAfterNoDouble"/>, derived and never stored.
+    /// XG's stored figure equals it within 2.4e-7 over the 17,158 cube
+    /// decisions of the local corpus (measured by the umbrella, 2026-09-26).
+    /// </summary>
+    [JsonIgnore]
+    public double LosePctAfterNoDouble => 1.0 - WinPctAfterNoDouble;
     /// <summary>XG's gammon-loss figure from the no-double evaluation. Fraction in [0, 1].</summary>
     public required double LoseGammonPctAfterNoDouble { get; init; }
     /// <summary>XG's backgammon-loss figure from the no-double evaluation. Fraction in [0, 1].</summary>
@@ -161,8 +168,13 @@ public sealed class CubeDecisionData
     public required double GammonPctAfterDoubleTake { get; init; }
     /// <summary>XG's backgammon-win figure from the double/take evaluation. Fraction in [0, 1].</summary>
     public required double BgPctAfterDoubleTake { get; init; }
-    /// <summary>Probability the on-roll player loses, from the double/take evaluation. Fraction in [0, 1].</summary>
-    public required double LosePctAfterDoubleTake { get; init; }
+    /// <summary>
+    /// Probability the on-roll player loses, from the double/take evaluation:
+    /// <c>1 − </c><see cref="WinPctAfterDoubleTake"/>, derived and never
+    /// stored, as <see cref="LosePctAfterNoDouble"/> is.
+    /// </summary>
+    [JsonIgnore]
+    public double LosePctAfterDoubleTake => 1.0 - WinPctAfterDoubleTake;
     /// <summary>XG's gammon-loss figure from the double/take evaluation. Fraction in [0, 1].</summary>
     public required double LoseGammonPctAfterDoubleTake { get; init; }
     /// <summary>XG's backgammon-loss figure from the double/take evaluation. Fraction in [0, 1].</summary>

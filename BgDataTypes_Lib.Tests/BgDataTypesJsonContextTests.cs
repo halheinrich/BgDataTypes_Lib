@@ -65,7 +65,6 @@ public class BgDataTypesJsonContextTests
                         winPct: 0.481,
                         winGammonPct: 0.112,
                         winBgPct: 0.004,
-                        losePct: 0.519,
                         loseGammonPct: 0.143,
                         loseBgPct: 0.006),
                     TestRecords.Candidate(
@@ -76,7 +75,7 @@ public class BgDataTypesJsonContextTests
                         analysisLevel: AnalysisLevel.Ply3Red,
                         equity: 0.198,
                         winPct: null, winGammonPct: null, winBgPct: null,
-                        losePct: null, loseGammonPct: null, loseBgPct: null)
+                        loseGammonPct: null, loseBgPct: null)
                 ],
                 userPlayIndex: 1),
             descriptive: TestRecords.Descriptive(
@@ -113,13 +112,11 @@ public class BgDataTypesJsonContextTests
             winPctAfterNoDouble: 0.621,
             gammonPctAfterNoDouble: 0.183,
             bgPctAfterNoDouble: 0.012,
-            losePctAfterNoDouble: 0.379,
             loseGammonPctAfterNoDouble: 0.091,
             loseBgPctAfterNoDouble: 0.003,
             winPctAfterDoubleTake: 0.618,
             gammonPctAfterDoubleTake: 0.181,
             bgPctAfterDoubleTake: 0.011,
-            losePctAfterDoubleTake: 0.382,
             loseGammonPctAfterDoubleTake: 0.093,
             loseBgPctAfterDoubleTake: 0.004,
             probOfOpponentErrorJustifyingDouble: 0.078,

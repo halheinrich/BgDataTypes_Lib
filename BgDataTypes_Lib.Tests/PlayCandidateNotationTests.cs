@@ -89,10 +89,11 @@ public class PlayCandidateNotationTests
         // The candidate's wire members are exactly its stored ones: the
         // derived notation is not written, and neither is the retired name.
         // Rewritten: the depth rank and the equity loss are derived now (from
-        // the mode and level, and on the decision), so they left the list.
+        // the mode and level, and on the decision), so they left the list; so
+        // did the loss probability, 1 − the win probability.
         var candidate = TestRecords.Candidate(
             play: [new(24, -18), new(13, 9)], winPct: 0.5, winGammonPct: 0.1, winBgPct: 0.01,
-            losePct: 0.5, loseGammonPct: 0.1, loseBgPct: 0.01);
+            loseGammonPct: 0.1, loseBgPct: 0.01);
 
         foreach (var (path, options) in BothPaths)
         {
@@ -103,7 +104,7 @@ public class PlayCandidateNotationTests
                 names.SequenceEqual(
                 [
                     "Play", "Depth", "DepthAbbreviation", "AnalysisMode", "AnalysisLevel",
-                    "Equity", "WinPct", "WinGammonPct", "WinBgPct", "LosePct",
+                    "Equity", "WinPct", "WinGammonPct", "WinBgPct",
                     "LoseGammonPct", "LoseBgPct",
                 ]),
                 $"{path}: {string.Join(",", names)}");
