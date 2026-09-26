@@ -309,6 +309,15 @@ public abstract class BgDecisionData : IDecisionFilterData
     [JsonIgnore]
     public int? Game => Id.GameInFile;
 
+    /// <summary>
+    /// The file the decision came from — its bare name with extension, no
+    /// directory (e.g. <c>"match.xg"</c>, <c>"session.xgp"</c>): the
+    /// <see cref="Id"/>'s <see cref="DecisionId.Filename"/>, the one place it
+    /// is stored, so the two cannot disagree. Every decision has one.
+    /// </summary>
+    [JsonIgnore]
+    public string SourceFile => Id.Filename;
+
     // -----------------------------------------------------------------------
     //  IDecisionFilterData
     //

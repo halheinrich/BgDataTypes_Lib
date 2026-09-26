@@ -35,12 +35,19 @@ public class AfterBoardDerivationTests
         return board.ToPosition();
     }
 
-    private static CheckerPlayDecision Tester(int bestPlayIndex, int? userPlayIndex) => TestRecords.CheckerPlay(
+    /// <summary>
+    /// The tester's candidates, the one at <paramref name="best"/> given the
+    /// highest equity: the best play is derived from the equities, so a test
+    /// choosing it states the equities that make it best.
+    /// </summary>
+    private static PlayCandidate[] TesterCandidates(int best) =>
+        [.. TesterPlays.Select((play, i) => TestRecords.Candidate(play: play, equity: i == best ? 0.5 : -0.1 * i))];
+
+    private static CheckerPlayDecision Tester(int best, int? userPlayIndex) => TestRecords.CheckerPlay(
         position: TestRecords.Position(mop: TesterMop, onRollNeeds: 3, opponentNeeds: 5),
         decision: TestRecords.CheckerPlayData(
             dice: [5, 4],
-            plays: [.. TesterPlays.Select(play => TestRecords.Candidate(play: play))],
-            bestPlayIndex: bestPlayIndex,
+            plays: TesterCandidates(best),
             userPlayIndex: userPlayIndex));
 
     // ── The derivation ────────────────────────────────────────────
@@ -75,8 +82,7 @@ public class AfterBoardDerivationTests
     public void AfterBoards_DoNotDependOnTheOrderPositionAndDecisionAreSet()
     {
         var decision = TestRecords.CheckerPlayData(
-            dice: [5, 4], plays: [.. TesterPlays.Select(play => TestRecords.Candidate(play: play))],
-            bestPlayIndex: 2, userPlayIndex: 1);
+            dice: [5, 4], plays: TesterCandidates(best: 2), userPlayIndex: 1);
         var position = TestRecords.Position(mop: TesterMop, onRollNeeds: 3, opponentNeeds: 5);
 
         var positionFirst = new CheckerPlayDecision
@@ -145,7 +151,7 @@ public class AfterBoardDerivationTests
         plays[invalid] = [new(8, 3), new(7, 3)];
         var decision = TestRecords.CheckerPlayData(
             dice: [5, 4], plays: [.. plays.Select(play => TestRecords.Candidate(play: play))],
-            bestPlayIndex: invalid == 0 ? 1 : 0, userPlayIndex: null);
+            userPlayIndex: null);
 
         var ex = Assert.Throws<ArgumentException>(() => TestRecords.CheckerPlay(
             position: TestRecords.Position(mop: TesterMop), decision: decision));

@@ -7,13 +7,46 @@ namespace BgDataTypes_Lib;
 /// producing analyser's move list, carried in <see cref="CheckerPlayDecisionData.Plays"/>.
 /// Which candidate is the best or the user's play is recorded on the parent
 /// (<see cref="CheckerPlayDecisionData.BestPlayIndex"/> / <see cref="CheckerPlayDecisionData.UserPlayIndex"/>),
-/// not flagged per-candidate. The nullable probabilities'
-/// <see langword="null"/> means the candidate was not evaluated; every other
-/// member is <c>required</c>, per the wire rule stated on
+/// not flagged per-candidate, and so is what a candidate gives up against the
+/// best (<see cref="CheckerPlayDecisionData.EquityLoss"/>), which needs the
+/// other candidates. The nullable probabilities' <see langword="null"/> means
+/// the candidate was not evaluated; every other stored member is
+/// <c>required</c>, per the wire rule stated on
 /// <see cref="BgDataTypesJsonContext"/>.
 /// </summary>
+/// <remarks>
+/// A document still stating a retired member — <c>MoveNotation</c>, derived
+/// from <see cref="Play"/>; <c>EquityLoss</c>, derived on the parent;
+/// <c>DepthRank</c>, derived from the depth taxonomy — reads with it ignored,
+/// as every member this category does not have is.
+/// </remarks>
 public class PlayCandidate
 {
+    // True while the candidate is read from a document (see the serializer's
+    // constructor below): each rule then refuses as a JsonException.
+    private readonly bool _read;
+    private readonly double _equity;
+
+    /// <summary>Creates a candidate; its members are set by the initializer.</summary>
+    public PlayCandidate()
+    {
+    }
+
+    /// <summary>
+    /// The serializer's constructor, for a candidate read from a document: it
+    /// marks the candidate as read before any member is set, so every rule
+    /// refuses a breach as a <see cref="System.Text.Json.JsonException"/> (the
+    /// wire rule on <see cref="BgDataTypesJsonContext"/>). It takes
+    /// <paramref name="play"/> only because a serializer constructor must bind
+    /// a member.
+    /// </summary>
+    [JsonConstructor]
+    internal PlayCandidate(Play play)
+    {
+        _read = true;
+        Play = play;
+    }
+
     /// <summary>
     /// The candidate's play — the sequence of (FrPt, ToPt) moves that
     /// produces it, and the one stored form of it. It is applied and matched
@@ -27,9 +60,7 @@ public class PlayCandidate
     /// <summary>
     /// The candidate's play in standard notation, e.g. <c>"8/5(2) 6/3(2)"</c>:
     /// the <see cref="Play"/>'s own <see cref="Play.ToNotation"/>, so it can
-    /// never disagree with the play. Derived on each read and never stored:
-    /// it is not on the wire, and a document that still carries the retired
-    /// <c>MoveNotation</c> member reads with that member ignored
+    /// never disagree with the play. Derived on each read and never stored
     /// (halheinrich/backgammon#273). The empty string for a pass.
     /// </summary>
     [JsonIgnore]
@@ -47,13 +78,17 @@ public class PlayCandidate
     /// label.</summary>
     public required string DepthAbbreviation { get; init; }
 
-    /// <summary>Ordinal ranking of the analysis depth; higher = deeper /
-    /// more rigorous. Semantics (category boundaries, rollout-vs-static
-    /// ordering) are defined by the producer — see ConvertXgToJson_Lib's
-    /// depth-resolution logic. Used by BackgammonDiagram_Lib to flag
-    /// out-of-order analysis depths across sorted-by-equity plays.
-    /// 0 is treated as lowest.</summary>
-    public required int DepthRank { get; init; }
+    /// <summary>
+    /// Ordinal ranking of the analysis depth; higher = deeper / more
+    /// rigorous, and only the ordering means anything. Derived from
+    /// <see cref="AnalysisMode"/> and <see cref="AnalysisLevel"/>, which
+    /// determine it, so never stored (the grid is stated on the internal
+    /// <c>AnalysisDepthRank</c>). Used by BackgammonDiagram_Lib to flag
+    /// out-of-order analysis depths across sorted-by-equity plays. 0 is the
+    /// floor: the mode, or an evaluation's level, not recorded.
+    /// </summary>
+    [JsonIgnore]
+    public int DepthRank => AnalysisDepthRank.Of(AnalysisMode, AnalysisLevel);
 
     /// <summary>How this candidate's numbers were produced — the mode axis of
     /// the two-axis depth taxonomy behind the <see cref="Depth"/> /
@@ -72,19 +107,30 @@ public class PlayCandidate
     /// producer did not record it.</summary>
     public required AnalysisLevel AnalysisLevel { get; init; }
 
-    /// <summary>Primary equity value, displayed top-right in the analysis panel.</summary>
-    public required double Equity { get; init; }
-
     /// <summary>
-    /// Equity loss vs. best-equity play, in match-equity units. <c>0.0</c> means
-    /// this candidate is itself a best play — multiple candidates may share zero
-    /// loss when they produce structurally equivalent (or tied-equity) positions.
-    /// <see cref="CheckerPlayDecisionData.BestPlayIndex"/> names a canonical single best
-    /// when one representative is needed; <c>EquityLoss == 0.0</c> is the valid
-    /// test for "is this a best play" / membership in the best-equity equivalence
-    /// class.
+    /// Primary equity value, displayed top-right in the analysis panel. A
+    /// finite number: the best play is the candidate of the highest equity
+    /// (<see cref="CheckerPlayDecisionData.BestPlayIndex"/>), which a
+    /// non-number would leave undefined.
     /// </summary>
-    public required double EquityLoss { get; init; }
+    /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is not finite.</exception>
+    public required double Equity
+    {
+        get => _equity;
+        init
+        {
+            try
+            {
+                if (!double.IsFinite(value))
+                    throw new ArgumentOutOfRangeException(nameof(Equity), value, "A candidate's equity is a finite number.");
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
+            _equity = value;
+        }
+    }
 
     // Outcome probabilities of this candidate, on-roll POV, fractions in
     // [0, 1] despite the Pct suffix, surfaced verbatim from XG's evaluation

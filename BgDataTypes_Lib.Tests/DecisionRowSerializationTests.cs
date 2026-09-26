@@ -38,10 +38,9 @@ public class DecisionRowSerializationTests
     private static DecisionRow PlayRow(
         DecisionId? id = null,
         string xgid = "XGID=x",
-        double? error = 0.0,
+        double? error = null,
         int matchLength = 7,
         string player = "Alice",
-        string? sourceFile = "match.xg",
         bool? isStandardStart = null,
         int[]? dice = null,
         string analysisDepth = "3-ply",
@@ -69,25 +68,26 @@ public class DecisionRowSerializationTests
                 plays: [TestRecords.Candidate(
                     play: play, depth: analysisDepth, analysisMode: analysisMode,
                     analysisLevel: analysisLevel, equity: equity)],
-                userPlayIndex: userPlayIndex,
-                userPlayError: error),
+                userPlayIndex: error is null ? userPlayIndex : null,
+                unlistedPlayError: error),
             descriptive: TestRecords.Descriptive(
-                matchLength: matchLength, onRollName: player, sourceFile: sourceFile,
+                matchLength: matchLength, onRollName: player,
                 isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))));
     }
 
     /// <summary>
-    /// A cube row, from a record as <see cref="PlayRow"/> is:
-    /// <paramref name="error"/> is the user's doubling error, and the depth,
-    /// mode, level and equity (the no-double equity) the cube analysis's.
+    /// A cube row, from a record as <see cref="PlayRow"/> is: the depth, mode,
+    /// level and equity (the no-double equity) are the cube analysis's. Left
+    /// null, <paramref name="error"/> leaves the builder's double and take
+    /// stated, whose derived errors are 0; stated, it is the doubling error
+    /// of an unstated action — the one cube error a record stores.
     /// </summary>
     private static DecisionRow CubeRow(
         DecisionId? id = null,
         string xgid = "XGID=x",
-        double? error = 0.0,
+        double? error = null,
         int matchLength = 7,
         string player = "Alice",
-        string? sourceFile = "match.xg",
         bool? isStandardStart = null,
         string analysisDepth = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
@@ -102,11 +102,16 @@ public class DecisionRowSerializationTests
             id: id,
             xgid: xgid,
             position: TestRecords.Position(onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isJacoby: isJacoby),
-            decision: TestRecords.CubeData(
-                depth: analysisDepth, analysisMode: analysisMode, analysisLevel: analysisLevel,
-                noDoubleEquity: equity, userDoubleError: error, userTakeError: null),
+            decision: error is null
+                ? TestRecords.CubeData(
+                    depth: analysisDepth, analysisMode: analysisMode, analysisLevel: analysisLevel,
+                    noDoubleEquity: equity)
+                : TestRecords.CubeData(
+                    depth: analysisDepth, analysisMode: analysisMode, analysisLevel: analysisLevel,
+                    noDoubleEquity: equity, userDoublerAction: null, userTakerAction: null,
+                    unstatedDoublerActionError: error),
             descriptive: TestRecords.Descriptive(
-                matchLength: matchLength, onRollName: player, sourceFile: sourceFile,
+                matchLength: matchLength, onRollName: player,
                 isStandardStart: isStandardStart ?? (id is XgpDecisionId ? null : true))));
     }
 
@@ -162,7 +167,6 @@ public class DecisionRowSerializationTests
             isCrawford: false,
             isJacoby: null,
             player: "Mochy",
-            sourceFile: "mochy-falafel.xg",
             dice: [6, 3],
             analysisDepth: "3-ply",
             equity: -0.142,
@@ -197,7 +201,6 @@ public class DecisionRowSerializationTests
         var original = CubeRow(
             equity: 0.312,
             player: "Falafel",
-            sourceFile: "mochy-falafel.xg",
             analysisDepth: "Rollout: 1296 trials. 3-ply",
             matchLength: 9,
             onRollNeeds: 1,
@@ -227,16 +230,17 @@ public class DecisionRowSerializationTests
     }
 
     [Fact]
-    public void DecisionRow_RoundTrip_EmptyStringsAndNullSourceFile()
+    public void DecisionRow_RoundTrip_EmptyStrings()
     {
-        // Rewritten from DecisionRow_RoundTrip_StringDefaults: the empty
-        // strings are stated values, and round-trip as such; the nullable
-        // SourceFile's null round-trips too.
-        var restored = RoundTrip(PlayRow(xgid: "", player: "", analysisDepth: "", sourceFile: null));
+        // Rewritten from DecisionRow_RoundTrip_EmptyStringsAndNullSourceFile
+        // (itself from DecisionRow_RoundTrip_StringDefaults): the empty
+        // strings are stated values, and round-trip as such. The source file
+        // is no longer a column that can be null: it is the Id's.
+        var restored = RoundTrip(PlayRow(xgid: "", player: "", analysisDepth: ""));
 
         Assert.Equal(string.Empty, restored.Xgid);
         Assert.Equal(string.Empty, restored.Player);
-        Assert.Null(restored.SourceFile);
+        Assert.Equal("match.xg", restored.SourceFile);
         Assert.Equal(string.Empty, restored.AnalysisDepth);
     }
 
@@ -272,16 +276,17 @@ public class DecisionRowSerializationTests
     {
         // Added: the row is the record's, column by column — the shared view
         // through IDecisionFilterData, the kind's own from the kind.
-        var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 2, userPlayError: 0.1813));
+        var record = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(userPlayIndex: 2));
         var row = DecisionRow.From(record);
 
         Assert.Equal(record.Kind, row.Kind);
         Assert.Equal(record.Id, row.Id);
         Assert.Equal(record.Xgid, row.Xgid);
-        Assert.Equal(0.1813, row.Error);
+        Assert.Equal(record.Decision.EquityLoss(2), row.Error);
+        Assert.Equal(0.1813, row.Error!.Value, 12);
         Assert.Equal(record.MatchLength, row.MatchLength);
         Assert.Equal(record.Player, row.Player);
-        Assert.Equal(record.Descriptive.SourceFile, row.SourceFile);
+        Assert.Equal(record.SourceFile, row.SourceFile);
         Assert.Equal(record.IsStandardStart, row.IsStandardStart);
         Assert.Equal(31, row.Roll);
         Assert.Equal(record.Decision.BestPlay.Depth, row.AnalysisDepth);
@@ -301,7 +306,8 @@ public class DecisionRowSerializationTests
     public void DecisionRow_From_TakesEveryColumnFromTheRecord_Cube()
     {
         // Added: the cube's own columns, and the checker play's empty.
-        var record = TestRecords.Cube(decision: TestRecords.CubeData(userDoubleError: null, userTakeError: 0.04));
+        var record = TestRecords.Cube(decision: TestRecords.CubeData(
+            userDoublerAction: null, userTakerAction: null, unstatedTakerActionError: 0.04));
         var row = DecisionRow.From(record);
 
         Assert.Equal(DecisionKind.Cube, row.Kind);
@@ -322,7 +328,7 @@ public class DecisionRowSerializationTests
         foreach (BgDecisionData record in new BgDecisionData[]
                  {
                      TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(dice: [1, 3], userPlayIndex: 1)),
-                     TestRecords.CheckerPlay(id: new XgpDecisionId("p.xgp"), decision: TestRecords.CheckerPlayData(userPlayIndex: null, userPlayError: null)),
+                     TestRecords.CheckerPlay(id: new XgpDecisionId("p.xgp"), decision: TestRecords.CheckerPlayData(userPlayIndex: null)),
                      TestRecords.Cube(),
                      TestRecords.Cube(position: TestRecords.Position(onRollNeeds: 0, opponentNeeds: 0, isJacoby: true),
                          descriptive: TestRecords.Descriptive(matchLength: 0)),
@@ -718,38 +724,43 @@ public class DecisionRowSerializationTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_SourceFile_AbsentReadsAsNull()
+    public void DecisionRow_RetiredSourceFileColumn_IsIgnored_TheIdsStands()
     {
-        // Rewritten from DecisionRow_SourceFile_DefaultsToNull: nullable (none
-        // recorded), so its absence reads as null.
-        var row = ReadWithout(PlayRow(sourceFile: "m.xg"), "SourceFile");
-        Assert.Null(row.SourceFile);
+        // Rewritten from DecisionRow_SourceFile_AbsentReadsAsNull: the source
+        // file is the Id's, not a column of its own, so there is nothing to be
+        // absent. A document still stating the retired column reads with it
+        // ignored — a stated name cannot contradict the Id.
+        var document = JsonNode.Parse(JsonSerializer.Serialize(PlayRow(), Options))!.AsObject();
+        Assert.False(document.ContainsKey("SourceFile"));
+        document["SourceFile"] = "other.xg";
+
+        foreach (var (_, options) in WirePaths.Both)
+            Assert.Equal("match.xg", JsonSerializer.Deserialize<DecisionRow>(document.ToJsonString(), options)!.SourceFile);
     }
 
     [Fact]
-    public void DecisionRow_ToCsvLine_SourceFile_EmptyCellWhenNull()
+    public void DecisionRow_ToCsvLine_SourceFile_IsTheIdsFilename()
     {
-        var row = PlayRow(player: "Mochy", sourceFile: null);
-        var line = row.ToCsvLine();
-
-        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity
-        // SourceFile is column index 5 (0-based). Between Player and Game it must appear
-        // as ",," — an empty cell — not the literal "null".
-        Assert.Contains(",Mochy,,", line);
-        Assert.DoesNotContain("null", line);
+        // Rewritten from DecisionRow_ToCsvLine_SourceFile_EmptyCellWhenNull:
+        // every decision has a source file — its Id's — so the cell is never
+        // empty. Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,...
+        // (column index 5, between Player and Game).
+        Assert.Contains(",Mochy,match.xg,1,1,", PlayRow(player: "Mochy").ToCsvLine());
+        Assert.Contains(",Mochy,position.xgp,,,",
+            PlayRow(id: new XgpDecisionId("position.xgp"), player: "Mochy").ToCsvLine());
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_PlainFilename()
     {
-        var line = PlayRow(sourceFile: "mochy-falafel.xg").ToCsvLine();
+        var line = PlayRow(id: new XgDecisionId("mochy-falafel.xg", 1, 1, IsCube: false)).ToCsvLine();
         Assert.Contains(",mochy-falafel.xg,", line);
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_FilenameWithSpaces_Unquoted()
     {
-        var line = PlayRow(sourceFile: "Mochy vs Falafel.xgp").ToCsvLine();
+        var line = PlayRow(id: new XgpDecisionId("Mochy vs Falafel.xgp")).ToCsvLine();
         // RFC 4180 does not require quoting on spaces; value passes through literally.
         Assert.Contains(",Mochy vs Falafel.xgp,", line);
     }
@@ -757,14 +768,16 @@ public class DecisionRowSerializationTests
     [Fact]
     public void DecisionRow_ToCsvLine_SourceFile_FilenameWithComma_Quoted()
     {
-        var line = PlayRow(sourceFile: "file,with,commas.xg").ToCsvLine();
+        var line = PlayRow(id: new XgDecisionId("file,with,commas.xg", 1, 1, IsCube: false)).ToCsvLine();
         Assert.Contains("\"file,with,commas.xg\"", line);
     }
 
     [Fact]
     public void DecisionRow_RoundTrip_SourceFile()
     {
-        Assert.Equal("mochy-falafel.xg", RoundTrip(PlayRow(sourceFile: "mochy-falafel.xg")).SourceFile);
+        // Rewritten: the source file rides the Id through the round trip.
+        Assert.Equal("mochy-falafel.xg",
+            RoundTrip(PlayRow(id: new XgDecisionId("mochy-falafel.xg", 1, 1, IsCube: false))).SourceFile);
     }
 
     // -----------------------------------------------------------------------
@@ -828,7 +841,7 @@ public class DecisionRowSerializationTests
         double? fe = row.FilterError;
         Assert.NotNull(fe);
         Assert.Equal(0.045, fe!.Value);
-        Assert.Null(((IDecisionFilterData)PlayRow(error: null)).FilterError);
+        Assert.Null(((IDecisionFilterData)PlayRow(error: null, userPlayIndex: null)).FilterError);
     }
 
     // -----------------------------------------------------------------------
@@ -1043,21 +1056,20 @@ public class DecisionRowSerializationTests
         var row = PlayRow(
             id: new XgDecisionId("m.xg", Game: 2, MoveNumber: 17, IsCube: false),
             player: "Mochy",
-            sourceFile: null,
             dice: [6, 3]);
         var line = row.ToCsvLine();
         // CSV header is: ...Player,SourceFile,Game,MoveNumber,Kind,Roll,...
-        // SourceFile is null → empty cell.
-        Assert.Contains(",Mochy,,2,17,CheckerPlay,63,", line);
+        // Rewritten: the source file is the Id's, never an empty cell.
+        Assert.Contains(",Mochy,m.xg,2,17,CheckerPlay,63,", line);
     }
 
     [Fact]
     public void DecisionRow_ToCsvLine_StandalonePosition_GameAndMoveNumberAreEmptyCells()
     {
-        var row = PlayRow(id: new XgpDecisionId("position.xgp"), player: "Mochy", sourceFile: null, dice: [6, 3]);
+        var row = PlayRow(id: new XgpDecisionId("position.xgp"), player: "Mochy", dice: [6, 3]);
 
         // Neither a 1 nor a 0: no game applies (halheinrich/backgammon#124).
-        Assert.Contains(",Mochy,,,,CheckerPlay,63,", row.ToCsvLine());
+        Assert.Contains(",Mochy,position.xgp,,,CheckerPlay,63,", row.ToCsvLine());
     }
 
     [Fact]

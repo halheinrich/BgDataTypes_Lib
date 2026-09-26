@@ -428,15 +428,13 @@ public class ProblemKeyTests
             descriptive: TestRecords.Descriptive(
                 matchLength: 7,
                 onRollName: "Alice",
-                opponentName: "Bob",
-                sourceFile: "one.xg"));
+                opponentName: "Bob"));
         var b = PlayDecision(
             id: new XgpDecisionId("two.xgp"),
             descriptive: TestRecords.Descriptive(
                 matchLength: 7,
                 onRollName: "Carol",
                 opponentName: "Dave",
-                sourceFile: "two.xgp",
                 isStandardStart: null));
 
         Assert.Equal(Derive(a), Derive(b));
@@ -516,7 +514,6 @@ public class ProblemKeyTests
         {
             Dice = null!,
             Plays = [TestRecords.Candidate()],
-            BestPlayIndex = 0,
         });
         Assert.Equal("Dice", ex.ParamName);
 

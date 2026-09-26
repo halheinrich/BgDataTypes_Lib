@@ -49,8 +49,6 @@ public class BgDataTypesJsonContextTests
                 mop: new BoardPosition(mop),
                 onRollNeeds: 3,
                 opponentNeeds: 5,
-                onRollPipCount: 131,
-                opponentPipCount: 144,
                 cubeSize: 2,
                 cubeOwner: CubeOwner.OnRoll,
                 isCrawford: true),
@@ -61,7 +59,6 @@ public class BgDataTypesJsonContextTests
                         play: [new(25, 19), new(13, 9)],
                         depth: "Rollout: 1296 trials. 3-ply",
                         depthAbbreviation: "3p1296",
-                        depthRank: 7,
                         analysisMode: AnalysisMode.Rollout,
                         analysisLevel: AnalysisLevel.Ply3,
                         equity: 0.211,
@@ -75,17 +72,13 @@ public class BgDataTypesJsonContextTests
                         play: [new(25, 21), new(13, 7)],
                         depth: "3-ply",
                         depthAbbreviation: "3-ply",
-                        depthRank: 4,
                         analysisMode: AnalysisMode.Evaluation,
                         analysisLevel: AnalysisLevel.Ply3Red,
                         equity: 0.198,
-                        equityLoss: 0.013,
                         winPct: null, winGammonPct: null, winBgPct: null,
                         losePct: null, loseGammonPct: null, loseBgPct: null)
                 ],
-                bestPlayIndex: 0,
-                userPlayIndex: 1,
-                userPlayError: 0.013),
+                userPlayIndex: 1),
             descriptive: TestRecords.Descriptive(
                 matchLength: 9,
                 onRollName: "Mochy",
@@ -93,7 +86,6 @@ public class BgDataTypesJsonContextTests
                 title: "Final",
                 date: new DateOnly(2024, 11, 15),
                 @event: "Monte Carlo 2024",
-                sourceFile: "mochy-falafel.xg",
                 isStandardStart: true,
                 comment: "Blitz or prime?",
                 flagged: true));
@@ -106,15 +98,12 @@ public class BgDataTypesJsonContextTests
             mop: BoardPosition.Empty,
             onRollNeeds: 0,
             opponentNeeds: 0,
-            onRollPipCount: 92,
-            opponentPipCount: 108,
             cubeSize: 2,
             cubeOwner: CubeOwner.Centered,
             isJacoby: true),
         decision: TestRecords.CubeData(
             depth: "Rollout: 1296 trials. 3-ply",
             depthAbbreviation: "3p1296",
-            depthRank: 7,
             analysisMode: AnalysisMode.BookRollout,
             analysisLevel: AnalysisLevel.XgRoller,
             noDoubleEquity: 0.312,
@@ -134,15 +123,12 @@ public class BgDataTypesJsonContextTests
             loseGammonPctAfterDoubleTake: 0.093,
             loseBgPctAfterDoubleTake: 0.004,
             probOfOpponentErrorJustifyingDouble: 0.078,
-            userDoubleError: 0.025,
-            userTakeError: 0.011,
             userDoublerAction: CubeAction.Double,
             userTakerAction: CubeAction.Take),
         descriptive: TestRecords.Descriptive(
             matchLength: 0,
             onRollName: "Hal",
-            opponentName: "Bot",
-            sourceFile: "hal-bot.xg"));
+            opponentName: "Bot"));
 
     // Rewritten from the record spelled by its Id alone: a standalone
     // position with every other member at the builders' defaults.

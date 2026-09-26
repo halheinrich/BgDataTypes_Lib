@@ -50,7 +50,8 @@ public class TestRecordsTests
         Assert.Equal(["8/5 6/5", "13/10 6/5", "24/23 13/10"], play.Decision.Plays.Select(c => c.Notation).ToArray());
         Assert.Equal(0, play.Decision.BestPlayIndex);
         Assert.Equal(0, play.Decision.UserPlayIndex);
-        Assert.Equal(0.0, play.Decision.BestPlay.EquityLoss);
+        Assert.Equal(0.0, play.Decision.EquityLoss(0));
+        Assert.Equal(0.0, play.Decision.UserPlayError);
         Assert.Equal(167, play.Position.OnRollPipCount);
         Assert.Equal(167, play.Position.OpponentPipCount);
         Assert.Equal(new XgDecisionId("match.xg", 1, 1, IsCube: false), play.Id);
@@ -80,7 +81,7 @@ public class TestRecordsTests
 
         Assert.Null(play.IsStandardStart);
         Assert.Null(cube.IsStandardStart);
-        Assert.Equal("p.xgp", play.Descriptive.SourceFile);
+        Assert.Equal("p.xgp", play.SourceFile);
     }
 
     [Fact]
@@ -103,12 +104,15 @@ public class TestRecordsTests
     [Fact]
     public void ThePosition_CountsItsOwnPips()
     {
+        // Rewritten: the pip counts are the category's derivation from its
+        // board, not the builder's defaults, so there is no count to override.
         var board = new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, 0]);
         var position = TestRecords.Position(mop: board);
 
         Assert.Equal(new BoardState(board).PipCount, position.OnRollPipCount);
         Assert.Equal(new BoardState(board).OpponentPipCount, position.OpponentPipCount);
-        Assert.Equal(99, TestRecords.Position(mop: board, onRollPipCount: 99).OnRollPipCount);
+        Assert.DoesNotContain(typeof(TestRecords).GetMethod(nameof(TestRecords.Position))!.GetParameters(),
+            p => p.Name!.Contains("Pip", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

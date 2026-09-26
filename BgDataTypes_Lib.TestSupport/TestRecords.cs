@@ -51,11 +51,11 @@ public static class TestRecords
     [
         Candidate(),
         Candidate(
-            play: [new(13, 10), new(6, 5)], equity: -0.0127, equityLoss: 0.1731,
+            play: [new(13, 10), new(6, 5)], equity: -0.0127,
             winPct: 0.4987, winGammonPct: 0.1352, winBgPct: 0.0061,
             losePct: 0.5013, loseGammonPct: 0.1398, loseBgPct: 0.0071),
         Candidate(
-            play: [new(24, 23), new(13, 10)], equity: -0.0209, equityLoss: 0.1813,
+            play: [new(24, 23), new(13, 10)], equity: -0.0209,
             winPct: 0.4969, winGammonPct: 0.1307, winBgPct: 0.0055,
             losePct: 0.5031, loseGammonPct: 0.1377, loseBgPct: 0.0069),
     ];
@@ -124,63 +124,57 @@ public static class TestRecords
     /// <summary>
     /// A position category; each argument is the member of the same name. By
     /// default the standard start at 0-0 in a 7-point match, the cube centred
-    /// on 1. The pip counts default to <paramref name="mop"/>'s own.
+    /// on 1. The pip counts are not arguments: the category derives them from
+    /// <paramref name="mop"/>.
     /// </summary>
     public static PositionData Position(
         BoardPosition? mop = null,
         int onRollNeeds = 7,
         int opponentNeeds = 7,
-        int? onRollPipCount = null,
-        int? opponentPipCount = null,
         int cubeSize = 1,
         CubeOwner cubeOwner = CubeOwner.Centered,
         bool isCrawford = false,
-        bool? isJacoby = null)
+        bool? isJacoby = null) => new()
     {
-        var board = mop ?? BoardPosition.Standard;
-        var counted = new BoardState(board);
-        return new PositionData
-        {
-            Mop = board,
-            OnRollNeeds = onRollNeeds,
-            OpponentNeeds = opponentNeeds,
-            OnRollPipCount = onRollPipCount ?? counted.PipCount,
-            OpponentPipCount = opponentPipCount ?? counted.OpponentPipCount,
-            CubeSize = cubeSize,
-            CubeOwner = cubeOwner,
-            IsCrawford = isCrawford,
-            IsJacoby = isJacoby,
-        };
-    }
+        Mop = mop ?? BoardPosition.Standard,
+        OnRollNeeds = onRollNeeds,
+        OpponentNeeds = opponentNeeds,
+        CubeSize = cubeSize,
+        CubeOwner = cubeOwner,
+        IsCrawford = isCrawford,
+        IsJacoby = isJacoby,
+    };
 
     /// <summary>
     /// A checker play's decision category; each argument is the member of the
     /// same name. By default a 3-1 with the opening's three candidates, the
-    /// first best and played at no cost.
+    /// first the best (it has the highest equity) and the user's play. The
+    /// best play and the user's error are not arguments: the category derives
+    /// them from the candidates, and a test wanting a user error either plays
+    /// a candidate with that loss or states an unlisted play's error with no
+    /// <paramref name="userPlayIndex"/>.
     /// </summary>
     public static CheckerPlayDecisionData CheckerPlayData(
         IReadOnlyList<int>? dice = null,
         IReadOnlyList<PlayCandidate>? plays = null,
-        int bestPlayIndex = 0,
         int? userPlayIndex = 0,
-        double? userPlayError = 0.0) => new()
+        double? unlistedPlayError = null) => new()
     {
         Dice = dice ?? [3, 1],
         Plays = plays ?? OpeningCandidates(),
-        BestPlayIndex = bestPlayIndex,
         UserPlayIndex = userPlayIndex,
-        UserPlayError = userPlayError,
+        UnlistedPlayError = unlistedPlayError,
     };
 
     /// <summary>
     /// A cube decision's category; each argument is the member of the same
     /// name. By default a 3-ply double/take (no double +0.512, double/take
-    /// +0.634), played as double and take at no cost.
+    /// +0.634), played as double and take — at no cost, which the category
+    /// derives from the equities, as it does the depth rank.
     /// </summary>
     public static CubeDecisionData CubeData(
         string depth = "3-ply",
         string depthAbbreviation = "3-ply",
-        int depthRank = 3,
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
         double noDoubleEquity = 0.512,
@@ -200,14 +194,13 @@ public static class TestRecords
         double loseGammonPctAfterDoubleTake = 0.004,
         double loseBgPctAfterDoubleTake = 0.0,
         double probOfOpponentErrorJustifyingDouble = 0.0,
-        double? userDoubleError = 0.0,
-        double? userTakeError = 0.0,
         CubeAction? userDoublerAction = CubeAction.Double,
-        CubeAction? userTakerAction = CubeAction.Take) => new()
+        CubeAction? userTakerAction = CubeAction.Take,
+        double? unstatedDoublerActionError = null,
+        double? unstatedTakerActionError = null) => new()
     {
         Depth = depth,
         DepthAbbreviation = depthAbbreviation,
-        DepthRank = depthRank,
         AnalysisMode = analysisMode,
         AnalysisLevel = analysisLevel,
         NoDoubleEquity = noDoubleEquity,
@@ -227,16 +220,17 @@ public static class TestRecords
         LoseGammonPctAfterDoubleTake = loseGammonPctAfterDoubleTake,
         LoseBgPctAfterDoubleTake = loseBgPctAfterDoubleTake,
         ProbOfOpponentErrorJustifyingDouble = probOfOpponentErrorJustifyingDouble,
-        UserDoubleError = userDoubleError,
-        UserTakeError = userTakeError,
         UserDoublerAction = userDoublerAction,
         UserTakerAction = userTakerAction,
+        UnstatedDoublerActionError = unstatedDoublerActionError,
+        UnstatedTakerActionError = unstatedTakerActionError,
     };
 
     /// <summary>
     /// A descriptive category; each argument is the member of the same name.
-    /// By default Alice against Bob in a 7-point match from <c>match.xg</c>,
-    /// whose game started from the standard position.
+    /// By default Alice against Bob in a 7-point match, whose game started
+    /// from the standard position. The source file is not here: a record
+    /// derives it from its id.
     /// </summary>
     public static DescriptiveData Descriptive(
         int matchLength = 7,
@@ -245,7 +239,6 @@ public static class TestRecords
         string? title = null,
         DateOnly? date = null,
         string? @event = null,
-        string? sourceFile = "match.xg",
         bool? isStandardStart = true,
         string comment = "",
         bool flagged = false) => new()
@@ -256,7 +249,6 @@ public static class TestRecords
         Title = title,
         Date = date,
         Event = @event,
-        SourceFile = sourceFile,
         IsStandardStart = isStandardStart,
         Comment = comment,
         Flagged = flagged,
@@ -264,20 +256,19 @@ public static class TestRecords
 
     /// <summary>
     /// A candidate; each argument is the member of the same name. By default
-    /// the opening 3-1's best play, 8/5 6/5, at 3-ply. Its notation is not a
-    /// member (halheinrich/backgammon#273): it is derived from
-    /// <paramref name="play"/>, so a test that cares how a candidate reads
-    /// passes the play that reads that way.
+    /// the opening 3-1's best play, 8/5 6/5, at 3-ply. Its notation, depth
+    /// rank and equity loss are not members (halheinrich/backgammon#273): the
+    /// notation is derived from <paramref name="play"/>, the rank from the
+    /// mode and level, and the loss on the decision from every candidate's
+    /// equity, so a test states the facts those come from.
     /// </summary>
     public static PlayCandidate Candidate(
         Play? play = null,
         string depth = "3-ply",
         string depthAbbreviation = "3-ply",
-        int depthRank = 3,
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
         double equity = 0.1604,
-        double equityLoss = 0.0,
         double? winPct = 0.5358,
         double? winGammonPct = 0.1598,
         double? winBgPct = 0.0088,
@@ -288,11 +279,9 @@ public static class TestRecords
         Play = play ?? [new(8, 5), new(6, 5)],
         Depth = depth,
         DepthAbbreviation = depthAbbreviation,
-        DepthRank = depthRank,
         AnalysisMode = analysisMode,
         AnalysisLevel = analysisLevel,
         Equity = equity,
-        EquityLoss = equityLoss,
         WinPct = winPct,
         WinGammonPct = winGammonPct,
         WinBgPct = winBgPct,
@@ -303,7 +292,7 @@ public static class TestRecords
 
     /// <summary>The default descriptive category for a record identified by <paramref name="id"/>.</summary>
     private static DescriptiveData DescriptiveFor(DecisionId id) =>
-        id is XgpDecisionId xgp
-            ? Descriptive(sourceFile: xgp.Filename, isStandardStart: null)
-            : Descriptive(sourceFile: id.Filename);
+        id is XgpDecisionId
+            ? Descriptive(isStandardStart: null)
+            : Descriptive();
 }

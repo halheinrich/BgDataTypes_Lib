@@ -91,8 +91,12 @@ public class DocumentRefusalTests
             d => d["Plays"] = new JsonArray(), typeof(ArgumentException));
         yield return ("a null candidate", typeof(CheckerPlayDecisionData), TestRecords.CheckerPlayData(),
             d => d["Plays"]![0] = null, typeof(ArgumentException));
-        yield return ("a best play past the candidates", typeof(CheckerPlayDecisionData), TestRecords.CheckerPlayData(),
-            d => d["BestPlayIndex"] = 3, typeof(ArgumentException));
+        yield return ("a user play and an unlisted play's error both stated", typeof(CheckerPlayDecisionData), TestRecords.CheckerPlayData(),
+            d => d["UnlistedPlayError"] = 0.1, typeof(ArgumentException));
+        yield return ("a doubler action and its unstated-action error both stated", typeof(CubeDecisionData), TestRecords.CubeData(),
+            d => d["UnstatedDoublerActionError"] = 0.1, typeof(ArgumentException));
+        yield return ("a taker action and its unstated-action error both stated", typeof(CubeDecisionData), TestRecords.CubeData(),
+            d => d["UnstatedTakerActionError"] = 0.1, typeof(ArgumentException));
         yield return ("a negative user play", typeof(CheckerPlayDecisionData), TestRecords.CheckerPlayData(),
             d => d["UserPlayIndex"] = -1, typeof(ArgumentOutOfRangeException));
         yield return ("a doubler half holding a taker action", typeof(CubeDecisionData), TestRecords.CubeData(),
@@ -125,6 +129,33 @@ public class DocumentRefusalTests
             decision: TestRecords.CheckerPlayData(plays: [TestRecords.Candidate(play: [new(24, 12)])])));
     }
 
+    [Fact]
+    public void ACandidatesEquityThatIsNotANumber_IsRefusedAsAJsonException_WhereTheOptionsLetOneIn()
+    {
+        // A NaN reaches the candidate's guard only where the caller's options
+        // read named floating-point literals; the default refuses the token
+        // itself. Either way it is a JsonException, and where it reaches the
+        // guard it carries the guard's exception.
+        var document = JsonNode.Parse(JsonSerializer.Serialize(TestRecords.Candidate(), WirePaths.Context))!.AsObject();
+        document["Equity"] = "NaN";
+        string json = document.ToJsonString();
+
+        foreach (var resolver in new System.Text.Json.Serialization.Metadata.IJsonTypeInfoResolver[]
+                 { new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver(), BgDataTypesJsonContext.Default })
+        {
+            var lenient = new JsonSerializerOptions
+            {
+                TypeInfoResolver = resolver,
+                NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
+            };
+            var ex = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlayCandidate>(json, lenient));
+            Assert.IsType<ArgumentOutOfRangeException>(ex.InnerException);
+
+            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlayCandidate>(
+                json, new JsonSerializerOptions { TypeInfoResolver = resolver }));
+        }
+    }
+
     // ── A play's own rule ────────────────────────────────────────
 
     [Fact]
@@ -147,6 +178,7 @@ public class DocumentRefusalTests
     [InlineData(typeof(CubeDecision))]
     [InlineData(typeof(CheckerPlayDecisionData))]
     [InlineData(typeof(CubeDecisionData))]
+    [InlineData(typeof(PlayCandidate))]
     public void TheSerializersConstructor_IsInternal_AndCodesIsPublicAndParameterless(Type type)
     {
         // The read mode is set only by the constructor the serializer uses,

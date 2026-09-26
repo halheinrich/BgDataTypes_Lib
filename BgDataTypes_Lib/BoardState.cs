@@ -694,45 +694,53 @@ public sealed class BoardState
     /// </para>
     ///
     /// <para>
-    /// Distinct from <c>PositionData.OnRollPipCount</c>, which carries the
-    /// XG-parser-supplied value. This property is a pure derivation from
-    /// <see cref="Points"/> and may not match parser output bit-for-bit if XG
-    /// ever rounds.
+    /// The one pip rule: <see cref="PositionData.OnRollPipCount"/> derives a
+    /// record's count through it too (<see cref="OnRollPips"/>), so no pip
+    /// count is stored anywhere to disagree with its board.
     /// </para>
     /// </summary>
-    public int PipCount
-    {
-        get
-        {
-            int total = 0;
-            for (int i = 1; i <= 25; i++)
-            {
-                int n = _points[i];
-                if (n > 0) total += i * n;
-            }
-            return total;
-        }
-    }
+    public int PipCount => OnRollPips(_points);
 
     /// <summary>
     /// Pip count for the opponent: sum over <c>i ∈ [0..24]</c> of
     /// <c>(25 - i) × |Points[i]|</c> for negative entries. Opponent's bar
     /// (index 0) contributes 25 pips per checker; opponent moves
     /// low-index → high-index in the on-roll storage frame, so distance to
-    /// bear-off from index <c>i</c> is <c>25 - i</c>.
+    /// bear-off from index <c>i</c> is <c>25 - i</c>. The one rule, as
+    /// <see cref="PipCount"/> is (<see cref="OpponentPips"/>).
     /// </summary>
-    public int OpponentPipCount
+    public int OpponentPipCount => OpponentPips(_points);
+
+    /// <summary>
+    /// The on-roll player's pip count of a board of 26 counts in this type's
+    /// layout — the statement of the rule <see cref="PipCount"/> and
+    /// <see cref="PositionData.OnRollPipCount"/> both read.
+    /// </summary>
+    internal static int OnRollPips(ReadOnlySpan<int> points)
     {
-        get
+        int total = 0;
+        for (int i = 1; i <= 25; i++)
         {
-            int total = 0;
-            for (int i = 0; i <= 24; i++)
-            {
-                int n = _points[i];
-                if (n < 0) total += (25 - i) * (-n);
-            }
-            return total;
+            int n = points[i];
+            if (n > 0) total += i * n;
         }
+        return total;
+    }
+
+    /// <summary>
+    /// The opponent's pip count of a board of 26 counts in this type's layout
+    /// — the statement of the rule <see cref="OpponentPipCount"/> and
+    /// <see cref="PositionData.OpponentPipCount"/> both read.
+    /// </summary>
+    internal static int OpponentPips(ReadOnlySpan<int> points)
+    {
+        int total = 0;
+        for (int i = 0; i <= 24; i++)
+        {
+            int n = points[i];
+            if (n < 0) total += (25 - i) * (-n);
+        }
+        return total;
     }
 
     /// <summary>

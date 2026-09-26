@@ -64,26 +64,38 @@ public class NotApplicableTests
     public void UserPlayIndex_IsCheckedWhicheverOfItAndPlaysIsSetSecond()
     {
         // Order-independent: the index set before the list and after it.
+        // Rewritten: the third case held a stated best index to the list; the
+        // best is derived now, and the rule it stood beside is the user's
+        // play against an unlisted play's error — the two say different
+        // things, so neither may be stated with the other, in either order.
         Assert.Throws<ArgumentException>(() => new CheckerPlayDecisionData
         {
             Dice = [3, 1],
             UserPlayIndex = 1,
             Plays = [TestRecords.Candidate()],
-            BestPlayIndex = 0,
         });
         Assert.Throws<ArgumentOutOfRangeException>(() => new CheckerPlayDecisionData
         {
             Dice = [3, 1],
             Plays = [TestRecords.Candidate()],
             UserPlayIndex = 1,
-            BestPlayIndex = 0,
         });
-        Assert.Throws<ArgumentException>(() => new CheckerPlayDecisionData
+        var indexFirst = Assert.Throws<ArgumentException>(() => new CheckerPlayDecisionData
         {
             Dice = [3, 1],
-            BestPlayIndex = 1,
             Plays = [TestRecords.Candidate()],
+            UserPlayIndex = 0,
+            UnlistedPlayError = 0.1,
         });
+        var errorFirst = Assert.Throws<ArgumentException>(() => new CheckerPlayDecisionData
+        {
+            Dice = [3, 1],
+            Plays = [TestRecords.Candidate()],
+            UnlistedPlayError = 0.1,
+            UserPlayIndex = 0,
+        });
+        Assert.Equal("UnlistedPlayError", indexFirst.ParamName);
+        Assert.Equal("UserPlayIndex", errorFirst.ParamName);
     }
 
     // ── A checker play's cube half, and a cube's checker half ─────
@@ -129,10 +141,33 @@ public class NotApplicableTests
     {
         // The empty list was a cube's; and a best index that identifies no
         // candidate was the case the Unknown-mode fallback covered.
+        // Rewritten: the best is derived — the first candidate of the highest
+        // equity — so it is one of the candidates by construction, and the
+        // two out-of-range indices it pinned cannot be stated.
         Assert.Throws<ArgumentException>(() => TestRecords.CheckerPlayData(plays: []));
-        Assert.Throws<ArgumentOutOfRangeException>(() => TestRecords.CheckerPlayData(bestPlayIndex: -1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => TestRecords.CheckerPlayData(bestPlayIndex: 3));
         Assert.Throws<ArgumentException>(() => TestRecords.CheckerPlayData(plays: [TestRecords.Candidate(), null!]));
+
+        var tied = TestRecords.CheckerPlayData(plays:
+        [
+            TestRecords.Candidate(play: [new(8, 5), new(6, 5)], equity: 0.1),
+            TestRecords.Candidate(play: [new(13, 10), new(6, 5)], equity: 0.3),
+            TestRecords.Candidate(play: [new(24, 23), new(13, 10)], equity: 0.3),
+        ]);
+        Assert.Equal(1, tied.BestPlayIndex);
+        Assert.Same(tied.Plays[1], tied.BestPlay);
+        Assert.Equal(0.0, tied.EquityLoss(2));
+    }
+
+    [Fact]
+    public void ACandidatesEquity_IsANumber()
+    {
+        // Added: the best is the highest equity's, which a NaN or an infinity
+        // would leave undefined, so a candidate's equity is finite.
+        foreach (double equity in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+        {
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(() => TestRecords.Candidate(equity: equity));
+            Assert.Equal("Equity", ex.ParamName);
+        }
     }
 
     [Theory]
@@ -251,7 +286,7 @@ public class NotApplicableTests
         // The converter wrote 0 when no user error was recorded; the row's
         // error is the record's, null when none is.
         var row = DecisionRow.From(TestRecords.CheckerPlay(
-            decision: TestRecords.CheckerPlayData(userPlayIndex: null, userPlayError: null)));
+            decision: TestRecords.CheckerPlayData(userPlayIndex: null)));
 
         Assert.Null(row.Error);
         foreach (var (_, options) in WirePaths.Both)

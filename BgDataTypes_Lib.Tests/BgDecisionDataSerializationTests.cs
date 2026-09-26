@@ -68,36 +68,41 @@ public class BgDecisionDataSerializationTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void PlayCandidate_EquityLoss_Zero_RoundTrips()
+    public void CheckerPlay_EquityLoss_OfABestPlay_IsZero_AfterARoundTrip()
     {
-        // Rewritten from PlayCandidate_EquityLoss_DefaultsToZero: the loss is
-        // required now, so a best play states its 0.0.
-        // Best plays carry EquityLoss = 0.0; the test for "is this a best play"
-        // is EquityLoss == 0.0 (or membership-by-equity equivalence). Identifying
-        // a canonical best uses CheckerPlayDecisionData.BestPlayIndex.
-        var original = TestRecords.Candidate(
-            play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
-            equity: -0.142,
-            equityLoss: 0.0);
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+        // Rewritten from PlayCandidate_EquityLoss_Zero_RoundTrips: the loss is
+        // no longer a candidate's member but the decision's derivation — the
+        // candidate's equity against the best's — so it round-trips as the
+        // equities do. EquityLoss(i) == 0 is the test for "is this a best
+        // play"; several candidates may tie, and BestPlayIndex names the first.
+        var original = TestRecords.CheckerPlayData(plays:
+        [
+            TestRecords.Candidate(play: [new(8, 5), new(6, 5)], equity: -0.142),
+            TestRecords.Candidate(play: [new(13, 10), new(6, 5)], equity: -0.142),
+        ]);
+        var restored = JsonSerializer.Deserialize<CheckerPlayDecisionData>(
+            JsonSerializer.Serialize(original, Options), Options)!;
 
-        Assert.Equal("8/5(2) 6/3(2)", restored.Notation);
-        Assert.Equal(original.Equity, restored.Equity);
-        Assert.Equal(0.0, restored.EquityLoss);
+        Assert.Equal(0, restored.BestPlayIndex);
+        Assert.Equal(0.0, restored.EquityLoss(0));
+        Assert.Equal(0.0, restored.EquityLoss(1));
     }
 
     [Fact]
-    public void PlayCandidate_RoundTrip_PopulatedEquityLoss()
+    public void CheckerPlay_EquityLoss_OfAWorsePlay_IsTheEquityGap_AfterARoundTrip()
     {
-        var original = TestRecords.Candidate(
-            play: [new(13, 8), new(13, 11)],
-            equity: -0.187,
-            equityLoss: 0.045);
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
+        // Rewritten from PlayCandidate_RoundTrip_PopulatedEquityLoss: the gap
+        // is derived from the two equities, which are what the wire carries.
+        var original = TestRecords.CheckerPlayData(plays:
+        [
+            TestRecords.Candidate(play: [new(8, 5), new(6, 5)], equity: -0.142),
+            TestRecords.Candidate(play: [new(13, 10), new(6, 5)], equity: -0.187),
+        ]);
+        var restored = JsonSerializer.Deserialize<CheckerPlayDecisionData>(
+            JsonSerializer.Serialize(original, Options), Options)!;
 
-        Assert.Equal(original.EquityLoss, restored.EquityLoss);
+        Assert.Equal(-0.142 - -0.187, restored.EquityLoss(1));
+        Assert.Equal(original.EquityLoss(1), restored.EquityLoss(1));
     }
 
     [Fact]
@@ -210,24 +215,43 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void PlayCandidate_DepthRank_RoundTrip()
+    public void PlayCandidate_DepthRank_IsDerivedFromTheModeAndLevel_AfterARoundTrip()
     {
+        // Rewritten from PlayCandidate_DepthRank_RoundTrip: the rank is not
+        // stated but derived from the mode and level, which the wire carries —
+        // a 3-ply rollout ranks 100 + 30.
         var original = TestRecords.Candidate(
             play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
-            depthRank: 7,
+            analysisMode: AnalysisMode.Rollout,
+            analysisLevel: AnalysisLevel.Ply3,
             equity: -0.142);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
-        Assert.Equal(7, restored.DepthRank);
+        Assert.DoesNotContain("DepthRank", json);
+        Assert.Equal(130, restored.DepthRank);
         Assert.Equal("8/5(2) 6/3(2)", restored.Notation);
     }
 
     [Fact]
-    public void PlayCandidate_DepthRank_AbsentIsRefused()
+    public void PlayCandidate_RetiredDerivedMembers_AreIgnored_TheDerivationsStand()
     {
-        // Rewritten from PlayCandidate_DepthRank_DefaultsToZero.
-        AssertAbsentIsRefused(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "DepthRank");
+        // Rewritten from PlayCandidate_DepthRank_AbsentIsRefused: DepthRank is
+        // no longer a member, so its absence is the wire form. A document
+        // still stating it, or the retired EquityLoss, reads with the member
+        // ignored, as every member this category does not have is — a stated
+        // number never overrides the derivation.
+        var candidate = TestRecords.Candidate(play: [new(8, 5), new(6, 1)]);
+        var document = WirePaths.Document(candidate);
+        document["DepthRank"] = 7;
+        document["EquityLoss"] = 0.5;
+
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            var restored = JsonSerializer.Deserialize<PlayCandidate>(document.ToJsonString(), options)!;
+            Assert.Equal(candidate.DepthRank, restored.DepthRank);
+            Assert.Equal(30, restored.DepthRank);
+        }
     }
 
     [Fact]
@@ -403,22 +427,36 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void CubeDecisionData_DepthRank_RoundTrip()
+    public void CubeDecisionData_DepthRank_IsDerivedFromTheModeAndLevel_AfterARoundTrip()
     {
-        // Rewritten from DecisionData_CubeDepthRank_RoundTrip.
-        var original = TestRecords.CubeData(depthRank: 7);
+        // Rewritten from CubeDecisionData_DepthRank_RoundTrip (itself from
+        // DecisionData_CubeDepthRank_RoundTrip): the rank is derived from the
+        // mode and level the wire carries, never stated — a book rollout ranks
+        // 99 whatever its level.
+        var original = TestRecords.CubeData(
+            analysisMode: AnalysisMode.BookRollout, analysisLevel: AnalysisLevel.XgRoller);
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<CubeDecisionData>(json, Options)!;
 
-        Assert.Equal(7, restored.DepthRank);
+        Assert.DoesNotContain("DepthRank", json);
+        Assert.Equal(99, restored.DepthRank);
     }
 
     [Fact]
-    public void CubeDecisionData_DepthRank_AbsentIsRefused()
+    public void CubeDecisionData_RetiredDepthRank_IsIgnored_TheDerivationStands()
     {
-        // Rewritten from DecisionData_CubeDepthRank_AbsentIsRefused.
-        AssertAbsentIsRefused(TestRecords.CubeData(), "DepthRank");
+        // Rewritten from CubeDecisionData_DepthRank_AbsentIsRefused: DepthRank
+        // is no longer stored, so its absence is the wire form. A document
+        // still stating it reads with it ignored — the serializer knows the
+        // derived member and skips its JSON even where unmapped members are
+        // refused (measured on .NET 10, both paths) — and the derivation
+        // stands: a stated rank never overrides it.
+        var document = WirePaths.Document(TestRecords.CubeData());
+        document["DepthRank"] = 7;
+
+        foreach (var (_, options) in WirePaths.Both)
+            Assert.Equal(30, JsonSerializer.Deserialize<CubeDecisionData>(document.ToJsonString(), options)!.DepthRank);
     }
 
     [Fact]
@@ -558,7 +596,7 @@ public class BgDecisionDataSerializationTests
             dice: [3, 5],
             plays: [
                 TestRecords.Candidate(play: [new(8, 5), new(6, 1)], depth: "3-ply", equity: -0.120),
-                TestRecords.Candidate(play: [new(8, 3), new(6, 1)], depth: "3-ply", equity: -0.165, equityLoss: 0.045)
+                TestRecords.Candidate(play: [new(8, 3), new(6, 1)], depth: "3-ply", equity: -0.165)
             ]);
 
         var json = JsonSerializer.Serialize(original, Options);
@@ -569,7 +607,8 @@ public class BgDecisionDataSerializationTests
         Assert.Equal("8/5 6/1", restored.Plays[0].Notation);
         Assert.Equal("3-ply", restored.Plays[0].Depth);
         Assert.Equal("3-ply", restored.Plays[1].Depth);
-        Assert.Equal(0.045, restored.Plays[1].EquityLoss);
+        // Rewritten: the loss is the decision's derivation from the equities.
+        Assert.Equal(-0.120 - -0.165, restored.EquityLoss(1));
     }
 
     [Fact]
@@ -618,7 +657,6 @@ public class BgDecisionDataSerializationTests
             title: null,
             date: null,
             @event: null,
-            sourceFile: null,
             isStandardStart: null);
 
         var json = JsonSerializer.Serialize(original, Options);
@@ -630,7 +668,6 @@ public class BgDecisionDataSerializationTests
         Assert.Null(restored.Title);
         Assert.Null(restored.Date);
         Assert.Null(restored.Event);
-        Assert.Null(restored.SourceFile);
         Assert.Null(restored.IsStandardStart);
     }
 
@@ -652,28 +689,34 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void DescriptiveData_RoundTrip_WithSourceFile()
+    public void BgDecisionData_SourceFile_IsTheIdsFilename_AfterARoundTrip()
     {
-        var original = TestRecords.Descriptive(
-            matchLength: 7,
-            onRollName: "Mochy",
-            opponentName: "Falafel",
-            sourceFile: "mochy-falafel.xg");
+        // Rewritten from DescriptiveData_RoundTrip_WithSourceFile: the source
+        // file left the descriptive category. The Id stores it and the record
+        // derives it, so the two cannot disagree and the wire states it once.
+        var original = TestRecords.CheckerPlay(id: new XgDecisionId("mochy-falafel.xg", 1, 1, IsCube: false));
+        var json = JsonSerializer.Serialize<BgDecisionData>(original, Options);
+        var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
 
-        var json = JsonSerializer.Serialize(original, Options);
-        var restored = JsonSerializer.Deserialize<DescriptiveData>(json, Options)!;
-
+        Assert.Equal("mochy-falafel.xg", original.SourceFile);
         Assert.Equal("mochy-falafel.xg", restored.SourceFile);
+        Assert.DoesNotContain("SourceFile", json);
+        Assert.Equal("session.xgp", TestRecords.Cube(id: new XgpDecisionId("session.xgp")).SourceFile);
     }
 
     [Fact]
-    public void DescriptiveData_SourceFile_AbsentReadsAsNull()
+    public void DescriptiveData_RetiredSourceFile_IsIgnored_TheIdsStands()
     {
-        // Rewritten from DescriptiveData_SourceFile_DefaultsToNull: the member
-        // is nullable (none recorded), so its absence reads as null.
-        var d = ReadWithout(
-            TestRecords.Descriptive(onRollName: "A", opponentName: "B", sourceFile: "a-b.xg"), "SourceFile");
-        Assert.Null(d.SourceFile);
+        // Rewritten from DescriptiveData_SourceFile_AbsentReadsAsNull: there is
+        // no SourceFile member to be absent, and every decision has one. A
+        // document still stating it in the descriptive category reads with it
+        // ignored, as every member that category does not have is: a stated
+        // name cannot contradict the Id.
+        var document = WirePaths.Document<BgDecisionData>(TestRecords.Cube());
+        document["Descriptive"]!["SourceFile"] = "other.xg";
+
+        foreach (var (_, options) in WirePaths.Both)
+            Assert.Equal("match.xg", JsonSerializer.Deserialize<BgDecisionData>(document.ToJsonString(), options)!.SourceFile);
     }
 
     // -----------------------------------------------------------------------
@@ -700,7 +743,7 @@ public class BgDecisionDataSerializationTests
                 dice: [6, 4],
                 plays: [
                     TestRecords.Candidate(play: [new(24, 18), new(24, 20)], depth: "3-ply", equity: 0.211),
-                    TestRecords.Candidate(play: [new(24, 18), new(13, 9)],  depth: "3-ply", equity: 0.198, equityLoss: 0.013)
+                    TestRecords.Candidate(play: [new(24, 18), new(13, 9)],  depth: "3-ply", equity: 0.198)
                 ]),
             descriptive: TestRecords.Descriptive(
                 matchLength: 5,
@@ -708,8 +751,7 @@ public class BgDecisionDataSerializationTests
                 opponentName: "Bot",
                 title: "Opening Run",
                 date: new DateOnly(2025, 3, 1),
-                @event: "Test Match",
-                sourceFile: "hal-bot.xg"));
+                @event: "Test Match"));
 
         var restored = Assert.IsType<CheckerPlayDecision>(RoundTrip(original));
 
@@ -717,11 +759,11 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.Position.CubeOwner, restored.Position.CubeOwner);
         Assert.Equal(original.Decision.Dice, restored.Decision.Dice);
         Assert.Equal(2, restored.Decision.Plays.Count);
-        Assert.Equal(0.013, restored.Decision.Plays[1].EquityLoss);
+        Assert.Equal(0.211 - 0.198, restored.Decision.EquityLoss(1));
         Assert.Equal(original.Descriptive.OnRollName, restored.Descriptive.OnRollName);
         Assert.Equal(original.Descriptive.Date, restored.Descriptive.Date);
         Assert.Equal(original.Descriptive.Event, restored.Descriptive.Event);
-        Assert.Equal(original.Descriptive.SourceFile, restored.Descriptive.SourceFile);
+        Assert.Equal(original.SourceFile, restored.SourceFile);
     }
 
     // -----------------------------------------------------------------------
@@ -731,22 +773,24 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void CheckerPlayDecisionData_RoundTrip_WithUserPlayError()
     {
-        // Rewritten from DecisionData_RoundTrip_PlayDecision_WithUserPlayError:
-        // the cube errors it asserted null are no members of a checker play.
+        // Rewritten: the user's error is no longer stated beside the candidate
+        // the user played — it is that candidate's loss against the best,
+        // derived from the equities the wire carries, so it round-trips as
+        // they do and is not written.
         var original = TestRecords.CheckerPlayData(
             dice: [3, 5],
             plays: [
                 TestRecords.Candidate(play: [new(8, 5), new(6, 1)], equity: -0.120),
-                TestRecords.Candidate(play: [new(8, 3), new(6, 1)], equity: -0.165, equityLoss: 0.045)
+                TestRecords.Candidate(play: [new(8, 3), new(6, 1)], equity: -0.165)
             ],
-            userPlayIndex: 1,
-            userPlayError: 0.045);
+            userPlayIndex: 1);
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<CheckerPlayDecisionData>(json, Options)!;
 
-        Assert.Equal(0.045, restored.UserPlayError);
+        Assert.Equal(-0.120 - -0.165, restored.UserPlayError);
         Assert.Equal(1, restored.UserPlayIndex);
+        Assert.DoesNotContain("\"UserPlayError\"", json);
         Assert.DoesNotContain("UserDoubleError", json);
         Assert.DoesNotContain("UserTakeError", json);
     }
@@ -754,42 +798,54 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void CubeDecisionData_RoundTrip_WithUserErrors()
     {
-        // Rewritten from DecisionData_RoundTrip_CubeDecision_WithUserErrors:
-        // the play error it asserted null is no member of a cube decision.
+        // Rewritten: the cube errors are the stated actions' losses against
+        // the best actions, derived from the equities — a double where no
+        // double (+0.312) beats double/take (+0.287) loses 0.025, and taking
+        // a double/take under 1 loses nothing — so nothing error-shaped is
+        // written.
         var original = TestRecords.CubeData(
             noDoubleEquity: 0.312,
             doubleTakeEquity: 0.287,
-            userDoubleError: 0.025,
-            userTakeError: 0.011);
+            userDoublerAction: CubeAction.Double,
+            userTakerAction: CubeAction.Take);
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<CubeDecisionData>(json, Options)!;
 
-        Assert.Equal(0.025, restored.UserDoubleError);
-        Assert.Equal(0.011, restored.UserTakeError);
+        Assert.Equal(0.025, restored.UserDoubleError!.Value, 12);
+        Assert.Equal(0.0, restored.UserTakeError);
+        Assert.DoesNotContain("UserDoubleError", json);
+        Assert.DoesNotContain("UserTakeError", json);
         Assert.DoesNotContain("UserPlayError", json);
     }
 
     [Fact]
     public void UserErrors_NullOrAbsent_ReadAsNull_EachKind()
     {
-        // Rewritten from DecisionData_UserErrors_NullOrAbsent_ReadAsNull: each
-        // kind's errors are nullable (not recorded), so a null round-trips and
-        // an absent member reads as null too.
+        // Rewritten from DecisionData_UserErrors_NullOrAbsent_ReadAsNull: the
+        // stored errors are the ones nothing determines (an unlisted play's,
+        // an unstated action's); each is nullable, so a null round-trips and
+        // an absent member reads as null, and with nothing stated to derive
+        // from, the user's errors are null too.
         var play = JsonSerializer.Deserialize<CheckerPlayDecisionData>(
-            JsonSerializer.Serialize(TestRecords.CheckerPlayData(userPlayIndex: null, userPlayError: null), Options), Options)!;
+            JsonSerializer.Serialize(TestRecords.CheckerPlayData(userPlayIndex: null), Options), Options)!;
         var cube = JsonSerializer.Deserialize<CubeDecisionData>(
-            JsonSerializer.Serialize(TestRecords.CubeData(userDoubleError: null, userTakeError: null), Options), Options)!;
+            JsonSerializer.Serialize(TestRecords.CubeData(userDoublerAction: null, userTakerAction: null), Options), Options)!;
 
         Assert.Null(play.UserPlayError);
         Assert.Null(cube.UserDoubleError);
         Assert.Null(cube.UserTakeError);
 
-        Assert.Null(ReadWithout(TestRecords.CheckerPlayData(userPlayError: 0.1), "UserPlayError").UserPlayError);
-        var absent = ReadWithout(TestRecords.CubeData(userDoubleError: 0.2, userTakeError: 0.3),
-            "UserDoubleError", "UserTakeError");
-        Assert.Null(absent.UserDoubleError);
-        Assert.Null(absent.UserTakeError);
+        var playAbsent = ReadWithout(
+            TestRecords.CheckerPlayData(userPlayIndex: null, unlistedPlayError: 0.1), "UnlistedPlayError");
+        Assert.Null(playAbsent.UnlistedPlayError);
+        Assert.Null(playAbsent.UserPlayError);
+        var cubeAbsent = ReadWithout(
+            TestRecords.CubeData(userDoublerAction: null, userTakerAction: null,
+                unstatedDoublerActionError: 0.2, unstatedTakerActionError: 0.3),
+            "UnstatedDoublerActionError", "UnstatedTakerActionError");
+        Assert.Null(cubeAbsent.UserDoubleError);
+        Assert.Null(cubeAbsent.UserTakeError);
     }
 
     // -----------------------------------------------------------------------
@@ -827,8 +883,7 @@ public class BgDecisionDataSerializationTests
             noDoubleEquity: 0.312,
             doubleTakeEquity: 0.287,
             userDoublerAction: CubeAction.NoDouble,
-            userTakerAction: null,
-            userTakeError: null);
+            userTakerAction: null);
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<CubeDecisionData>(json, Options)!;
@@ -856,14 +911,15 @@ public class BgDecisionDataSerializationTests
     {
         // Rewritten from DecisionData_LegacyJsonWithoutUserCubeActions_DeserializesToNull:
         // a cube decision without the two reads both back null — played
-        // action not recorded, never an error.
+        // action not recorded, never an error. The errors were derived from
+        // the actions, so with the actions gone there is no error either.
         var restored = ReadWithout(
             TestRecords.CubeData(
-                noDoubleEquity: 0.312, doubleTakeEquity: 0.287, userDoubleError: 0.025,
+                noDoubleEquity: 0.312, doubleTakeEquity: 0.287,
                 userDoublerAction: CubeAction.Double, userTakerAction: CubeAction.Take),
             "UserDoublerAction", "UserTakerAction");
 
-        Assert.Equal(0.025, restored.UserDoubleError);
+        Assert.Null(restored.UserDoubleError);
         Assert.Null(restored.UserDoublerAction);
         Assert.Null(restored.UserTakerAction);
     }
@@ -886,7 +942,8 @@ public class BgDecisionDataSerializationTests
                 isCrawford: false),
             decision: TestRecords.CheckerPlayData(
                 plays: [TestRecords.Candidate(play: [new(1, 0), new(1, 0)])],
-                userPlayError: 0.034),
+                userPlayIndex: null,
+                unlistedPlayError: 0.034),
             descriptive: TestRecords.Descriptive(onRollName: "Hal"));
 
         Assert.Equal("Hal", data.Player);
@@ -901,22 +958,28 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void BgDecisionData_IDecisionFilterData_CubePlay_UserDoubleError()
     {
+        // Rewritten: the errors are derived from the stated actions — no
+        // double +1.025 against the cash doubles at a loss of 0.025, and
+        // taking double/take +1.011 loses 0.011.
         IDecisionFilterData data = TestRecords.Cube(decision: TestRecords.CubeData(
-            userDoubleError: 0.025,
-            userTakeError: 0.011));
+            noDoubleEquity: 1.025,
+            doubleTakeEquity: 1.011));
 
         Assert.Equal(DecisionKind.Cube, data.Kind);
-        Assert.Equal(0.025, data.FilterError);  // UserDoubleError takes precedence
+        Assert.Equal(0.025, data.FilterError!.Value, 12);  // UserDoubleError takes precedence
     }
 
     [Fact]
     public void BgDecisionData_IDecisionFilterData_CubePlay_UserTakeError()
     {
+        // Rewritten: no doubler action stated, so no doubling error; the take
+        // of double/take +1.011 loses 0.011.
         IDecisionFilterData data = TestRecords.Cube(decision: TestRecords.CubeData(
-            userDoubleError: null,
-            userTakeError: 0.011));
+            noDoubleEquity: 1.025,
+            doubleTakeEquity: 1.011,
+            userDoublerAction: null));
 
-        Assert.Equal(0.011, data.FilterError);  // Falls through to UserTakeError
+        Assert.Equal(0.011, data.FilterError!.Value, 12);  // Falls through to UserTakeError
     }
 
     [Fact]
@@ -1052,19 +1115,21 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void BgDecisionData_AnalysisModeAndLevel_CheckerPlay_UseBestPlayCandidate()
     {
-        // BestPlayIndex deliberately not 0, to pin that derivation indexes by
-        // it rather than taking the first candidate.
+        // The best deliberately not the first candidate, to pin that the
+        // derivation reads the best rather than the first. Rewritten: the best
+        // is the higher equity's, no longer a stated index.
         IDecisionFilterData data = TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(
-            bestPlayIndex: 1,
             plays: [
                 TestRecords.Candidate(
                     play: [new(8, 5), new(6, 5)],
                     analysisMode: AnalysisMode.Evaluation,
-                    analysisLevel: AnalysisLevel.Ply3),
+                    analysisLevel: AnalysisLevel.Ply3,
+                    equity: 0.1),
                 TestRecords.Candidate(
                     play: [new(8, 4), new(6, 5)],
                     analysisMode: AnalysisMode.Rollout,
-                    analysisLevel: AnalysisLevel.Ply1)
+                    analysisLevel: AnalysisLevel.Ply1,
+                    equity: 0.2)
             ]));
 
         Assert.Equal(AnalysisMode.Rollout, data.AnalysisMode);
@@ -1072,17 +1137,23 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void BgDecisionData_AnalysisModeAndLevel_CheckerPlay_OutOfRangeBestPlayIndex_CannotBeBuilt()
+    public void BgDecisionData_AnalysisModeAndLevel_CheckerPlay_TheBestCannotBeStated()
     {
-        // Rewritten from ..._OutOfRangeBestPlayIndex_ReturnUnknown: the
-        // derivation's "no candidate → Unknown" fallback was a stand-in, and
-        // it is gone — a best-play index that identifies no candidate is
-        // refused at construction, so the derivation always reads a real one.
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => TestRecords.CheckerPlayData(
-            bestPlayIndex: 2,
-            plays: [TestRecords.Candidate(play: [new(8, 5), new(6, 1)])]));
+        // Rewritten from ..._OutOfRangeBestPlayIndex_CannotBeBuilt (itself
+        // from ..._ReturnUnknown): the best play is derived from the
+        // candidates' equities, so there is no index to state out of range —
+        // no setter for code, and a document still stating one, in or out of
+        // range, reads with it ignored while the derivation stands. The
+        // derivation always reads a real candidate.
+        Assert.False(typeof(CheckerPlayDecisionData).GetProperty(nameof(CheckerPlayDecisionData.BestPlayIndex))!.CanWrite);
 
-        Assert.Equal("BestPlayIndex", ex.ParamName);
+        foreach (int stated in new[] { 2, 7 })
+        {
+            var document = WirePaths.Document(TestRecords.CheckerPlayData());
+            document["BestPlayIndex"] = stated;
+            foreach (var (_, options) in WirePaths.Both)
+                Assert.Equal(0, JsonSerializer.Deserialize<CheckerPlayDecisionData>(document.ToJsonString(), options)!.BestPlayIndex);
+        }
     }
 
     [Fact]

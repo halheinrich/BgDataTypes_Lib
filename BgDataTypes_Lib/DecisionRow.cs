@@ -82,7 +82,6 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             Error = record.FilterError,
             MatchLength = record.MatchLength,
             Player = record.Player,
-            SourceFile = record.Descriptive.SourceFile,
             IsStandardStart = record.IsStandardStart,
             Roll = roll,
             AnalysisDepth = depth,
@@ -110,8 +109,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// Stable, persistent identifier for this decision within its source file
     /// (<see cref="BgDecisionData.Id"/>). Serialized to JSON via
     /// <see cref="DecisionIdJsonConverter"/>; excluded from CSV (the column set
-    /// is explicit). The one stored place of <see cref="Game"/> and
-    /// <see cref="MoveNumber"/>.
+    /// is explicit). The one stored place of <see cref="Game"/>,
+    /// <see cref="MoveNumber"/> and <see cref="SourceFile"/>.
     /// </summary>
     public required DecisionId Id { get; init; }
 
@@ -144,9 +143,15 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <summary>Name of the player who made the decision.</summary>
     public required string Player { get; init; }
 
-    /// <summary>Originating file name including extension (e.g. "match.xg", "session.xgp"). No directory.
-    /// Null when none was recorded.</summary>
-    public string? SourceFile { get; init; }
+    /// <summary>
+    /// The file the decision came from — its bare name with extension, no
+    /// directory: the <see cref="Id"/>'s <see cref="DecisionId.Filename"/>,
+    /// as <see cref="BgDecisionData.SourceFile"/> is. Derived, so excluded
+    /// from JSON (<see cref="Id"/> is the wire form, and a document still
+    /// stating the retired column reads with it ignored); a CSV column.
+    /// </summary>
+    [JsonIgnore]
+    public string SourceFile => Id.Filename;
 
     /// <summary>
     /// The 1-based number of the game this decision was played in, within
@@ -375,7 +380,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             CsvEscape(MatchScore),
             MatchLength.ToString(invariant),
             CsvEscape(Player),
-            CsvEscape(SourceFile ?? string.Empty),
+            CsvEscape(SourceFile),
             Game?.ToString(invariant),
             MoveNumber?.ToString(invariant),
             Kind,

@@ -10,13 +10,16 @@ namespace BgDataTypes_Lib;
 /// documentation says what <see langword="null"/> means.
 ///
 /// <para>
-/// The decision's game and move number are not here: the record's
-/// <see cref="BgDecisionData.Id"/> carries them, and the record derives
-/// <see cref="BgDecisionData.Game"/> and <see cref="BgDecisionData.MoveNumber"/>
-/// from it — <see langword="null"/> for a standalone position, never a
-/// stamped 1 (halheinrich/backgammon#124). The one game fact that is here,
-/// <see cref="IsStandardStart"/>, is likewise <see langword="null"/> for a
-/// standalone position.
+/// The decision's game and move number are not here, and neither is its
+/// source file: the record's <see cref="BgDecisionData.Id"/> carries all
+/// three, and the record derives <see cref="BgDecisionData.Game"/>,
+/// <see cref="BgDecisionData.MoveNumber"/> and
+/// <see cref="BgDecisionData.SourceFile"/> from it — the game and move
+/// <see langword="null"/> for a standalone position, never a stamped 1
+/// (halheinrich/backgammon#124). A document still stating the retired
+/// <c>SourceFile</c> here reads with it ignored. The one game fact that is
+/// here, <see cref="IsStandardStart"/>, is likewise <see langword="null"/>
+/// for a standalone position.
 /// </para>
 /// </summary>
 public class DescriptiveData
@@ -42,9 +45,6 @@ public class DescriptiveData
 
     /// <summary>Event name (e.g. tournament) as the source file stored it. Null when none was recorded.</summary>
     public string? Event { get; init; }
-
-    /// <summary>Originating file name including extension (e.g. "match.xg", "session.xgp"). No directory.</summary>
-    public string? SourceFile { get; init; }
 
     /// <summary>
     /// Whether the decision's game started from the canonical opening

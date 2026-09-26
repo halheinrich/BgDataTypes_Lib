@@ -47,8 +47,9 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// Filename equality is case-sensitive (record-default semantics on
 /// <see cref="string"/>). The bare filename (with extension, no directory)
-/// is stored — the same form the producer stamps on
-/// <c>DescriptiveData.SourceFile</c>; no full path is retained anywhere.
+/// is stored, and nowhere else: a record's and a row's <c>SourceFile</c> is
+/// derived from it (<see cref="BgDecisionData.SourceFile"/>,
+/// <see cref="DecisionRow.SourceFile"/>). No full path is retained anywhere.
 /// </para>
 ///
 /// <para>

@@ -1,12 +1,15 @@
+using System.Text.Json.Serialization;
+
 namespace BgDataTypes_Lib;
 
 /// <summary>
 /// The position-and-match-state category of a <see cref="BgDecisionData"/>:
 /// the board, the score context, and the cube state at the moment of the
-/// decision. Everything here is producer-supplied from the source file
-/// (see <c>ConvertXgToJson_Lib</c>), not derived. Every member but the
-/// nullable <see cref="IsJacoby"/> is <c>required</c>, per the wire rule
-/// stated on <see cref="BgDataTypesJsonContext"/>.
+/// decision. The stored members are producer-supplied from the source file
+/// (see <c>ConvertXgToJson_Lib</c>); the pip counts are derived from the
+/// board and never stored (no stored copy of a derivable value). Every
+/// stored member but the nullable <see cref="IsJacoby"/> is <c>required</c>,
+/// per the wire rule stated on <see cref="BgDataTypesJsonContext"/>.
 /// </summary>
 public class PositionData
 {
@@ -33,19 +36,37 @@ public class PositionData
     public required int OpponentNeeds { get; init; }
 
     /// <summary>
-    /// On-roll player's pip count as supplied by the producing parser (XG's
-    /// stored value). Distinct from <see cref="BoardState.PipCount"/>, which
-    /// is computed from a live board — use this one when reading parsed
-    /// decisions.
+    /// The on-roll player's pip count, derived from <see cref="Mop"/> by the
+    /// one pip rule (<see cref="BoardState.PipCount"/>'s) on each read, at no
+    /// allocation. Never stored, so it cannot disagree with the board: not on
+    /// the wire, and a document still stating it reads with the member
+    /// ignored, as every retired member of this category does.
     /// </summary>
-    public required int OnRollPipCount { get; init; }
+    [JsonIgnore]
+    public int OnRollPipCount
+    {
+        get
+        {
+            Span<int> counts = stackalloc int[BoardPosition.SlotCount];
+            Mop.CopyTo(counts);
+            return BoardState.OnRollPips(counts);
+        }
+    }
 
     /// <summary>
-    /// Opponent's pip count as supplied by the producing parser (XG's stored
-    /// value). Distinct from <see cref="BoardState.OpponentPipCount"/> — see
-    /// <see cref="OnRollPipCount"/>.
+    /// The opponent's pip count, derived from <see cref="Mop"/> as
+    /// <see cref="OnRollPipCount"/> is (<see cref="BoardState.OpponentPipCount"/>'s rule).
     /// </summary>
-    public required int OpponentPipCount { get; init; }
+    [JsonIgnore]
+    public int OpponentPipCount
+    {
+        get
+        {
+            Span<int> counts = stackalloc int[BoardPosition.SlotCount];
+            Mop.CopyTo(counts);
+            return BoardState.OpponentPips(counts);
+        }
+    }
 
     /// <summary>
     /// Face value of the doubling cube: 1 (start), 2, 4, 8, …
