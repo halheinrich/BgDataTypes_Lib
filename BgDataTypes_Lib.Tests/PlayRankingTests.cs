@@ -303,41 +303,41 @@ public class PlayRankingTests
         Assert.All(depthFirst, play => Assert.True(play.IsScored));
     }
 
-    // ── The player's error ────────────────────────────────────────
+    // ── The player's result ───────────────────────────────────────
 
     [Theory]
-    [InlineData(PlayRanking.Equity, 4, 0.32)]
-    [InlineData(PlayRanking.DepthFirst, 4, 0.25)]
-    [InlineData(PlayRanking.Equity, 0, 0.02)]
-    [InlineData(PlayRanking.DepthFirst, 0, null)]
-    [InlineData(PlayRanking.Equity, 2, 0.0)]
-    [InlineData(PlayRanking.DepthFirst, 2, null)]
-    [InlineData(PlayRanking.Equity, 5, 0.07)]
-    [InlineData(PlayRanking.DepthFirst, 5, 0.0)]
-    public void ThePlayersError_IsTheirCandidatesError_UnderTheRanking_NoneWhenItIsNotScored(
-        PlayRanking ranking, int played, double? error)
+    [InlineData(PlayRanking.Equity, 4, PlayerResultKind.Scored, 0.32)]
+    [InlineData(PlayRanking.DepthFirst, 4, PlayerResultKind.Scored, 0.25)]
+    [InlineData(PlayRanking.Equity, 0, PlayerResultKind.Scored, 0.02)]
+    [InlineData(PlayRanking.DepthFirst, 0, PlayerResultKind.NotScored, null)]
+    [InlineData(PlayRanking.Equity, 2, PlayerResultKind.Scored, 0.0)]
+    [InlineData(PlayRanking.DepthFirst, 2, PlayerResultKind.NotScored, null)]
+    [InlineData(PlayRanking.Equity, 5, PlayerResultKind.Scored, 0.07)]
+    [InlineData(PlayRanking.DepthFirst, 5, PlayerResultKind.Scored, 0.0)]
+    public void ThePlayersResult_IsTheirCandidatesUnderTheRanking_NotScoredWithNoError(
+        PlayRanking ranking, int played, PlayerResultKind kind, double? error)
     {
         var ranked = MixedData(userPlayIndex: played).RankedBy(ranking);
 
         Assert.Same(ranked.ForCandidate(played), ranked.UserPlay);
+        Assert.Equal(kind, ranked.PlayerResult.Kind);
+        Assert.Equal(error is not null, ranked.PlayerResult.TryGetError(out double actual));
         if (error is double expected)
-            Assert.Equal(expected, ranked.UserPlayError!.Value, 12);
-        else
-            Assert.Null(ranked.UserPlayError);
+            Assert.Equal(expected, actual, 12);
     }
 
     [Fact]
-    public void AnUnlistedPlaysError_IsTheAnalysers_UnderEveryRanking_AndNoneRecordedIsNone()
+    public void AnUnlistedPlay_IsUnlisted_UnderEveryRanking_AndNoneRecordedIsNotRecorded()
     {
         foreach (var ranking in Enum.GetValues<PlayRanking>())
         {
             var unlisted = MixedData(unlistedPlayError: 0.07).RankedBy(ranking);
             Assert.Null(unlisted.UserPlay);
-            Assert.Equal(0.07, unlisted.UserPlayError);
+            Assert.Equal(PlayerResult.Unlisted(0.07), unlisted.PlayerResult);
 
             var none = MixedData().RankedBy(ranking);
             Assert.Null(none.UserPlay);
-            Assert.Null(none.UserPlayError);
+            Assert.Equal(PlayerResult.NotRecorded, none.PlayerResult);
         }
     }
 
@@ -353,7 +353,9 @@ public class PlayRankingTests
         var view = record.ViewFor(ranking);
 
         Assert.Equal(ranking, view.Ranking);
-        Assert.Equal(error, view.FilterError!.Value, 12);
+        Assert.Equal(PlayerResultKind.Scored, view.PlayerResult.Kind);
+        Assert.True(view.PlayerResult.TryGetError(out double actual));
+        Assert.Equal(error, actual, 12);
         Assert.Equal(mode, view.AnalysisMode);
         Assert.Equal(level, view.AnalysisLevel);
         Assert.Equal(record.AfterBoardOf(best), view.AfterBestBoard);
@@ -370,50 +372,80 @@ public class PlayRankingTests
         var row = DecisionRow.From(record, ranking);
 
         Assert.Equal(ranking, row.Ranking);
+        Assert.Equal(PlayerResultKind.Scored, row.Result);
         Assert.Equal(error, row.Error!.Value, 12);
         Assert.Equal(depth, row.AnalysisDepth);
         Assert.Equal(equity, row.Equity);
         Assert.Equal(record.AfterBoardOfBest(ranking), row.AfterBestBoard);
-        Assert.EndsWith($",{ranking}", row.ToCsvLine());
+        Assert.EndsWith($",{ranking},Scored", row.ToCsvLine());
     }
 
     [Fact]
-    public void APlayTheRankingDoesNotScore_HasNoErrorInTheViewOrTheRow()
+    public void APlayTheRankingDoesNotScore_IsNotScored_NeverNotRecorded_InTheViewAndTheRow()
     {
-        var record = MixedRecord(userPlayIndex: 0);
+        // The two errorless cases, told apart by type (the umbrella's
+        // third-round ruling): a listed move depth first does not score, and
+        // a decision with no move recorded.
+        var played = MixedRecord(userPlayIndex: 0);
+        var none = MixedRecord();
 
-        Assert.Equal(0.02, record.ViewFor(PlayRanking.Equity).FilterError!.Value, 12);
-        Assert.Null(record.ViewFor(PlayRanking.DepthFirst).FilterError);
-        Assert.Null(DecisionRow.From(record, PlayRanking.DepthFirst).Error);
+        Assert.Equal(PlayerResultKind.Scored, played.ViewFor(PlayRanking.Equity).PlayerResult.Kind);
+        Assert.Equal(PlayerResult.NotScored, played.ViewFor(PlayRanking.DepthFirst).PlayerResult);
+        Assert.Equal(PlayerResult.NotRecorded, none.ViewFor(PlayRanking.DepthFirst).PlayerResult);
+        Assert.NotEqual(PlayerResult.NotScored, PlayerResult.NotRecorded);
+
+        // The row: an empty Error cell for both, and the Result column that
+        // tells them apart, in JSON and in CSV.
+        var notScored = DecisionRow.From(played, PlayRanking.DepthFirst);
+        var notRecorded = DecisionRow.From(none, PlayRanking.DepthFirst);
+        Assert.Null(notScored.Error);
+        Assert.Null(notRecorded.Error);
+        Assert.Equal(PlayerResultKind.NotScored, notScored.Result);
+        Assert.Equal(PlayerResultKind.NotRecorded, notRecorded.Result);
+        Assert.Equal(PlayerResult.NotScored, notScored.PlayerResult);
+        Assert.Equal(PlayerResult.NotRecorded, notRecorded.PlayerResult);
+        Assert.EndsWith(",DepthFirst,NotScored", notScored.ToCsvLine());
+        Assert.EndsWith(",DepthFirst,NotRecorded", notRecorded.ToCsvLine());
     }
 
     [Fact]
     public void ErredByMoreThanX_IsExpressibleUnderEitherRanking_OnViewsAndRowsAlike()
     {
         // The filter's question, asked of views built for each ranking: the
-        // same records answer differently, as the rankings' errors differ.
+        // same records answer differently, as the rankings' errors differ. It
+        // selects scored and unlisted moves above x only — never a move the
+        // ranking does not score, never a decision with no move recorded, even
+        // at an x below every error.
         BgDecisionData[] records =
         [
-            MixedRecord(userPlayIndex: 4),  // 0.32 by equity, 0.25 depth first
-            MixedRecord(userPlayIndex: 0),  // 0.02 by equity, not scored depth first
-            MixedRecord(userPlayIndex: 1),  // 0.07 by equity, 0 depth first
+            MixedRecord(userPlayIndex: 4),  // scored: 0.32 by equity, 0.25 depth first
+            MixedRecord(userPlayIndex: 0),  // scored 0.02 by equity; not scored depth first
+            MixedRecord(userPlayIndex: 1),  // scored: 0.07 by equity, 0 depth first
             TestRecords.Cube(decision: TestRecords.CubeData(
-                userDoublerAction: null, userTakerAction: null, unstatedDoublerActionError: 0.3)),
+                userDoublerAction: null, userTakerAction: null, unstatedDoublerActionError: 0.3)),  // unlisted 0.3
+            MixedRecord(),                  // not recorded
         ];
 
         Assert.Equal([0, 3], ErredByMoreThan(records, PlayRanking.Equity, 0.28));
         Assert.Equal([3], ErredByMoreThan(records, PlayRanking.DepthFirst, 0.28));
         Assert.Equal([0, 2, 3], ErredByMoreThan(records, PlayRanking.Equity, 0.05));
         Assert.Equal([0, 3], ErredByMoreThan(records, PlayRanking.DepthFirst, 0.05));
+        Assert.Equal([0, 1, 2, 3], ErredByMoreThan(records, PlayRanking.Equity, -1.0));
+        Assert.Equal([0, 2, 3], ErredByMoreThan(records, PlayRanking.DepthFirst, -1.0));
 
         foreach (var ranking in Enum.GetValues<PlayRanking>())
-        {
-            int[] fromRows = [.. records.Index().Where(r => DecisionRow.From(r.Item, ranking).Error > 0.05).Select(r => r.Index)];
-            Assert.Equal(ErredByMoreThan(records, ranking, 0.05), fromRows);
-        }
+            foreach (double x in new[] { -1.0, 0.05, 0.28 })
+            {
+                int[] fromRows = [.. records.Index()
+                    .Where(r => DecisionRow.From(r.Item, ranking).PlayerResult.TryGetError(out double error) && error > x)
+                    .Select(r => r.Index)];
+                Assert.Equal(ErredByMoreThan(records, ranking, x), fromRows);
+            }
 
         static int[] ErredByMoreThan(BgDecisionData[] records, PlayRanking ranking, double x) =>
-            [.. records.Index().Where(r => r.Item.ViewFor(ranking).FilterError > x).Select(r => r.Index)];
+            [.. records.Index()
+                .Where(r => r.Item.ViewFor(ranking).PlayerResult.TryGetError(out double error) && error > x)
+                .Select(r => r.Index)];
     }
 
     [Fact]
@@ -426,9 +458,12 @@ public class PlayRankingTests
         foreach (var property in typeof(IDecisionFilterData).GetProperties().Where(p => p.Name != nameof(IDecisionFilterData.Ranking)))
             Assert.Equal(property.GetValue(byEquity), property.GetValue(depthFirst));
 
-        string equityLine = DecisionRow.From(cube, PlayRanking.Equity).ToCsvLine();
-        string depthFirstLine = DecisionRow.From(cube, PlayRanking.DepthFirst).ToCsvLine();
-        Assert.Equal(equityLine[..equityLine.LastIndexOf(',')], depthFirstLine[..depthFirstLine.LastIndexOf(',')]);
+        // Every cell but the Ranking column, the second to last.
+        string[] equityCells = DecisionRow.From(cube, PlayRanking.Equity).ToCsvLine().Split(',');
+        string[] depthFirstCells = DecisionRow.From(cube, PlayRanking.DepthFirst).ToCsvLine().Split(',');
+        Assert.Equal(["Equity", "DepthFirst"], [equityCells[^2], depthFirstCells[^2]]);
+        equityCells[^2] = depthFirstCells[^2] = "";
+        Assert.Equal(equityCells, depthFirstCells);
     }
 
     // ── Built once per ranking ────────────────────────────────────
@@ -448,7 +483,8 @@ public class PlayRankingTests
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 1000; i++)
         {
-            sink += data.RankedBy(PlayRanking.Equity).Best.Error!.Value + data.RankedBy(PlayRanking.DepthFirst).UserPlayError!.Value;
+            sink += data.RankedBy(PlayRanking.Equity).Best.Error!.Value
+                + (data.RankedBy(PlayRanking.DepthFirst).PlayerResult.TryGetError(out double error) ? error : 0.0);
             sink += data.RankedBy(PlayRanking.DepthFirst)[3].Error!.Value + data.RankedBy(PlayRanking.Equity).ForCandidate(5).Error!.Value;
         }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;

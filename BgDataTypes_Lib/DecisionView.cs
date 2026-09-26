@@ -14,18 +14,31 @@ internal sealed class DecisionView : IDecisionFilterData
     {
         _record = record;
         Ranking = ranking;
-        (AnalysisMode, AnalysisLevel, FilterError, Dice, AfterBestBoard, AfterPlayerBoard) = record.Match(
+        (AnalysisMode, AnalysisLevel, PlayerResult, Dice, AfterBestBoard, AfterPlayerBoard) = record.Match(
             play =>
             {
                 var ranked = play.Decision.RankedBy(ranking);
                 var best = ranked.Best;
-                return (best.Candidate.AnalysisMode, best.Candidate.AnalysisLevel, ranked.UserPlayError,
+                return (best.Candidate.AnalysisMode, best.Candidate.AnalysisLevel, ranked.PlayerResult,
                     (DiceRoll?)play.Dice, (BoardPosition?)play.AfterBoardOf(best.Index), play.AfterPlayerBoard);
             },
-            static cube => (cube.Decision.AnalysisMode, cube.Decision.AnalysisLevel,
-                cube.Decision.UserDoubleError ?? cube.Decision.UserTakeError,
+            static cube => (cube.Decision.AnalysisMode, cube.Decision.AnalysisLevel, CubeResult(cube.Decision),
                 (DiceRoll?)null, (BoardPosition?)null, (BoardPosition?)null));
     }
+
+    /// <summary>
+    /// A cube decision's player result: the doubler's, or when the record
+    /// holds none, the taker's — as <see cref="CubeDecisionData.UserDoubleError"/>
+    /// <c>??</c> <see cref="CubeDecisionData.UserTakeError"/> reads, with each
+    /// case named. A stated action is scored with its error; an unstated one
+    /// with an analyser's error is unlisted.
+    /// </summary>
+    private static PlayerResult CubeResult(CubeDecisionData cube) =>
+        cube.UserDoublerAction is CubeAction doubled ? PlayerResult.Scored(cube.DoublerActionError(doubled))
+        : cube.UnstatedDoublerActionError is double unstatedDouble ? PlayerResult.Unlisted(unstatedDouble)
+        : cube.UserTakerAction is CubeAction taken ? PlayerResult.Scored(cube.TakerActionError(taken))
+        : cube.UnstatedTakerActionError is double unstatedTake ? PlayerResult.Unlisted(unstatedTake)
+        : PlayerResult.NotRecorded;
 
     public PlayRanking Ranking { get; }
     public DecisionKind Kind => _record.Kind;
@@ -40,7 +53,7 @@ internal sealed class DecisionView : IDecisionFilterData
     public BoardPosition Board => _record.Board;
     public AnalysisMode AnalysisMode { get; }
     public AnalysisLevel AnalysisLevel { get; }
-    public double? FilterError { get; }
+    public PlayerResult PlayerResult { get; }
     public DiceRoll? Dice { get; }
     public BoardPosition? AfterBestBoard { get; }
     public BoardPosition? AfterPlayerBoard { get; }

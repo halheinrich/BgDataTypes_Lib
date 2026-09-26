@@ -299,7 +299,8 @@ public class DecisionRowSerializationTests
             Assert.Equal(record.Kind, row.Kind);
             Assert.Equal(record.Id, row.Id);
             Assert.Equal(record.Xgid, row.Xgid);
-            Assert.Equal(ranked.UserPlayError, row.Error);
+            Assert.Equal(ranked.PlayerResult, row.PlayerResult);
+            Assert.Equal(PlayerResultKind.Scored, row.Result);
             Assert.Equal(0.1813, row.Error!.Value, 12);
             Assert.Equal(record.MatchLength, row.MatchLength);
             Assert.Equal(record.Player, row.Player);
@@ -518,8 +519,8 @@ public class DecisionRowSerializationTests
 
         Assert.DoesNotContain("AnalysisMode", DecisionRow.CsvHeader);
         Assert.DoesNotContain("AnalysisLevel", DecisionRow.CsvHeader);
-        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
-        Assert.Equal(12, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
+        Assert.Equal(13, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
@@ -585,8 +586,8 @@ public class DecisionRowSerializationTests
         var row = PlayRow(matchLength: 0);
 
         Assert.DoesNotContain("IsMoneyGame", DecisionRow.CsvHeader);
-        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
-        Assert.Equal(12, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
+        Assert.Equal(13, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
@@ -660,23 +661,26 @@ public class DecisionRowSerializationTests
     {
         // Rewritten: the row carries its kind, so the CSV does — a column of
         // its own beside the roll, never inferred from an empty roll — and
-        // the ranking it was built for, last, since the error, depth and
-        // equity before it are that ranking's.
+        // the ranking it was built for, since the error, depth and equity
+        // before it are that ranking's — and last the player's result, which
+        // tells the two empty Error cells apart.
         Assert.Equal(
-            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking",
+            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result",
             DecisionRow.CsvHeader);
     }
 
     [Fact]
-    public void DecisionRow_ToCsvLine_EndsWithTheRankingsToken_EachKind()
+    public void DecisionRow_ToCsvLine_EndsWithTheRankingsToken_ThenTheResults_EachKind()
     {
-        // Added: the declared name, as on the wire.
+        // Added: the declared names, as on the wire.
         foreach (var ranking in Enum.GetValues<PlayRanking>())
         {
-            Assert.EndsWith($",{ranking}", PlayRow(ranking: ranking).ToCsvLine());
-            Assert.EndsWith($",{ranking}", CubeRow(ranking: ranking).ToCsvLine());
+            Assert.EndsWith($",{ranking},Scored", PlayRow(ranking: ranking).ToCsvLine());
+            Assert.EndsWith($",{ranking},Scored", CubeRow(ranking: ranking).ToCsvLine());
+            Assert.EndsWith($",{ranking},Unlisted", PlayRow(error: 0.1, ranking: ranking).ToCsvLine());
+            Assert.EndsWith($",{ranking},NotRecorded", PlayRow(userPlayIndex: null, ranking: ranking).ToCsvLine());
         }
-        Assert.EndsWith(",DepthFirst", PlayRow(ranking: PlayRanking.DepthFirst).ToCsvLine());
+        Assert.EndsWith(",DepthFirst,Scored", PlayRow(ranking: PlayRanking.DepthFirst).ToCsvLine());
     }
 
     [Fact]
@@ -725,7 +729,7 @@ public class DecisionRowSerializationTests
         var row = PlayRow(
             error: 0.12345678, equity: -0.98765432, dice: [6, 3],
             matchLength: 9, onRollNeeds: 3, opponentNeeds: 5);
-        const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity";
+        const string expected = "XGID=x,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity,Unlisted";
 
         var original = CultureInfo.CurrentCulture;
         try
@@ -758,8 +762,8 @@ public class DecisionRowSerializationTests
     {
         var row = PlayRow(board: new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]));
         var line = row.ToCsvLine();
-        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
-        Assert.Equal(12, line.Count(c => c == ','));
+        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
+        Assert.Equal(13, line.Count(c => c == ','));
     }
 
     // -----------------------------------------------------------------------
@@ -845,7 +849,7 @@ public class DecisionRowSerializationTests
         Assert.Equal(3, row.OnRollNeeds);
         Assert.Equal(5, row.OpponentNeeds);
         Assert.False(row.IsCrawford);
-        Assert.Equal(0.023, row.FilterError);
+        Assert.Equal(PlayerResult.Unlisted(0.023), row.PlayerResult);
         Assert.Equal(board, row.Board);
     }
 
@@ -861,7 +865,7 @@ public class DecisionRowSerializationTests
 
         Assert.Equal(DecisionKind.Cube, row.Kind);
         Assert.False(row.IsCrawford);
-        Assert.Equal(0.011, row.FilterError);
+        Assert.Equal(PlayerResult.Unlisted(0.011), row.PlayerResult);
     }
 
     [Fact]
@@ -876,15 +880,46 @@ public class DecisionRowSerializationTests
     }
 
     [Fact]
-    public void DecisionRow_IDecisionFilterData_FilterError_IsNullableDouble()
+    public void DecisionRow_IDecisionFilterData_PlayerResult_NamesItsCase()
     {
-        // Rewritten: the error is nullable on the row as on the record —
-        // present here, none when no user decision is recorded.
-        IDecisionFilterData row = PlayRow(error: 0.045);
-        double? fe = row.FilterError;
-        Assert.NotNull(fe);
-        Assert.Equal(0.045, fe!.Value);
-        Assert.Null(((IDecisionFilterData)PlayRow(error: null, userPlayIndex: null)).FilterError);
+        // Rewritten from ..._FilterError_IsNullableDouble: the row's result
+        // is its Result column with its Error — an unlisted play's error, a
+        // scored candidate's, or none recorded, each by name.
+        var unlisted = PlayRow(error: 0.045);
+        var scored = PlayRow();
+        var none = PlayRow(error: null, userPlayIndex: null);
+
+        Assert.Equal((PlayerResultKind.Unlisted, 0.045), (unlisted.Result, unlisted.Error));
+        Assert.Equal(PlayerResult.Unlisted(0.045), ((IDecisionFilterData)unlisted).PlayerResult);
+        Assert.Equal((PlayerResultKind.Scored, 0.0), (scored.Result, scored.Error));
+        Assert.Equal(PlayerResult.Scored(0.0), ((IDecisionFilterData)scored).PlayerResult);
+        Assert.Equal((PlayerResultKind.NotRecorded, (double?)null), (none.Result, none.Error));
+        Assert.Equal(PlayerResult.NotRecorded, ((IDecisionFilterData)none).PlayerResult);
+    }
+
+    public static TheoryData<string, string, string, double?> ResultAndErrorBreaches => new()
+    {
+        { "a scored result without its error", "CheckerPlay", "Scored", null },
+        { "an unlisted result without its error", "CheckerPlay", "Unlisted", null },
+        { "an error beside no move recorded", "CheckerPlay", "NotRecorded", 0.1 },
+        { "an error beside a move not scored", "CheckerPlay", "NotScored", 0.1 },
+        { "a negative scored error", "CheckerPlay", "Scored", -0.1 },
+        { "a cube row not scored", "Cube", "NotScored", null },
+    };
+
+    [Theory]
+    [MemberData(nameof(ResultAndErrorBreaches))]
+    public void DecisionRow_AResultAndErrorThatDisagree_AreRefused_BothPaths(string because, string kind, string result, double? error)
+    {
+        // Added: a row read from JSON is held to what a projection gives —
+        // the error stated exactly for a scored or unlisted result, a scored
+        // error never negative, and no cube row not scored.
+        var document = WirePaths.Document(kind == "Cube" ? CubeRow() : PlayRow());
+        document["Result"] = result;
+        document["Error"] = error;
+
+        var ex = WirePaths.AssertRefused<DecisionRow>(document.ToJsonString());
+        Assert.False(string.IsNullOrEmpty(ex.Message), because);
     }
 
     // -----------------------------------------------------------------------
@@ -955,8 +990,8 @@ public class DecisionRowSerializationTests
         var row = PlayRow(dice: [6, 3]);
 
         Assert.DoesNotContain("Dice", DecisionRow.CsvHeader);
-        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
-        Assert.Equal(12, row.ToCsvLine().Count(c => c == ','));
+        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
+        Assert.Equal(13, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
@@ -1010,8 +1045,8 @@ public class DecisionRowSerializationTests
     public void DecisionRow_ToCsvLine_AfterBoardsNotInCsv()
     {
         var line = PlayRow().ToCsvLine();
-        // Rewritten: 13 columns with the Kind and Ranking columns → 12 commas.
-        Assert.Equal(12, line.Count(c => c == ','));
+        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
+        Assert.Equal(13, line.Count(c => c == ','));
     }
 
     [Fact]
@@ -1261,7 +1296,7 @@ public class DecisionRowSerializationTests
         // fact.
         Assert.Equal(expectedToken, line.Split(',')[2]);
         Assert.DoesNotContain("IsJacoby", DecisionRow.CsvHeader);
-        Assert.Equal(12, line.Count(c => c == ','));
+        Assert.Equal(13, line.Count(c => c == ','));
         Assert.DoesNotContain("null", line);
     }
 }

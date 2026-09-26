@@ -49,8 +49,9 @@ and `Directory.Packages.props` (Central Package Management — no inline
   that bind a decision's members, and `DocumentRefusal`, the internal one
   spelling of how a rule a document breaks is refused. The ranking —
   `PlayRanking`, and `RankedPlays` of `RankedPlay`, what a checker play
-  derives for one — and the internal `DecisionView`, a record's filter view
-  for one ranking. `DecisionRow` is the flat projection for CSV/JSON
+  derives for one — the player's result, `PlayerResult` and
+  `PlayerResultKind`, and the internal `DecisionView`, a record's filter
+  view for one ranking. `DecisionRow` is the flat projection for CSV/JSON
   export.
 - **Identity** — two distinct keys, deliberately not one. `DecisionId`
   (with `DecisionIdJsonConverter`) is the file-navigation identity: *where
@@ -156,7 +157,7 @@ the reflection path (pinned by `BgDataTypesJsonContextTests`), every
 bundled converter honored. Its `[JsonSerializable]` roots are the wire
 units — the document roots (`BgDecisionData`, `DecisionRow`) and the
 converter-bearing token types (`Play`, `Move`, `DecisionId`, `ProblemKey`,
-`DiceRoll`, `BoardPosition`, the eight enums — `CubeClaim` declared ahead of its first
+`DiceRoll`, `BoardPosition`, the nine enums — `CubeClaim` declared ahead of its first
 embedding document so the claim vocabulary is born source-genned and
 downstream contexts chain rather than re-cover it); composite parts ride
 the generator's graph walk. Two converters stop that walk, so what lies
@@ -351,7 +352,7 @@ asked for it exhaustively). Derived, never stored:
 | `PlayCandidate.DepthRank`, `CubeDecisionData.DepthRank` | `AnalysisMode` × `AnalysisLevel`, by the grid the producer used (internal `DepthTaxonomy`, moved here unchanged) |
 | `PlayCandidate.Depth`, `DepthAbbreviation`, and the cube analysis's | the typed depth facts — `AnalysisMode`, `AnalysisLevel`, `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — by the producer's grammar, moved here unchanged (`DepthTaxonomy`; see "The depth as typed facts") |
 | `RankedBy(ranking)`: the order, `Best`, each `RankedPlay.Error` and `IsScored` | the candidates' equities and, under depth first, their depth ranks (see "The ranking") |
-| `RankedBy(ranking).UserPlayError` | the played candidate's error when the ranking scores it, none when it does not; otherwise the stored `UnlistedPlayError` |
+| `RankedBy(ranking).PlayerResult` | the played candidate: scored with its error, or not scored; otherwise unlisted with the stored `UnlistedPlayError`, or not recorded |
 | `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus: 16,932 of 16,959 doubler errors within 1e-5, the rest within 1e-4; all 830 taker errors equal) |
 | `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures matched within 9.5e-7 (273,592 candidates) and 2.4e-7 (17,158 cube decisions, each half) |
 | earlier: `Game`, `MoveNumber` (the `Id`), the after-boards (the play rule), `Notation` (the play), `Dice` (the roll), `MatchScore`, `IsMoneyGame` | — |
@@ -469,10 +470,12 @@ everything the ruling makes a ranking's, as a `RankedPlays`
   depth, so a higher equity is always at another, and the depth condition
   SPEC-scoring §2a states is implied — pinned as a property (every unscored
   candidate is at a different depth from the best);
-- `UserPlay` and `UserPlayError`, the player's error: the played
-  candidate's error when the ranking scores it, **none (`null`) when it
-  does not**, and for a play outside the candidates the stored
-  `UnlistedPlayError`, which no ranking changes.
+- `UserPlay`, and `PlayerResult`, the player's result, each case by name
+  (see "The player's result"): `Scored` with the played candidate's error
+  when the ranking scores it, **`NotScored`, with no error, when it does
+  not**, `Unlisted` with the stored `UnlistedPlayError` for a play outside
+  the candidates (no ranking changes it), and `NotRecorded` when no play is
+  recorded.
 
 `ForCandidate(index)` finds a candidate by its stored index. Each ranking
 is built on its first request and cached (published once, thread-safe), so
@@ -492,7 +495,7 @@ user's.
 
 **The filter view and the row are each built for one ranking.** A record is
 no longer itself an `IDecisionFilterData`: `BgDecisionData.ViewFor(ranking)`
-builds the view, whose `Ranking` states the ranking its `FilterError`,
+builds the view, whose `Ranking` states the ranking its `PlayerResult`,
 `AnalysisMode`, `AnalysisLevel` and `AfterBestBoard` are derived under
 (derived once, when the view is built). `DecisionRow.From(record, ranking)`
 takes those columns from the view and stores the ranking as a column. So
@@ -500,6 +503,35 @@ the filter's "erred by more than x" is expressible under either ranking:
 filter views, or rows, built for it. A cube decision's members do not
 depend on the ranking. The members every kind has stay forwarded publicly
 on the record (`Player`, `MatchLength`, `IsMoneyGame`, …).
+
+### The player's result
+
+**"Not scored" and "not recorded" are told apart by type, never by one
+`null`** (the umbrella's third-round ruling). Under depth first, both a
+listed move the ranking does not score and a decision with no move
+recorded have no error; one `null` could not say which. `PlayerResult` is
+a readonly struct naming its case, `PlayerResultKind`:
+
+| Case | Meaning | Error |
+|---|---|---|
+| `NotRecorded` (the zero value, and `default`) | no player move recorded | none |
+| `NotScored` | a listed move the ranking does not score (checker plays, depth first) | none |
+| `Scored` | a move this library scores: a listed play the ranking scores, a stated cube action | finite, never negative |
+| `Unlisted` | a move the record does not state: a play outside the candidates, an unstated cube action | the analyser's, as stated |
+
+The error is read only where it exists: `TryGetError(out error)` yields it
+for `Scored` and `Unlisted`, and `Match(notRecorded, notScored, scored,
+unlisted)` hands it to exactly those branches. The four named factories
+build it; `Scored` refuses a negative or non-finite error. The filter's
+"erred by more than x" is `result.TryGetError(out var e) && e > x`:
+scored and unlisted moves above x, never a move not scored, never a
+decision with nothing recorded. `RankedPlays.PlayerResult` is a checker
+play's under a ranking; `IDecisionFilterData.PlayerResult` is the view's —
+for a cube decision, the doubler's result or, when the record holds none,
+the taker's (as `UserDoubleError ?? UserTakeError` reads), never
+`NotScored`. The old `RankedPlays.UserPlayError` and
+`IDecisionFilterData.FilterError` are gone, so a stale use fails to
+compile.
 
 Whether a play is correct (its error exactly 0) stays with consumers; the
 not-scored classification is this library's.
@@ -512,6 +544,7 @@ not-scored classification is this library's.
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
 | `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the doubler half of a cube answer at the claim layer (SPEC-scoring §1/§3, `halheinrich/backgammon#86`), serializes as string. A claim about the position, not a board action: `NoDouble` and `TooGood` share the identical board action (`CubeAction.NoDouble`), and `CubeClaimExtensions.ToCubeAction` is the single spelling of that collapse. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, ruled claim-layer only. Declaration order is the ruled claim axis {No Double, Double, Too Good}, what a UI offering the claims renders. No reverse action→claim mapping exists: the claim is underdetermined by the action alone; the only equities→claim door is `CubeDecisionData.BestDoublerClaim`. |
 | `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — "not recorded", which a producer states; the members carrying the pair are required on the wire (see "Absence on the wire"), so JSON lacking them is refused rather than read as `Unknown`, while the retired flat class's property beside them is still ignored on read. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). The rollout trial count, the book edition and an unrecognized level's raw code are typed facts beside the pair (see "The depth as typed facts"). |
+| `PlayerResultKind` | enum: `NotRecorded`, `NotScored`, `Scored`, `Unlisted` — the case of a player's result (`PlayerResult.Kind`, `DecisionRow.Result`), serializes as its string token through the strict converter. `NotRecorded` is the zero value. Every member carries a `[Description]` label. See "The player's result". |
 | `PlayRanking` | enum: `Equity`, `DepthFirst` — the ranking of a checker play's candidates, the one definition of which play is best (SPEC-scoring §2a, `halheinrich/backgammon#282`); serializes as its string token through the strict converter. `Equity` is the default and the zero value. Every member carries a `[Description]` label ("Equity", "Depth first"). See "The ranking". |
 | `AnalysisLevel` | enum: `Unknown`, `Ply1`, `Ply2`, `Ply3Red`, `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`, `Ply6`, `Ply7`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — "not recorded", a value the producer states, never an absent member (see `AnalysisMode`). **Declaration order is contractual** (ruled 2026-08-28 on the authority of XG's own analysis-level menu, amended the same day): every member after `Unknown` ascends in rigor, and the ply and Roller families *interleave* rather than forming two blocks — `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`. Reordering, or inserting out of rigor order, is a breaking change; live consumers read the order (the diagram's level floor, the filter-panel and quiz level dropdowns). `Unknown` sits *outside* the rigor scale — not "least rigorous" but "not recorded": never excluded by a floor, never offered as a threshold; head-of-list is the zero-value requirement, not a rank. `DepthRank` (a candidate's and the cube analysis's) remains the ordering surface across the mode × level *pair*. Every member carries a `[Description]` display label. `Ply3Red` is XG's "3-ply Red" — its own member between `Ply2` and `Ply3` as of the same ruling, superseding the earlier collapse into `Ply3` as a label variant. |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
@@ -1181,8 +1214,8 @@ Design points a maintainer needs before touching it:
   and error, which a ranking decides, so the base is not itself a view:
   `ViewFor(ranking)` builds one (internal `DecisionView`), deriving per kind
   through `Match` — a checker play's best candidate under the ranking and
-  its `UserPlayError`; a cube's analysis and `UserDoubleError ??
-  UserTakeError`. The checker play's own filter members — `Dice` and the
+  its `PlayerResult`; a cube's analysis and its result, the doubler's or
+  failing that the taker's. The checker play's own filter members — `Dice` and the
   after-boards — are `null` in a cube's view and on neither the base's nor
   the cube's surface; `CheckerPlayDecision` exposes them (the best
   after-board for a ranking). `Game` and `MoveNumber` derive from `Id` (see
@@ -1256,10 +1289,19 @@ structural). Carries its own CSV methods (`ToCsvLine`, `CsvHeader`, private
 
 **It carries the kind** (`Kind`, a required column, written first), and the
 other kind's columns are empty, never zero: a cube row's `Roll` and
-after-boards are `null` — empty CSV cells. `Error` is the record's
-`FilterError` under the row's ranking, `null` when no user decision is
-recorded or the ranking does not score the player's move (the 0.0 the
-producer wrote was a stand-in). `Game`, `MoveNumber` derive from `Id`, and
+after-boards are `null` — empty CSV cells. The player's result is two
+columns: `Result`, required, its case (`PlayerResultKind`), and `Error`,
+stated exactly when the case is `Scored` or `Unlisted` — otherwise `null`,
+an empty CSV cell, never the 0.0 the producer wrote as a stand-in; which of
+the errorless cases it is, `Result` says. `PlayerResult` is the two typed,
+`[JsonIgnore]`d, as `Dice` is `Roll`'s. Read back, a row is held to their
+agreement: the error stated exactly for `Scored` and `Unlisted`, a scored
+error never negative, no cube row `NotScored`. Which check reports first
+on a document missing a required column differs by path (measured on
+.NET 10): the generated context checks required members before the row's
+read-back check; the reflection path runs the read-back check first, which
+sees the absent member as its default, so a rule can refuse it first. It is
+refused either way. `Game`, `MoveNumber` derive from `Id`, and
 `IsStandardStart` is `null` for a standalone position
 (`halheinrich/backgammon#124`). `Roll` is the checker play's dice in rolled
 order as a two-digit integer; `Dice` is its canonical form, `[JsonIgnore]`d
@@ -1280,10 +1322,12 @@ refused whole.
 The three boards and `AnalysisMode` / `AnalysisLevel` serialize to JSON but
 are **excluded from CSV**; `AnalysisDepth` remains the CSV depth column.
 The CSV header is
-`Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking`:
+`Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result`:
 the `Kind` column is new with the kinds, beside the roll it governs; the
 `Ranking` column (its token, `Equity` or `DepthFirst`) is new with the
-ranking, last.
+ranking; the `Result` column (`NotRecorded`, `NotScored`, `Scored`,
+`Unlisted`) is new with the player's result, last — appended, so no
+earlier column moves.
 
 **Culture-invariant.** `ToCsvLine` writes every number with the invariant
 culture, whatever the ambient one — `Error` and `Equity` as `G6` with a
@@ -1501,7 +1545,7 @@ public interface IDecisionFilterData             // a view built for one ranking
     bool? IsStandardStart { get; }                // false for non-standard openings; null for a standalone position
     AnalysisMode AnalysisMode { get; }            // cube analysis for cubes, the ranking's best play for checkers
     AnalysisLevel AnalysisLevel { get; }          // level axis of the same analysis AnalysisMode reports
-    double? FilterError { get; }                  // ≥ 0 under Ranking; null when none recorded or not scored
+    PlayerResult PlayerResult { get; }            // under Ranking: NotRecorded, NotScored, Scored(e), Unlisted(e)
     BoardPosition Board { get; }                  // on-roll frame, see Mop layout
 
     // The checker play's own members: null for a cube decision.
@@ -1587,12 +1631,26 @@ public sealed class CheckerPlayDecisionData    // unmapped members refused
 
 public enum PlayRanking { Equity, DepthFirst }  // Equity the default; strict string token
 
+public enum PlayerResultKind { NotRecorded, NotScored, Scored, Unlisted }  // NotRecorded the zero value; strict token
+
+public readonly struct PlayerResult : IEquatable<PlayerResult>   // see "The player's result"
+{
+    public PlayerResultKind Kind { get; }
+    public static PlayerResult NotRecorded { get; }           // = default
+    public static PlayerResult NotScored { get; }
+    public static PlayerResult Scored(double error);          // ArgumentOutOfRangeException: negative or not finite
+    public static PlayerResult Unlisted(double error);        // the analyser's number, as stated
+    public bool TryGetError(out double error);                // true exactly for Scored and Unlisted
+    public TResult Match<TResult>(Func<TResult> notRecorded, Func<TResult> notScored,
+                                  Func<double, TResult> scored, Func<double, TResult> unlisted);
+}
+
 public sealed class RankedPlays : IReadOnlyList<RankedPlay>   // the ranking's order; no public constructor
 {
     public PlayRanking Ranking { get; }
     public RankedPlay Best { get; }                           // this[0]
     public RankedPlay? UserPlay { get; }                      // null when the user's play is not a candidate
-    public double? UserPlayError { get; }                     // scored: its Error; not scored: null; unlisted: UnlistedPlayError
+    public PlayerResult PlayerResult { get; }                 // Scored(its Error), NotScored, Unlisted(UnlistedPlayError), NotRecorded
     public RankedPlay this[int position] { get; }             // ArgumentOutOfRangeException outside
     public RankedPlay ForCandidate(int index);                // by stored index
 }
@@ -1655,8 +1713,10 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     public required DecisionKind Kind { get; init; }          // written first
     public required DecisionId Id { get; init; }
-    public required PlayRanking Ranking { get; init; }        // the ranking the row was built for; the last CSV column
-    public double? Error { get; init; }                       // the record's FilterError under Ranking
+    public required PlayRanking Ranking { get; init; }        // the ranking the row was built for; a CSV column
+    public double? Error { get; init; }                       // the result's error; stated exactly for Scored and Unlisted
+    public required PlayerResultKind Result { get; init; }    // the result's case; the last CSV column
+    [JsonIgnore] public PlayerResult PlayerResult { get; }    // Result with Error, typed
     public bool? IsStandardStart { get; init; }               // null for a standalone position
     public int? Roll { get; init; }                           // rolled dice, e.g. 13; null for a cube
     public required BoardPosition Board { get; init; }        // on-roll frame
@@ -1667,7 +1727,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     [JsonIgnore] public string SourceFile { get; }            // Id.Filename; a CSV column
     [JsonIgnore] public DiceRoll? Dice { get; }               // canonical Roll
     [JsonIgnore] public string MatchScore { get; }            // computed from needs/Crawford/length/Jacoby
-    public static string CsvHeader { get; }                   // …,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking
+    public static string CsvHeader { get; }                   // …,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result
     public string ToCsvLine();                                // null → empty cell; numbers invariant-culture
     // Read from JSON, a row is checked whole (OnDeserialized): the kind's
     // columns present and the other's empty, the roll two faces, and
@@ -2301,7 +2361,7 @@ measure" is not a valid comparison on this hardware.
   `EnumLabel.ToLabel`) throw on a member without one.
 - **`IDecisionFilterData.Dice` is null for cube decisions, and never
   malformed.** Null means "no dice apply" (a cube is offered before the roll
-  — the `FilterError` null-when-inapplicable convention), never "data was
+  — the null-when-inapplicable convention), never "data was
   bad": a checker play's roll is two faces 1–6 by construction
   (`CheckerPlayDecisionData.Dice`), and a row's `Roll` is refused on read
   unless it is two die faces. Both derivations are `[JsonIgnore]`d; the

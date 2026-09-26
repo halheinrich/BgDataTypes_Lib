@@ -20,7 +20,7 @@ namespace BgDataTypes_Lib;
 ///
 /// <para>
 /// <b>Built for one ranking.</b> Which play is best, and so a checker play's
-/// error, depth, mode, level, equity and best after-board, is a ranking's
+/// error and result, depth, mode, level, equity and best after-board, is a ranking's
 /// (SPEC-scoring §2a, halheinrich/backgammon#282). A row is built for one
 /// <see cref="PlayRanking"/>, takes those columns from it, and states it
 /// (<see cref="Ranking"/>); an export under the other ranking is a second
@@ -89,7 +89,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             Id = record.Id,
             Xgid = record.Xgid,
             Ranking = ranking,
-            Error = view.FilterError,
+            Result = view.PlayerResult.Kind,
+            Error = view.PlayerResult.TryGetError(out double error) ? error : null,
             MatchLength = record.MatchLength,
             Player = record.Player,
             IsStandardStart = record.IsStandardStart,
@@ -129,23 +130,33 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     /// <summary>
     /// The ranking the row was built for (<see cref="PlayRanking"/>): a
-    /// checker play's <see cref="Error"/>, <see cref="Equity"/>,
-    /// <see cref="AnalysisDepth"/>, <see cref="AnalysisMode"/>,
-    /// <see cref="AnalysisLevel"/> and <see cref="AfterBestBoard"/> are that
-    /// ranking's. A cube row's columns do not depend on it; it still states
-    /// the ranking it was exported under. The last CSV column.
+    /// checker play's <see cref="Error"/>, <see cref="Result"/>,
+    /// <see cref="Equity"/>, <see cref="AnalysisDepth"/>,
+    /// <see cref="AnalysisMode"/>, <see cref="AnalysisLevel"/> and
+    /// <see cref="AfterBestBoard"/> are that ranking's. A cube row's columns
+    /// do not depend on it; it still states the ranking it was exported
+    /// under. A CSV column, before <see cref="Result"/>.
     /// </summary>
     public required PlayRanking Ranking { get; init; }
 
     /// <summary>
-    /// The user's error (≥ 0) — the record's <see cref="IDecisionFilterData.FilterError"/>
-    /// under <see cref="Ranking"/>: a checker play's error against the
-    /// ranking's best play, a cube decision's doubling error or, failing that,
-    /// its take error. <see langword="null"/> when no user decision is
-    /// recorded, or the ranking does not score the player's move — an empty
-    /// CSV cell, never 0.
+    /// The player's error under <see cref="Ranking"/>, stated exactly when
+    /// <see cref="Result"/> is <see cref="PlayerResultKind.Scored"/> (never
+    /// negative) or <see cref="PlayerResultKind.Unlisted"/> — the record's
+    /// <see cref="IDecisionFilterData.PlayerResult"/>'s error. Otherwise
+    /// <see langword="null"/>, an empty CSV cell, never 0: which of the two
+    /// errorless cases it is, <see cref="Result"/> says.
     /// </summary>
     public double? Error { get; init; }
+
+    /// <summary>
+    /// Which case the player's result is under <see cref="Ranking"/>
+    /// (<see cref="PlayerResultKind"/>): the column that tells a move the
+    /// ranking does not score from a decision with no move recorded, which
+    /// both leave <see cref="Error"/> empty. A cube row's is never
+    /// <see cref="PlayerResultKind.NotScored"/>. The last CSV column.
+    /// </summary>
+    public required PlayerResultKind Result { get; init; }
 
     /// <summary>Match length (0 = unlimited/money).</summary>
     public required int MatchLength { get; init; }
@@ -343,9 +354,18 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     //  IDecisionFilterData
     // -----------------------------------------------------------------------
 
-    /// <summary>The user's error (≥ 0), or <see langword="null"/> when none is recorded; <see cref="Error"/>.</summary>
+    /// <summary>
+    /// The player's result, typed: <see cref="Result"/> with
+    /// <see cref="Error"/>, which a row read from JSON is held to agree with.
+    /// </summary>
     [JsonIgnore]
-    public double? FilterError => Error;
+    public PlayerResult PlayerResult => Result switch
+    {
+        PlayerResultKind.NotScored => PlayerResult.NotScored,
+        PlayerResultKind.Scored => PlayerResult.Scored(Error!.Value),
+        PlayerResultKind.Unlisted => PlayerResult.Unlisted(Error!.Value),
+        _ => PlayerResult.NotRecorded,
+    };
 
     // -----------------------------------------------------------------------
     //  Read back whole
@@ -374,6 +394,12 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
                 "A checker-play row states the board its best play leaves.",
             DecisionKind.Cube when Roll is not null || AfterBestBoard is not null || AfterPlayerBoard is not null =>
                 "A cube row's checker-play columns are empty: Roll, AfterBestBoard and AfterPlayerBoard.",
+            DecisionKind.Cube when Result == PlayerResultKind.NotScored =>
+                "A cube row's result is never NotScored: a ranking scores checker plays only.",
+            _ when (Result is PlayerResultKind.Scored or PlayerResultKind.Unlisted) != Error.HasValue =>
+                $"A row's Error is stated exactly when its Result is Scored or Unlisted; the Result is {Result}.",
+            _ when Result == PlayerResultKind.Scored && !(double.IsFinite(Error!.Value) && Error.Value >= 0.0) =>
+                $"A scored error is a finite number, never negative (got {Error}).",
             _ when !StatedText.Holds(Xgid) => StatedText.Message(nameof(Xgid)),
             _ when !StatedText.Holds(Player) => StatedText.Message(nameof(Player)),
             _ when !StatedText.Holds(AnalysisDepth) => StatedText.Message(nameof(AnalysisDepth)),
@@ -395,7 +421,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     /// <summary>CSV header row matching the column order of <see cref="ToCsvLine"/>.</summary>
     public static string CsvHeader =>
-        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking";
+        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result";
 
     /// <summary>
     /// Formats this row as a CSV line (no trailing newline). A
@@ -421,7 +447,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             Roll?.ToString(invariant),
             CsvEscape(AnalysisDepth),
             Equity.ToString("G6", invariant),
-            Ranking);
+            Ranking,
+            Result);
     }
 
     /// <summary><paramref name="value"/> as a CSV cell; <see langword="null"/> (none recorded) is an empty one.</summary>

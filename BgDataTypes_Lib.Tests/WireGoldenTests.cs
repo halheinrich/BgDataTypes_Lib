@@ -150,10 +150,10 @@ public class WireGoldenTests
         """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"OnRollNeeds":3,"OpponentNeeds":5,"CubeSize":2,"CubeOwner":"OnRoll","IsCrawford":false,"IsJacoby":false},"Descriptive":{"MatchLength":7,"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","RolloutTrials":12960,"BookEdition":"V2","UnrecognizedLevelCode":null,"NoDoubleEquity":0.75,"DoubleTakeEquity":0.5,"CubelessNoDoubleEquity":0.375,"CubelessDoubleTakeEquity":0.625,"WinPctAfterNoDouble":0.51,"GammonPctAfterNoDouble":0.12,"BgPctAfterNoDouble":0.013,"LoseGammonPctAfterNoDouble":0.14,"LoseBgPctAfterNoDouble":0.015,"WinPctAfterDoubleTake":0.52,"GammonPctAfterDoubleTake":0.16,"BgPctAfterDoubleTake":0.017,"LoseGammonPctAfterDoubleTake":0.18,"LoseBgPctAfterDoubleTake":0.019,"ProbOfOpponentErrorJustifyingDouble":0.2,"UserDoublerAction":"Double","UserTakerAction":null,"UnstatedDoublerActionError":null,"UnstatedTakerActionError":0.04}}""";
 
     private const string CheckerPlayRowGolden =
-        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Ranking":"Equity","Error":0.125,"MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
+        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=golden","Ranking":"Equity","Error":0.125,"Result":"Scored","MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
 
     private const string CubeRowGolden =
-        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Ranking":"DepthFirst","Error":0.25,"MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":null,"AnalysisDepth":"Book V2: 12960 trials. 4-ply","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.75,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
+        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Ranking":"DepthFirst","Error":0.25,"Result":"Scored","MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":null,"AnalysisDepth":"Book V2: 12960 trials. 4-ply","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.75,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
 
     public static TheoryData<string> Kinds => ["CheckerPlay", "Cube"];
 
@@ -362,7 +362,7 @@ public class WireGoldenTests
         Assert.Equal(previous.RootElement.GetProperty("Descriptive").GetProperty("SourceFile").GetString(), play.SourceFile);
         var byEquity = play.Decision.RankedBy(PlayRanking.Equity);
         Assert.Equal(decision.GetProperty("BestPlayIndex").GetInt32(), byEquity.Best.Index);
-        Assert.Equal(decision.GetProperty("UserPlayError").GetDouble(), byEquity.UserPlayError);
+        Assert.Equal(PlayerResult.Scored(decision.GetProperty("UserPlayError").GetDouble()), byEquity.PlayerResult);
         Assert.Equal(decision.GetProperty("Plays")[1].GetProperty("EquityLoss").GetDouble(), byEquity.ForCandidate(1).Error);
         Assert.Equal(decision.GetProperty("Plays")[0].GetProperty("LosePct").GetDouble(), play.Decision.Plays[0].LosePct!.Value, 12);
         Assert.Equal(decision.GetProperty("LosePctAfterNoDouble").GetDouble(), FullCubeRecord().Decision.LosePctAfterNoDouble, 12);
@@ -413,12 +413,18 @@ public class WireGoldenTests
     public void OldShapeRow_IsRefused_AsAJsonException_BothPaths()
     {
         // Added: the retired row shape states no kind, and the kind is a
-        // required column — never read off an empty or zero roll.
+        // required column — never read off an empty or zero roll. It states
+        // no result either, beside an error. Which check reports first
+        // differs by path (measured on .NET 10): the generated context checks
+        // required members first and names the missing Kind; the reflection
+        // path runs the row's read-back check first, which sees an absent
+        // member as its default and refuses the error beside no result.
+        // Which rule reports is incidental; the refusal is the pin, and the
+        // absence walk pins each missing column on its own.
         foreach (var options in new[] { ReflectionOptions, ContextOptions })
         {
             var ex = Record.Exception(() => JsonSerializer.Deserialize<DecisionRow>(RowGoldenBeforeKinds, options));
             Assert.True(ex is JsonException, ex?.GetType().Name ?? "loaded");
-            Assert.Contains("Kind", ex!.Message);
         }
     }
 }

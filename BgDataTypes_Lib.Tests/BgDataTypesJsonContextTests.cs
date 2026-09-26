@@ -378,7 +378,7 @@ public class BgDataTypesJsonContextTests
             typeof(DecisionRow), typeof(DecisionKind),
             typeof(Play), typeof(Move), typeof(DecisionId),
             typeof(ProblemKey), typeof(DiceRoll), typeof(BoardPosition),
-            typeof(AnalysisMode), typeof(AnalysisLevel), typeof(BookEdition), typeof(PlayRanking),
+            typeof(AnalysisMode), typeof(AnalysisLevel), typeof(BookEdition), typeof(PlayRanking), typeof(PlayerResultKind),
             typeof(CubeAction), typeof(CubeClaim), typeof(CubeOwner)
         ];
 

@@ -12,7 +12,7 @@ namespace BgDataTypes_Lib;
 /// <remarks>
 /// <b>A view is built for one ranking</b> (SPEC-scoring §2a,
 /// halheinrich/backgammon#282). The members that say best or error —
-/// <see cref="FilterError"/>, <see cref="AnalysisMode"/>,
+/// <see cref="PlayerResult"/>, <see cref="AnalysisMode"/>,
 /// <see cref="AnalysisLevel"/>, <see cref="AfterBestBoard"/> — are
 /// <see cref="Ranking"/>'s: a record's view derives them for the ranking it
 /// was built for, and a row carries the values of the ranking it was built
@@ -123,15 +123,20 @@ public interface IDecisionFilterData
     AnalysisLevel AnalysisLevel { get; }
 
     /// <summary>
-    /// The player's error on this decision (≥ 0). For a checker play, the
-    /// player's error under <see cref="Ranking"/>
-    /// (<see cref="RankedPlays.UserPlayError"/>): none when the ranking does
-    /// not score the player's move, and the analyser's number for a move
-    /// outside the candidates. For a cube decision, the doubling error or,
-    /// failing that, the take/pass error. <see langword="null"/> when no user
-    /// decision is recorded, or none is scored.
+    /// The player's result on this decision, each case by name
+    /// (<see cref="BgDataTypes_Lib.PlayerResult"/>). For a checker play, the
+    /// player's result under <see cref="Ranking"/>
+    /// (<see cref="RankedPlays.PlayerResult"/>): scored with its error, not
+    /// scored (no error), unlisted with the analyser's error, or not recorded.
+    /// For a cube decision, the doubler's result or, when the record holds
+    /// none, the taker's: a stated action is scored with its error
+    /// (<see cref="CubeDecisionData.UserDoubleError"/>,
+    /// <see cref="CubeDecisionData.UserTakeError"/>), an unstated one with an
+    /// analyser's error is unlisted; a cube decision is never not scored. The
+    /// filter's "erred by more than x" is
+    /// <c>PlayerResult.TryGetError(out var error) &amp;&amp; error &gt; x</c>.
     /// </summary>
-    double? FilterError { get; }
+    PlayerResult PlayerResult { get; }
 
     /// <summary>
     /// The board at the moment of the decision. <b>Frame: the player on

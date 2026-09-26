@@ -80,6 +80,10 @@ public class EnumTokenStrictnessTests
         AssertStringTokenExact(PlayRanking.DepthFirst);
 
     [Fact]
+    public void PlayerResultKind_IsStringTokenExact() =>
+        AssertStringTokenExact(PlayerResultKind.NotScored);
+
+    [Fact]
     public void CubeAction_IsStringTokenExact() =>
         AssertStringTokenExact(CubeAction.Take);
 
@@ -106,6 +110,7 @@ public class EnumTokenStrictnessTests
         AssertEveryMemberRoundTrips<CubeClaim>();
         AssertEveryMemberRoundTrips<CubeOwner>();
         AssertEveryMemberRoundTrips<PlayRanking>();
+        AssertEveryMemberRoundTrips<PlayerResultKind>();
 
         static void AssertEveryMemberRoundTrips<TEnum>()
             where TEnum : struct, Enum

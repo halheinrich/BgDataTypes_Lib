@@ -5,7 +5,7 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// A checker-play decision's candidates under one <see cref="PlayRanking"/>:
 /// in the ranking's order, each with its rank, whether it is scored and if
-/// so its error, and the player's error under the ranking — every derivation
+/// so its error, and the player's result under the ranking — every derivation
 /// SPEC-scoring §2a makes a ranking's. Built by
 /// <see cref="CheckerPlayDecisionData.RankedBy"/>, once per decision and
 /// ranking; immutable.
@@ -44,7 +44,9 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>
         }
 
         UserPlay = userPlayIndex is int user ? _byIndex[user] : null;
-        UserPlayError = UserPlay is { } played ? played.Error : unlistedPlayError;
+        PlayerResult = UserPlay is { } played
+            ? (played.Error is double playedError ? PlayerResult.Scored(playedError) : PlayerResult.NotScored)
+            : (unlistedPlayError is double unlisted ? PlayerResult.Unlisted(unlisted) : PlayerResult.NotRecorded);
     }
 
     /// <summary>The ranking these are ranked by.</summary>
@@ -60,15 +62,18 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>
     public RankedPlay? UserPlay { get; }
 
     /// <summary>
-    /// The player's error under the ranking: the <see cref="RankedPlay.Error"/>
-    /// of the user's play when the ranking scores it; none
-    /// (<see langword="null"/>) when it does not — a play the ranking does not
-    /// score has no error; and for a play outside the candidates the
-    /// analyser's <see cref="CheckerPlayDecisionData.UnlistedPlayError"/>,
-    /// which no ranking changes. <see langword="null"/> too when no user play
-    /// is recorded.
+    /// The player's result under the ranking, each case by name:
+    /// <see cref="PlayerResultKind.Scored"/> with the user's play's
+    /// <see cref="RankedPlay.Error"/> when the ranking scores it;
+    /// <see cref="PlayerResultKind.NotScored"/> when it does not — a play the
+    /// ranking does not score has no error;
+    /// <see cref="PlayerResultKind.Unlisted"/> with the analyser's
+    /// <see cref="CheckerPlayDecisionData.UnlistedPlayError"/> for a play
+    /// outside the candidates, which no ranking changes; and
+    /// <see cref="PlayerResultKind.NotRecorded"/> when no user play is
+    /// recorded.
     /// </summary>
-    public double? UserPlayError { get; }
+    public PlayerResult PlayerResult { get; }
 
     /// <summary>The number of candidates.</summary>
     public int Count => _inOrder.Length;

@@ -54,7 +54,7 @@ public class TestRecordsTests
             var ranked = play.Decision.RankedBy(ranking);
             Assert.Equal(0, ranked.Best.Index);
             Assert.Equal(0.0, ranked.ForCandidate(0).Error);
-            Assert.Equal(0.0, ranked.UserPlayError);
+            Assert.Equal(PlayerResult.Scored(0.0), ranked.PlayerResult);
         }
         Assert.Equal(167, play.Position.OnRollPipCount);
         Assert.Equal(167, play.Position.OpponentPipCount);

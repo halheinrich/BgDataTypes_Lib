@@ -286,7 +286,7 @@ public class DerivedValuesTests
             {
                 var ranked = read.Decision.RankedBy(ranking);
                 Assert.Equal(0, ranked.Best.Index);
-                Assert.Equal(record.Decision.RankedBy(ranking).UserPlayError, ranked.UserPlayError);
+                Assert.Equal(record.Decision.RankedBy(ranking).PlayerResult, ranked.PlayerResult);
                 Assert.Equal(0.0, ranked.ForCandidate(0).Error);
             }
             Assert.Equal(30, read.Decision.Plays[0].DepthRank);

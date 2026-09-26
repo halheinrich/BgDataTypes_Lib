@@ -820,7 +820,7 @@ public class BgDecisionDataSerializationTests
         var restored = JsonSerializer.Deserialize<CheckerPlayDecisionData>(json, Options)!;
 
         Assert.All(Enum.GetValues<PlayRanking>(), ranking =>
-            Assert.Equal(-0.120 - -0.165, restored.RankedBy(ranking).UserPlayError));
+            Assert.Equal(PlayerResult.Scored(-0.120 - -0.165), restored.RankedBy(ranking).PlayerResult));
         Assert.Equal(1, restored.UserPlayIndex);
         Assert.DoesNotContain("\"UserPlayError\"", json);
         Assert.DoesNotContain("UserDoubleError", json);
@@ -864,14 +864,14 @@ public class BgDecisionDataSerializationTests
         var cube = JsonSerializer.Deserialize<CubeDecisionData>(
             JsonSerializer.Serialize(TestRecords.CubeData(userDoublerAction: null, userTakerAction: null), Options), Options)!;
 
-        Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Null(play.RankedBy(ranking).UserPlayError));
+        Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Equal(PlayerResult.NotRecorded, play.RankedBy(ranking).PlayerResult));
         Assert.Null(cube.UserDoubleError);
         Assert.Null(cube.UserTakeError);
 
         var playAbsent = ReadWithout(
             TestRecords.CheckerPlayData(userPlayIndex: null, unlistedPlayError: 0.1), "UnlistedPlayError");
         Assert.Null(playAbsent.UnlistedPlayError);
-        Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Null(playAbsent.RankedBy(ranking).UserPlayError));
+        Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Equal(PlayerResult.NotRecorded, playAbsent.RankedBy(ranking).PlayerResult));
         var cubeAbsent = ReadWithout(
             TestRecords.CubeData(userDoublerAction: null, userTakerAction: null,
                 unstatedDoublerActionError: 0.2, unstatedTakerActionError: 0.3),
@@ -985,7 +985,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(3, data.OnRollNeeds);
         Assert.Equal(5, data.OpponentNeeds);
         Assert.False(data.IsCrawford);
-        Assert.Equal(0.034, data.FilterError);
+        Assert.Equal(PlayerResult.Unlisted(0.034), data.PlayerResult);
         Assert.Equal(new BoardPosition(mop), data.Board);
     }
 
@@ -1000,7 +1000,9 @@ public class BgDecisionDataSerializationTests
             doubleTakeEquity: 1.011)).ViewFor(PlayRanking.Equity);
 
         Assert.Equal(DecisionKind.Cube, data.Kind);
-        Assert.Equal(0.025, data.FilterError!.Value, 12);  // UserDoubleError takes precedence
+        Assert.Equal(PlayerResultKind.Scored, data.PlayerResult.Kind);  // UserDoubleError takes precedence
+        Assert.True(data.PlayerResult.TryGetError(out double error));
+        Assert.Equal(0.025, error, 12);
     }
 
     [Fact]
@@ -1013,7 +1015,9 @@ public class BgDecisionDataSerializationTests
             doubleTakeEquity: 1.011,
             userDoublerAction: null)).ViewFor(PlayRanking.Equity);
 
-        Assert.Equal(0.011, data.FilterError!.Value, 12);  // Falls through to UserTakeError
+        Assert.Equal(PlayerResultKind.Scored, data.PlayerResult.Kind);  // Falls through to UserTakeError
+        Assert.True(data.PlayerResult.TryGetError(out double error));
+        Assert.Equal(0.011, error, 12);
     }
 
     [Fact]
