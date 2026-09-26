@@ -17,7 +17,8 @@ public class DepthFactsTests
 {
     /// <summary>
     /// Every shape the producer writes, with the label and abbreviation its
-    /// ResolveDepthInfo gave it, now derived here.
+    /// ResolveDepthInfo gave it, now derived here — and the inner level that
+    /// is neither recognized nor coded, which no producer writes today.
     /// </summary>
     public static TheoryData<AnalysisMode, AnalysisLevel, int?, BookEdition?, int?, string?, string?> Shapes => new()
     {
@@ -40,7 +41,13 @@ public class DepthFactsTests
         { AnalysisMode.Rollout, AnalysisLevel.Ply3, 1296, null, null, "Rollout: 1296 trials. 3-ply", "3p1296" },
         { AnalysisMode.Rollout, AnalysisLevel.XgRollerPlus, 1296, null, null, "Rollout: 1296 trials. XG Roller+", "R+p1296" },
         { AnalysisMode.Rollout, AnalysisLevel.Unknown, 1296, null, 42, "Rollout: 1296 trials. level-42", "level-42p1296" },
-        // An unrecognized level, and none recorded.
+        // A trial-bearing analysis whose inner level is neither recognized
+        // nor coded: the level's own label and a placeholder token.
+        { AnalysisMode.Rollout, AnalysisLevel.Unknown, 1296, null, null, "Rollout: 1296 trials. Unknown", "?p1296" },
+        { AnalysisMode.BookRollout, AnalysisLevel.Unknown, 1296, BookEdition.V2, null, "Book V2: 1296 trials. Unknown", "B?_1296" },
+        // An unrecognized level, of an evaluation and of an unrecorded mode,
+        // and none recorded.
+        { AnalysisMode.Evaluation, AnalysisLevel.Unknown, null, null, 9, "level-9", "level-9" },
         { AnalysisMode.Unknown, AnalysisLevel.Unknown, null, null, 7, "level-7", "level-7" },
         { AnalysisMode.Unknown, AnalysisLevel.Unknown, null, null, -100, "level--100", "level--100" },
         { AnalysisMode.Unknown, AnalysisLevel.Unknown, null, null, null, null, null },
@@ -103,21 +110,57 @@ public class DepthFactsTests
     }
 
     [Fact]
-    public void AFactStatedFirst_IsRefusedByTheModeOrLevelSetSecond()
+    public void AFactStatedFirst_IsRefusedByTheModeOrLevelSetSecond_OnACandidateAndACube()
     {
-        var byMode = Assert.Throws<ArgumentException>(() => new PlayCandidate
+        // Each fact stated before the mode or level it must agree with, in an
+        // initializer: the mode or level, set second, refuses. (On the wire
+        // the cube's serializer constructor binds its mode first.)
+        Assert.Equal("AnalysisMode", Assert.Throws<ArgumentException>(() => new PlayCandidate
         {
             Play = [], RolloutTrials = 1296, AnalysisMode = AnalysisMode.Evaluation,
             AnalysisLevel = AnalysisLevel.Ply3, Equity = 0,
-        });
-        var byLevel = Assert.Throws<ArgumentException>(() => new PlayCandidate
+        }).ParamName);
+        Assert.Equal("AnalysisMode", Assert.Throws<ArgumentException>(() => new PlayCandidate
+        {
+            Play = [], BookEdition = BookEdition.V2, AnalysisMode = AnalysisMode.Rollout,
+            AnalysisLevel = AnalysisLevel.Ply3, Equity = 0,
+        }).ParamName);
+        Assert.Equal("AnalysisLevel", Assert.Throws<ArgumentException>(() => new PlayCandidate
         {
             Play = [], AnalysisMode = AnalysisMode.Unknown, UnrecognizedLevelCode = 7,
             AnalysisLevel = AnalysisLevel.Ply3, Equity = 0,
-        });
+        }).ParamName);
 
-        Assert.Equal("AnalysisMode", byMode.ParamName);
-        Assert.Equal("AnalysisLevel", byLevel.ParamName);
+        Assert.Equal("AnalysisMode", Assert.Throws<ArgumentException>(() => new CubeDecisionData
+        {
+            RolloutTrials = 1296, AnalysisMode = AnalysisMode.Evaluation, AnalysisLevel = AnalysisLevel.Ply3,
+            NoDoubleEquity = 0, DoubleTakeEquity = 0, CubelessNoDoubleEquity = 0, CubelessDoubleTakeEquity = 0,
+            WinPctAfterNoDouble = 0, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
+            LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
+            WinPctAfterDoubleTake = 0, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
+            LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
+            ProbOfOpponentErrorJustifyingDouble = 0,
+        }).ParamName);
+        Assert.Equal("AnalysisMode", Assert.Throws<ArgumentException>(() => new CubeDecisionData
+        {
+            BookEdition = BookEdition.V1, AnalysisMode = AnalysisMode.Rollout, AnalysisLevel = AnalysisLevel.Ply3,
+            NoDoubleEquity = 0, DoubleTakeEquity = 0, CubelessNoDoubleEquity = 0, CubelessDoubleTakeEquity = 0,
+            WinPctAfterNoDouble = 0, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
+            LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
+            WinPctAfterDoubleTake = 0, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
+            LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
+            ProbOfOpponentErrorJustifyingDouble = 0,
+        }).ParamName);
+        Assert.Equal("AnalysisLevel", Assert.Throws<ArgumentException>(() => new CubeDecisionData
+        {
+            AnalysisMode = AnalysisMode.Unknown, UnrecognizedLevelCode = 7, AnalysisLevel = AnalysisLevel.Ply3,
+            NoDoubleEquity = 0, DoubleTakeEquity = 0, CubelessNoDoubleEquity = 0, CubelessDoubleTakeEquity = 0,
+            WinPctAfterNoDouble = 0, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
+            LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
+            WinPctAfterDoubleTake = 0, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
+            LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
+            ProbOfOpponentErrorJustifyingDouble = 0,
+        }).ParamName);
     }
 
     [Theory]
