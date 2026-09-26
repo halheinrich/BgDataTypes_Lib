@@ -68,10 +68,10 @@ namespace BgDataTypes_Lib;
 /// </para>
 ///
 /// <para>
-/// <b>The notation is <see cref="ToString"/></b>, the one statement of how a
-/// play is written: <c>"24/18*"</c>, <c>"bar/22"</c>, <c>"6/off"</c>,
-/// <c>"8/5(2)"</c>. A form's canonical text is its <see cref="ToString"/>, as
-/// for <see cref="DiceRoll"/> and <see cref="ProblemKey"/>, and the rendering
+/// <b>The notation is rendered by <see cref="ToString"/></b>, the one
+/// formatter, and reached publicly through <see cref="Play.ToNotation"/>. A
+/// form's canonical text is its <see cref="ToString"/>, as for
+/// <see cref="DiceRoll"/> and <see cref="ProblemKey"/>, and the rendering
 /// lives here because it leans on this type's order: duplicate chains
 /// (doubles moving two checkers identically) are repeated entries, kept
 /// adjacent by the canonical order, and the notation groups them.
@@ -301,14 +301,11 @@ public readonly struct CanonicalPlay
     }
 
     /// <summary>
-    /// The play in standard backgammon notation — the one formatter of play
-    /// notation. Chains are written in canonical order, separated by single
-    /// spaces, each as <c>from/to</c>: a source of 25 is written
-    /// <c>bar</c>, a destination of 0 (bear-off) <c>off</c>, and a hit adds
-    /// <c>*</c>. A run of adjacent chains with the same source and landing
-    /// point is written once with its count, <c>"8/5(2)"</c>; the mark is
-    /// carried by at most one chain of the run and follows the count,
-    /// <c>"6/2(2)*"</c>. The empty play, a pass, is the empty string.
+    /// The play in standard backgammon notation: the one formatter, and the
+    /// implementation of <see cref="Play.ToNotation"/>, whose doc comment
+    /// states what it writes. The chains are written in canonical order,
+    /// separated by single spaces, and a run of adjacent identical chains
+    /// once with its count.
     /// </summary>
     /// <returns>The notation, or <see cref="string.Empty"/> for the empty play.</returns>
     public override string ToString()

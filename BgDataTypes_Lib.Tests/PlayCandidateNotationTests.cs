@@ -7,9 +7,9 @@ namespace BgDataTypes_Lib.Tests;
 /// <summary>
 /// A candidate's notation is derived from its play and never stored
 /// (halheinrich/backgammon#273): <see cref="PlayCandidate.Notation"/> is the
-/// play written by the one formatter, <see cref="CanonicalPlay.ToString"/>;
-/// it is not on the wire, and a document still carrying the retired
-/// <c>MoveNotation</c> member reads on both paths with that member ignored.
+/// play's own <see cref="Play.ToNotation"/>; it is not on the wire, and a
+/// document still carrying the retired <c>MoveNotation</c> member reads on
+/// both paths with that member ignored.
 /// The full-record bytes are pinned in <see cref="WireGoldenTests"/>.
 /// </summary>
 public class PlayCandidateNotationTests
@@ -52,7 +52,7 @@ public class PlayCandidateNotationTests
         var candidate = TestRecords.Candidate(play: play);
 
         Assert.True(expected == candidate.Notation, $"{name}: '{candidate.Notation}'");
-        Assert.Equal(play.ToCanonical().ToString(), candidate.Notation);
+        Assert.Equal(play.ToNotation(), candidate.Notation);
     }
 
     [Fact]

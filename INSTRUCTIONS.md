@@ -279,7 +279,7 @@ what a board is compared and stored as.
 | `CubeClaimPair` | `readonly record struct (CubeClaim Claim, CubeAction Taker)` — the two-part cube answer of SPEC-scoring §3 (`halheinrich/backgammon#86`): the claim-layer counterpart of `CubeDecisionPair`, pairing the three-valued claim with the taker response if doubled. Same construction-guard idiom (`Claim` any defined member, `Taker` ∈ {`Take`, `Pass`}). A closed 3×2 of six named canonical instances: five verdict cells (`NoDoubleTake`, `DoubleTake`, `DoublePass`, `TooGoodTake`, `TooGoodPass`) plus `NoDoublePass`, the incoherent cell — representable *by ruling* (a selectable user answer; cross-disabling the axes was rejected), named by `IsIncoherent` for review surfaces. One type serves both scored roles — a user's submitted answer and the derived truth (`DecisionData.BestClaimPair`). Scoring semantics stay with the consuming legs. No parse/format story: display strings are consumer copy per SPEC-scoring §3, and no wire token is ruled — its wire debut (and wire shape) belongs to the first document that embeds it. `default` is non-meaningful — see Pitfalls. |
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
-| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. **No equality** (`halheinrich/backgammon#273`, ruling A): `==`/`!=` are not defined, and `Equals`/`GetHashCode` throw `NotSupportedException` so every runtime route (comparers, hashed collections, `Distinct`, records and tuples holding a play) fails loudly. Play identity is `BoardState.IsSamePlay`, from a starting position — see "Play identity" below. `IsSameEncoding` compares exact encodings (order, hops, marks) for storage and round-trips; it is not identity. `ToCanonical()` is the display form. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly. |
+| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. **No equality** (`halheinrich/backgammon#273`, ruling A): `==`/`!=` are not defined, and `Equals`/`GetHashCode` throw `NotSupportedException` so every runtime route (comparers, hashed collections, `Distinct`, records and tuples holding a play) fails loudly. Play identity is `BoardState.IsSamePlay`, from a starting position — see "Play identity" below. `IsSameEncoding` compares exact encodings (order, hops, marks) for storage and round-trips; it is not identity. `ToNotation()` writes the play in standard notation, the one public way to spell a play (see "Play notation"); `ToCanonical()` is the display form behind it. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly. |
 | `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
 | `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a route from a source to a landing point, which the notation writes as one `from/to`, joining consecutive moves and eliding the touch-down points between. It stops where its moves stop or at a hit point whose mark it carries, so it is not a checker's whole trajectory: an intermediate hit splits one trajectory into two chains (`13/10*/8` is written `13/10* 10/8`). Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
@@ -353,22 +353,26 @@ in BgMoveGen's notation formatter; the rule lives here, and so, since
 
 ### Play notation
 
-**`CanonicalPlay.ToString()` is the one formatter of play notation**
+**`Play.ToNotation()` is the one public way to spell a play**
 (`halheinrich/backgammon#273`): `"24/18*"`, `"bar/22"`, `"6/off"`,
 `"8/5(2)"`, `"6/2(2)*"`, and the empty string for a pass. What it writes is
-stated once, on the method's doc comment, and not restated here. From a play
-it is `play.ToCanonical().ToString()`. Design points:
+stated once, on that method's doc comment, and not restated here. It forwards
+to `CanonicalPlay.ToString()`, the one formatter. Design points:
 
 - **Placement: the display form's text.** The notation is a function of the
   canonical form alone, and its `(n)` grouping leans on the form's own
   order (identical chains adjacent, a carrier first), so the rendering lives
   in the type that owns that order. A form's
   canonical text is its `ToString`, as for `DiceRoll`, `ProblemKey` and
-  `DecisionId`; no separate formatter type, and no second spelling on
-  `Play` — `Play.ToString()` stays the default, since a play's encoding
-  (order, hops, marks) is more than its notation shows.
+  `DecisionId`; no separate formatter type.
+- **The public route: a named method on `Play`.** Every consumer that
+  spells a play holds a `Play`, so the route lives there and no consumer
+  needs the canonical form, which the play-identity arc makes internal.
+  A method, because it formats. `Play.ToString()` stays the default and is
+  not the notation: a play's encoding (order, hops, marks) is more than its
+  notation shows.
 - **Moved, not rewritten.** It came from BgMoveGen's `MoveNotationFormatter`
-  unchanged: `CanonicalPlayNotationTests` ports every one of that
+  unchanged: `PlayNotationTests` ports every one of that
   formatter's cases with the same inputs and expected strings, and a
   differential run over random encodings and legal plays found no
   difference. BgMoveGen's copy is deleted in its own consumer leg.
@@ -1146,7 +1150,7 @@ public sealed class DecisionRow : IDecisionFilterData
 public class PositionData    { /* required init-only properties per Architecture table; Mop is a BoardPosition; IsJacoby? */ }
 public class DescriptiveData { /* required init-only properties per Architecture table; Title?, Date?, Event?, SourceFile? */ }
 public class PlayCandidate   { /* required init-only properties per Architecture table; the six probabilities nullable */
-                               [JsonIgnore] public string Notation { get; }  /* Play.ToCanonical().ToString(); never stored */ }
+                               [JsonIgnore] public string Notation { get; }  /* Play.ToNotation(); never stored */ }
 
 public class DecisionData
 {
@@ -1208,6 +1212,7 @@ public struct Play                                // no equality: see BoardState
     public void RemoveLast();
     public Play Snapshot();                       // readonly
     public CanonicalPlay ToCanonical();           // readonly; the display form
+    public string ToNotation();                   // readonly; the notation — the one public way to spell a play
     public bool IsSameEncoding(Play other);       // readonly; exact encodings, for storage
     public Enumerator GetEnumerator();            // readonly; foreach pattern, allocation-free
     public struct Enumerator { /* Current, MoveNext() */ }

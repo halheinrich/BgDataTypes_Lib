@@ -26,15 +26,14 @@ public class PlayCandidate
 
     /// <summary>
     /// The candidate's play in standard notation, e.g. <c>"8/5(2) 6/3(2)"</c>:
-    /// <see cref="Play"/> written by the one formatter of play notation,
-    /// <see cref="CanonicalPlay.ToString"/>, so it can never disagree with
-    /// the play. Derived on each read and never stored: it is not on the
-    /// wire, and a document that still carries the retired
+    /// the <see cref="Play"/>'s own <see cref="Play.ToNotation"/>, so it can
+    /// never disagree with the play. Derived on each read and never stored:
+    /// it is not on the wire, and a document that still carries the retired
     /// <c>MoveNotation</c> member reads with that member ignored
     /// (halheinrich/backgammon#273). The empty string for a pass.
     /// </summary>
     [JsonIgnore]
-    public string Notation => Play.ToCanonical().ToString();
+    public string Notation => Play.ToNotation();
 
     /// <summary>Analysis depth label for this candidate, e.g. "3-ply",
     /// "XG Roller++", "Rollout: 1296 trials. 3-ply". Rendered in the

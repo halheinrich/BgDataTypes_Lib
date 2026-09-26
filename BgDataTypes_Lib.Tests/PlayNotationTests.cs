@@ -3,19 +3,19 @@ using BgDataTypes_Lib;
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
-/// Play notation, <see cref="CanonicalPlay.ToString"/> (halheinrich/backgammon#273).
-/// Every case is ported from BgMoveGen's <c>MoveNotationFormatterTests</c> at
-/// BgMoveGen aabf5a0, with the same input and the same expected string: the
-/// parity proof that the formatter moved here unchanged. Each keeps its name
-/// with <c>Format_</c> read as <c>Notation_</c>. Chain-collapse semantics are
-/// pinned in <see cref="CanonicalPlayTests"/>; these pin what the rendering
-/// owns — the "bar"/"off" labels, the "*" suffix, "(n)" run-grouping with the
-/// group's star after the count, and the rendered shape of representative
-/// forms.
+/// Play notation, through its one public route, <see cref="Play.ToNotation"/>
+/// (halheinrich/backgammon#273). Every case is ported from BgMoveGen's
+/// <c>MoveNotationFormatterTests</c> at BgMoveGen aabf5a0, with the same input
+/// and the same expected string: the parity proof that the formatter moved
+/// here unchanged. Each keeps its name with <c>Format_</c> read as
+/// <c>Notation_</c>. Chain-collapse semantics are pinned in
+/// <see cref="CanonicalPlayTests"/>; these pin what the rendering owns — the
+/// "bar"/"off" labels, the "*" suffix, "(n)" run-grouping with the group's
+/// star after the count, and the rendered shape of representative forms.
 /// </summary>
-public class CanonicalPlayNotationTests
+public class PlayNotationTests
 {
-    private static string Notation(Play play) => play.ToCanonical().ToString();
+    private static string Notation(Play play) => play.ToNotation();
 
     // Regular moves --------------------------------------------------------
 

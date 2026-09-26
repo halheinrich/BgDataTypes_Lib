@@ -28,7 +28,8 @@ namespace BgDataTypes_Lib;
 /// <c>==</c> and <c>!=</c> are not defined, and <see cref="Equals(object)"/>
 /// and <see cref="GetHashCode"/> throw (halheinrich/backgammon#273, ruling A).
 /// <see cref="IsSameEncoding"/> compares exact encodings, for storage.
-/// <see cref="ToCanonical"/> is the play's display form.
+/// <see cref="ToNotation"/> writes the play in standard notation, its display
+/// form.
 ///
 /// Serialised as a JSON array of <see cref="Move"/> via <see cref="PlayJsonConverter"/>;
 /// the raw move sequence round-trips exactly. The private buffer fields and the
@@ -269,6 +270,40 @@ public struct Play
     /// <see cref="CanonicalPlay"/>). Not identity; see the type summary.
     /// </summary>
     public readonly CanonicalPlay ToCanonical() => CanonicalPlay.FromPlay(in this);
+
+    /// <summary>
+    /// This play in standard backgammon notation — <c>"24/18* 13/9"</c>,
+    /// <c>"bar/22"</c>, <c>"6/off"</c>, <c>"8/5(2) 6/3(2)"</c> — and the empty
+    /// string for a pass. The one public way to spell a play
+    /// (halheinrich/backgammon#273); <see cref="object.ToString"/> is not it,
+    /// because an encoding holds more than its notation shows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each term is <c>from/to</c>, written in order of source point
+    /// descending, then landing point descending: a source of 25 is written
+    /// <c>bar</c>, a landing of 0 (bear-off) <c>off</c>, and a hit adds
+    /// <c>*</c>. Consecutive moves of one checker are written as one term,
+    /// so the order the moves are listed in and how a trajectory is split
+    /// into hops do not show (13/10 10/8 and 13/8 are both <c>"13/8"</c>),
+    /// except that a hit stays visible: a checker hitting on an intermediate
+    /// point is written as two terms (13/10*/8 is <c>"13/10* 10/8"</c>). A
+    /// hit belongs to its point, so it is marked once, on the first term
+    /// landing there, whichever move recorded it (8/3* 7/3 and 8/3 7/3* are
+    /// both <c>"8/3* 7/3"</c>). Identical terms are written once with their
+    /// count, <c>"8/5(2)"</c>, the mark after the count, <c>"6/2(2)*"</c>.
+    /// </para>
+    /// <para>
+    /// The notation is the play's display form, not its identity: a
+    /// multi-die move pairs sources with destinations as written, so two
+    /// encodings of one play can be written differently (<c>"13/9 11/7"</c>
+    /// and <c>"13/7 11/9"</c>). Whether two plays are the same play is
+    /// <see cref="BoardState.IsSamePlay"/>, from the position they are
+    /// played from. Point numbers are written with the invariant culture.
+    /// </para>
+    /// </remarks>
+    /// <returns>The notation, or <see cref="string.Empty"/> for the empty play.</returns>
+    public readonly string ToNotation() => ToCanonical().ToString();
 
     /// <summary>
     /// Whether <paramref name="other"/> is the identical encoding: the same
