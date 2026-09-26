@@ -312,7 +312,7 @@ internal readonly struct CanonicalPlay
     /// implementation of <see cref="Play.ToNotation"/>, whose doc comment
     /// states what it writes. The chains are written in canonical order,
     /// separated by single spaces, and a run of adjacent identical chains
-    /// once with its count.
+    /// once with its count, followed by the mark its first chain carries.
     /// </summary>
     /// <returns>The notation, or <see cref="string.Empty"/> for the empty play.</returns>
     public override string ToString()
@@ -325,21 +325,21 @@ internal readonly struct CanonicalPlay
         {
             var chain = this[idx];
             int to = Math.Abs(chain.ToPt);
-            bool anyHit = chain.ToPt < 0;
 
             int run = 1;
             while (idx + run < Count
                    && this[idx + run].FrPt == chain.FrPt
                    && Math.Abs(this[idx + run].ToPt) == to)
-            {
-                if (this[idx + run].ToPt < 0) anyHit = true;
                 run++;
-            }
 
             if (text.Length > 0) text.Append(' ');
             text.Append(FromLabel(chain.FrPt)).Append('/').Append(ToLabel(to));
             if (run > 1) text.Append('(').Append(run.ToString(CultureInfo.InvariantCulture)).Append(')');
-            if (anyHit) text.Append('*');
+
+            // The carrier rule puts a hit point's mark on the first chain, in
+            // canonical order, ending there, and a run's chains all end on one
+            // point, so the run's mark is on its first chain or on none.
+            if (chain.ToPt < 0) text.Append('*');
 
             idx += run;
         }

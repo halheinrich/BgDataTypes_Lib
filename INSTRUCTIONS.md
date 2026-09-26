@@ -380,7 +380,12 @@ to `CanonicalPlay.ToString()`, the one formatter. Design points:
   unchanged: `PlayNotationTests` ports every one of that
   formatter's cases with the same inputs and expected strings, and a
   differential run over random encodings and legal plays found no
-  difference. BgMoveGen's copy is deleted in its own consumer leg.
+  difference. One simplification followed: the port combined the hit marks
+  of a `(n)` run, which the carrier rule makes dead — a hit point's mark is
+  on the first chain ending there, so a run's mark is on its first chain or
+  on none — and the formatter now reads it there. The differential run,
+  repeated, still found no difference. BgMoveGen's copy is deleted in its
+  own consumer leg.
 - **Invariant text.** Point numbers are written with the invariant culture,
   so the notation never varies with the machine's locale.
 - **Never stored.** Notation is derived wherever it is shown — a candidate's
