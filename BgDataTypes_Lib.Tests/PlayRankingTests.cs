@@ -109,8 +109,52 @@ public class PlayRankingTests
     {
         // Differential, over seeded random decisions: LINQ's sort is stable,
         // so ordering by the ranking's keys through it is the order the
-        // definition states. Equities and depths are drawn from small sets so
-        // that ties are common, recorded and unrecorded depths alike.
+        // definition states.
+        foreach (var (trial, plays, data) in RandomDecisions())
+        {
+            foreach (var ranking in Enum.GetValues<PlayRanking>())
+            {
+                int[] expected = [.. Enumerable.Range(0, plays.Length)
+                    .OrderByDescending(i => ranking == PlayRanking.DepthFirst ? plays[i].DepthRank ?? int.MinValue : 0)
+                    .ThenByDescending(i => plays[i].Equity)];
+                var ranked = data.RankedBy(ranking);
+                Assert.Equal(expected, ranked.Select(p => p.Index));
+
+                var best = plays[expected[0]];
+                foreach (var play in ranked)
+                {
+                    bool notScored = ranking == PlayRanking.DepthFirst && play.Candidate.Equity > best.Equity;
+                    Assert.Equal(notScored ? null : best.Equity - play.Candidate.Equity, play.Error);
+                    Assert.Equal(!notScored, play.IsScored);
+                    Assert.True(!play.IsScored || play.Error >= 0.0, $"trial {trial}: a scored error of {play.Error}");
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void OverManyDecisions_EveryUnscoredPlay_IsAtAnotherDepthFromTheRankingsBest()
+    {
+        // SPEC-scoring §2a's depth condition, as a property of the ranking's
+        // own output: the rule is applied as the equity comparison, and the
+        // order implies the rest. Checked on its own, so it guards the
+        // implication whatever else a change breaks.
+        foreach (var (trial, _, data) in RandomDecisions())
+        {
+            var ranked = data.RankedBy(PlayRanking.DepthFirst);
+            foreach (var play in ranked.Where(play => !play.IsScored))
+                Assert.True(play.Candidate.DepthRank != ranked.Best.Candidate.DepthRank,
+                    $"trial {trial}: candidate {play.Index} is unscored at the best's depth");
+        }
+    }
+
+    /// <summary>
+    /// 2000 seeded random decisions of 1–24 candidates. Equities and depths
+    /// are drawn from small sets so that ties are common, recorded and
+    /// unrecorded depths alike.
+    /// </summary>
+    private static IEnumerable<(int Trial, PlayCandidate[] Plays, CheckerPlayDecisionData Data)> RandomDecisions()
+    {
         (AnalysisMode Mode, AnalysisLevel Level)[] depths =
         [
             (AnalysisMode.Unknown, AnalysisLevel.Unknown), (AnalysisMode.Evaluation, AnalysisLevel.Unknown),
@@ -127,27 +171,7 @@ public class PlayRankingTests
                 var (mode, level) = depths[random.Next(depths.Length)];
                 return TestRecords.Candidate(analysisMode: mode, analysisLevel: level, equity: random.Next(-4, 5) * 0.05);
             })];
-            var data = TestRecords.CheckerPlayData(plays: plays);
-
-            foreach (var ranking in Enum.GetValues<PlayRanking>())
-            {
-                int[] expected = [.. Enumerable.Range(0, plays.Length)
-                    .OrderByDescending(i => ranking == PlayRanking.DepthFirst ? plays[i].DepthRank ?? int.MinValue : 0)
-                    .ThenByDescending(i => plays[i].Equity)];
-                var ranked = data.RankedBy(ranking);
-                Assert.Equal(expected, ranked.Select(p => p.Index));
-
-                var best = plays[expected[0]];
-                foreach (var play in ranked)
-                {
-                    bool notScored = ranking == PlayRanking.DepthFirst
-                        && play.Candidate.DepthRank != best.DepthRank
-                        && play.Candidate.Equity > best.Equity;
-                    Assert.Equal(notScored ? null : best.Equity - play.Candidate.Equity, play.Error);
-                    Assert.Equal(!notScored, play.IsScored);
-                    Assert.True(!play.IsScored || play.Error >= 0.0, $"trial {trial}: a scored error of {play.Error}");
-                }
-            }
+            yield return (trial, plays, TestRecords.CheckerPlayData(plays: plays));
         }
     }
 
@@ -216,6 +240,19 @@ public class PlayRankingTests
         var byEquity = data.RankedBy(PlayRanking.Equity);
         Assert.Equal(2, byEquity.Best.Index);
         Assert.All(byEquity, play => Assert.True(play.IsScored));
+    }
+
+    [Fact]
+    public void EveryUnscoredCandidate_IsAtAnotherDepthFromTheBest()
+    {
+        // The rule is applied as the equity comparison; SPEC-scoring §2a's
+        // depth condition follows from the order. On the fixture, and over
+        // seeded random decisions in the differential test above.
+        var ranked = MixedData().RankedBy(PlayRanking.DepthFirst);
+        var unscored = ranked.Where(play => !play.IsScored).ToArray();
+
+        Assert.Equal([0, 2], unscored.Select(play => play.Index).Order());
+        Assert.All(unscored, play => Assert.NotEqual(ranked.Best.Candidate.DepthRank, play.Candidate.DepthRank));
     }
 
     [Fact]

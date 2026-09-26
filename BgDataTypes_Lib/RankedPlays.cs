@@ -121,12 +121,15 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>
     private static int DepthKey(PlayCandidate candidate) => candidate.DepthRank ?? int.MinValue;
 
     /// <summary>
-    /// The not-scored rule (SPEC-scoring §2a): under depth first, a candidate
-    /// at a different depth from the best play's with a higher equity is not
-    /// scored; every other candidate is.
+    /// The not-scored rule: under depth first, a candidate whose equity is
+    /// higher than the best play's is not scored; every other candidate is.
+    /// SPEC-scoring §2a states the rule for a play analysed at a different
+    /// depth from the best play that shows a higher equity. Under depth first
+    /// the best play has the highest equity at its own depth, so a higher
+    /// equity is always at another depth: the depth condition is implied, and
+    /// the rule is the equity comparison alone. That every unscored candidate
+    /// is at a different depth from the best is pinned as a property.
     /// </summary>
     private static bool IsScored(PlayRanking ranking, PlayCandidate best, PlayCandidate candidate) =>
-        ranking != PlayRanking.DepthFirst
-        || candidate.DepthRank == best.DepthRank
-        || candidate.Equity <= best.Equity;
+        ranking != PlayRanking.DepthFirst || candidate.Equity <= best.Equity;
 }

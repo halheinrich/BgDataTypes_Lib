@@ -28,6 +28,9 @@ namespace BgDataTypes_Lib;
 /// (<see cref="RankedPlay.IsScored"/>) and has no error: a consumer treats it
 /// as an off-list play. Every other candidate is scored, so no scored error
 /// is ever negative. Under <see cref="Equity"/> every candidate is scored.
+/// The depth condition is implied: under depth first the best play has the
+/// highest equity at its own depth, so a candidate of higher equity is
+/// always at another, and the rule is applied as the equity comparison.
 /// </para>
 /// <para>
 /// <see cref="Equity"/> is the default, and deliberately the zero value: an
