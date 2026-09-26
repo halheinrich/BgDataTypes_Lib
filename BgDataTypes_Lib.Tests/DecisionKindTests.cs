@@ -220,9 +220,9 @@ public class DecisionKindTests
     [Fact]
     public void AKindReadAsItsOwnType_RequiresItsOwnKind_BothPaths()
     {
-        // The stated limit of the converter: a kind read directly bypasses
-        // it, but its own contract still requires the kind and refuses the
-        // other one.
+        // A kind read directly bypasses the converter, but its own contract
+        // still requires the kind — its serializer constructor takes it — and
+        // refuses the other one.
         var cube = WirePaths.Document<BgDecisionData>(TestRecords.Cube());
         foreach (var (_, options) in WirePaths.Both)
             Assert.IsType<CubeDecision>(JsonSerializer.Deserialize<CubeDecision>(cube.ToJsonString(), options));
@@ -237,17 +237,22 @@ public class DecisionKindTests
     }
 
     [Fact]
-    public void AKindReadAsItsOwnType_SurfacesAConstructionRuleAsTheGuardsOwnException()
+    public void AKindReadAsItsOwnType_RefusesABrokenRuleAsTheBaseDoes_BothPaths()
     {
-        // The other half of the stated limit, pinned so a change to it is
-        // seen: read as BgDecisionData, a broken construction rule is a
-        // JsonException; read by its own type, it is the init guard's.
+        // Rewritten from AKindReadAsItsOwnType_SurfacesAConstructionRuleAsTheGuardsOwnException,
+        // which pinned the converter's stated limit: read by its own type, a
+        // broken construction rule used to surface as the init guard's
+        // ArgumentException. The limit is closed — the kind refuses the rule
+        // itself, so read either way it is a JsonException carrying the
+        // guard's exception (DocumentRefusalTests has the whole matrix).
         var document = WirePaths.Document<BgDecisionData>(TestRecords.Cube());
         document["Position"]!["IsCrawford"] = true;
 
-        Assert.Throws<ArgumentException>(
-            () => JsonSerializer.Deserialize<CubeDecision>(document.ToJsonString(), WirePaths.Context));
-        WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
+        var direct = WirePaths.AssertRefused<CubeDecision>(document.ToJsonString());
+        var viaBase = WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
+        Assert.IsType<ArgumentException>(direct.InnerException);
+        Assert.IsType<ArgumentException>(viaBase.InnerException);
+        Assert.Equal(direct.Message, viaBase.Message);
     }
 
     // ── Reading one kind's member off the other does not compile ──

@@ -25,6 +25,30 @@ namespace BgDataTypes_Lib;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class CubeDecisionData
 {
+    // True while the category is read from a document (see the serializer's
+    // constructor below): each rule then refuses as a JsonException.
+    private readonly bool _read;
+
+    /// <summary>Creates the category; its members are set by the initializer.</summary>
+    public CubeDecisionData()
+    {
+    }
+
+    /// <summary>
+    /// The serializer's constructor, for a category read from a document: it
+    /// marks the category as read before any member is set, so every rule
+    /// refuses a breach as a <see cref="System.Text.Json.JsonException"/> (the
+    /// wire rule on <see cref="BgDataTypesJsonContext"/>). It takes
+    /// <paramref name="depth"/> only because a serializer constructor must
+    /// bind a member.
+    /// </summary>
+    [JsonConstructor]
+    internal CubeDecisionData(string depth)
+    {
+        _read = true;
+        Depth = depth;
+    }
+
     // -----------------------------------------------------------------------
     //  The cube analysis
     // -----------------------------------------------------------------------
@@ -161,11 +185,20 @@ public sealed class CubeDecisionData
     public CubeAction? UserDoublerAction
     {
         get => _userDoublerAction;
-        init => _userDoublerAction =
-            value is null or CubeAction.NoDouble or CubeAction.Double
-                ? value
-                : throw new ArgumentOutOfRangeException(nameof(UserDoublerAction), value,
-                    "UserDoublerAction requires a doubler-half action (Double or NoDouble).");
+        init
+        {
+            try
+            {
+                if (value is not (null or CubeAction.NoDouble or CubeAction.Double))
+                    throw new ArgumentOutOfRangeException(nameof(UserDoublerAction), value,
+                        "UserDoublerAction requires a doubler-half action (Double or NoDouble).");
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
+            _userDoublerAction = value;
+        }
     }
 
     /// <summary>
@@ -183,11 +216,20 @@ public sealed class CubeDecisionData
     public CubeAction? UserTakerAction
     {
         get => _userTakerAction;
-        init => _userTakerAction =
-            value is null or CubeAction.Take or CubeAction.Pass
-                ? value
-                : throw new ArgumentOutOfRangeException(nameof(UserTakerAction), value,
-                    "UserTakerAction requires a taker-half action (Take or Pass).");
+        init
+        {
+            try
+            {
+                if (value is not (null or CubeAction.Take or CubeAction.Pass))
+                    throw new ArgumentOutOfRangeException(nameof(UserTakerAction), value,
+                        "UserTakerAction requires a taker-half action (Take or Pass).");
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
+            _userTakerAction = value;
+        }
     }
 
     // -----------------------------------------------------------------------

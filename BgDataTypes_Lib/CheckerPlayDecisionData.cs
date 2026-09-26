@@ -23,7 +23,11 @@ namespace BgDataTypes_Lib;
 /// document in either property order alike. <see cref="Plays"/> and
 /// <see cref="BestPlayIndex"/> are required, so both setters always run and
 /// the check is never skipped. The two collections are copied on init, so a
-/// caller keeping its own list cannot change them afterwards.
+/// caller keeping its own list cannot change them afterwards. Code breaking a
+/// rule gets the guard's <see cref="ArgumentException"/>; a document breaking
+/// it, read as this type or inside a record, gets a
+/// <see cref="System.Text.Json.JsonException"/> carrying it (the wire rule on
+/// <see cref="BgDataTypesJsonContext"/>).
 /// </para>
 /// <para>
 /// Whether each candidate is valid from the decision's position needs the
@@ -40,6 +44,30 @@ public sealed class CheckerPlayDecisionData
     private readonly int? _bestPlayIndex;
     private readonly int? _userPlayIndex;
 
+    // True while the category is read from a document (see the serializer's
+    // constructor below): each rule then refuses as a JsonException.
+    private readonly bool _read;
+
+    /// <summary>Creates the category; its members are set by the initializer.</summary>
+    public CheckerPlayDecisionData()
+    {
+    }
+
+    /// <summary>
+    /// The serializer's constructor, for a category read from a document: it
+    /// marks the category as read before any member is set, so every rule
+    /// refuses a breach as a <see cref="System.Text.Json.JsonException"/> (the
+    /// wire rule on <see cref="BgDataTypesJsonContext"/>). It takes
+    /// <paramref name="dice"/> only because a serializer constructor must bind
+    /// a member.
+    /// </summary>
+    [JsonConstructor]
+    internal CheckerPlayDecisionData(IReadOnlyList<int> dice)
+    {
+        _read = true;
+        Dice = dice;
+    }
+
     /// <summary>
     /// The two dice as rolled, in rolled order — the order a diagram draws
     /// them and an <c>.xgp</c> export writes them back. Each face is 1–6.
@@ -54,14 +82,21 @@ public sealed class CheckerPlayDecisionData
         get => _dice!;
         init
         {
-            ArgumentNullException.ThrowIfNull(value, nameof(Dice));
-            if (value.Count != 2)
-                throw new ArgumentException(
-                    $"A checker play's roll is two dice (got {value.Count}).", nameof(Dice));
-            foreach (int face in value)
+            try
             {
-                if (face is < 1 or > 6)
-                    throw new ArgumentOutOfRangeException(nameof(Dice), face, "A die face is 1 to 6.");
+                ArgumentNullException.ThrowIfNull(value, nameof(Dice));
+                if (value.Count != 2)
+                    throw new ArgumentException(
+                        $"A checker play's roll is two dice (got {value.Count}).", nameof(Dice));
+                foreach (int face in value)
+                {
+                    if (face is < 1 or > 6)
+                        throw new ArgumentOutOfRangeException(nameof(Dice), face, "A die face is 1 to 6.");
+                }
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
             }
             _dice = Array.AsReadOnly([value[0], value[1]]);
         }
@@ -83,19 +118,27 @@ public sealed class CheckerPlayDecisionData
         get => _plays!;
         init
         {
-            ArgumentNullException.ThrowIfNull(value, nameof(Plays));
-            if (value.Count == 0)
-                throw new ArgumentException(
-                    "A checker-play decision has at least one analysed candidate.", nameof(Plays));
-            var plays = value.ToArray();
-            if (Array.Exists(plays, candidate => candidate is null))
-                throw new ArgumentException("A candidate play is null.", nameof(Plays));
-            if (_bestPlayIndex is int best && best >= plays.Length)
-                throw new ArgumentException(
-                    $"BestPlayIndex {best} identifies no candidate of {plays.Length}.", nameof(Plays));
-            if (_userPlayIndex is int user && user >= plays.Length)
-                throw new ArgumentException(
-                    $"UserPlayIndex {user} identifies no candidate of {plays.Length}.", nameof(Plays));
+            PlayCandidate[] plays;
+            try
+            {
+                ArgumentNullException.ThrowIfNull(value, nameof(Plays));
+                if (value.Count == 0)
+                    throw new ArgumentException(
+                        "A checker-play decision has at least one analysed candidate.", nameof(Plays));
+                plays = value.ToArray();
+                if (Array.Exists(plays, candidate => candidate is null))
+                    throw new ArgumentException("A candidate play is null.", nameof(Plays));
+                if (_bestPlayIndex is int best && best >= plays.Length)
+                    throw new ArgumentException(
+                        $"BestPlayIndex {best} identifies no candidate of {plays.Length}.", nameof(Plays));
+                if (_userPlayIndex is int user && user >= plays.Length)
+                    throw new ArgumentException(
+                        $"UserPlayIndex {user} identifies no candidate of {plays.Length}.", nameof(Plays));
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
             _plays = Array.AsReadOnly(plays);
         }
     }
@@ -115,9 +158,16 @@ public sealed class CheckerPlayDecisionData
         get => _bestPlayIndex.GetValueOrDefault();
         init
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(value, nameof(BestPlayIndex));
-            if (_plays is not null)
-                ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value, _plays.Count, nameof(BestPlayIndex));
+            try
+            {
+                ArgumentOutOfRangeException.ThrowIfNegative(value, nameof(BestPlayIndex));
+                if (_plays is not null)
+                    ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value, _plays.Count, nameof(BestPlayIndex));
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
             _bestPlayIndex = value;
         }
     }
@@ -141,11 +191,18 @@ public sealed class CheckerPlayDecisionData
         get => _userPlayIndex;
         init
         {
-            if (value is int index)
+            try
             {
-                ArgumentOutOfRangeException.ThrowIfNegative(index, nameof(UserPlayIndex));
-                if (_plays is not null)
-                    ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _plays.Count, nameof(UserPlayIndex));
+                if (value is int index)
+                {
+                    ArgumentOutOfRangeException.ThrowIfNegative(index, nameof(UserPlayIndex));
+                    if (_plays is not null)
+                        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _plays.Count, nameof(UserPlayIndex));
+                }
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
             }
             _userPlayIndex = value;
         }

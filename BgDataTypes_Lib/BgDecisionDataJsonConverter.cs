@@ -34,9 +34,12 @@ namespace BgDataTypes_Lib;
 /// (<see cref="CanonicalJson"/>'s readers absorb exactly that): a missing
 /// kind, a kind stated twice, an unknown or non-string kind (the strict enum
 /// token), a member of the other kind (each kind disallows unmapped
-/// members), a missing member, and a construction rule the record breaks —
-/// an init guard's <see cref="ArgumentException"/> is rethrown as a
-/// <see cref="JsonException"/> carrying it as the inner exception.</description></item>
+/// members), a missing member, and a construction rule the record breaks.
+/// That last one is not this converter's doing: each kind refuses a broken
+/// rule read from a document as a <see cref="JsonException"/> itself,
+/// carrying the init guard's <see cref="ArgumentException"/>, so a kind read
+/// directly by its own type refuses exactly as it does here (the wire rule on
+/// <see cref="BgDataTypesJsonContext"/>).</description></item>
 /// </list>
 /// <para>
 /// <b>Why not <see cref="JsonPolymorphicAttribute"/>.</b> The built-in
@@ -59,13 +62,6 @@ namespace BgDataTypes_Lib;
 /// <item><description>and a sealed type cannot carry polymorphism of its own to
 /// close that gap ("Specified type … does not support polymorphism").</description></item>
 /// </list>
-/// <para>
-/// <b>Stated limit.</b> Read a record as <see cref="BgDecisionData"/>. A kind
-/// read directly by its own type bypasses this converter: it still requires a
-/// matching <c>"Kind"</c> and refuses the other kind's members, but a broken
-/// construction rule surfaces as the init guard's own
-/// <see cref="ArgumentException"/>.
-/// </para>
 /// <para>
 /// Public by necessity, as every converter named by an attribute here: a
 /// downstream context whose documents embed a record instantiates it from its
@@ -92,14 +88,7 @@ public sealed class BgDecisionDataJsonConverter : JsonConverter<BgDecisionData>
             var kind => throw new JsonException($"Unknown decision kind {kind}."),
         };
 
-        try
-        {
-            return (BgDecisionData?)JsonSerializer.Deserialize(ref reader, contract);
-        }
-        catch (ArgumentException e)
-        {
-            throw new JsonException($"The document is not a well-formed decision: {e.Message}", e);
-        }
+        return (BgDecisionData?)JsonSerializer.Deserialize(ref reader, contract);
     }
 
     /// <inheritdoc/>

@@ -30,13 +30,14 @@ namespace BgDataTypes_Lib;
 /// whatever static type the value is serialized as, and read wherever it sits;
 /// <see cref="BgDecisionDataJsonConverter"/> finds it, refuses a document
 /// without exactly one known kind, and hands the whole document to that
-/// kind's generated contract. Read a record as <see cref="BgDecisionData"/>:
-/// that is where every refusal — a member of the other kind, a missing
-/// member, a construction rule broken — is a
-/// <see cref="JsonException"/>. Every stored member is <c>required</c> or
-/// nullable, per the wire rule stated on <see cref="BgDataTypesJsonContext"/>;
-/// <see cref="Kind"/> is required through <see cref="JsonRequiredAttribute"/>,
-/// since the type states it and code never does.
+/// kind's generated contract. Every refusal — a member of the other kind, a
+/// missing member, a construction rule broken — is a
+/// <see cref="JsonException"/>, whether the record is read as
+/// <see cref="BgDecisionData"/> or as its own kind. Every stored member is
+/// <c>required</c> or nullable, per the wire rule stated on
+/// <see cref="BgDataTypesJsonContext"/>; <see cref="Kind"/> is required
+/// through <see cref="JsonRequiredAttribute"/>, since the type states it and
+/// code never does.
 /// </para>
 ///
 /// <para>
@@ -45,8 +46,10 @@ namespace BgDataTypes_Lib;
 /// fixes before any member is set, so a record breaking a rule of
 /// <see cref="DecisionRules"/> cannot be built — from an object initializer in
 /// any member order (an <see cref="ArgumentException"/> naming the member that
-/// completed the contradiction) or from JSON (a
-/// <see cref="JsonException"/>):
+/// completed the contradiction) or from JSON (a <see cref="JsonException"/>
+/// carrying that exception: each kind's serializer constructor marks the
+/// record as read before any member is set, as the wire rule on
+/// <see cref="BgDataTypesJsonContext"/> states):
 /// </para>
 /// <list type="bullet">
 /// <item><description>a cube decision is never made in the Crawford game
@@ -83,6 +86,12 @@ public abstract class BgDecisionData : IDecisionFilterData
 {
     private readonly DecisionKind _kind;
 
+    // True for a record being read from a document: set only by the
+    // serializer's constructor, before any member is set, so each rule below
+    // refuses a breach as a JsonException rather than the guard's own
+    // ArgumentException (DocumentRefusal).
+    private readonly bool _read;
+
     // Null only while construction is still setting the member; `required`
     // guarantees each is set by the time it ends, and each init setter
     // rejects an explicit null (halheinrich/backgammon#221). The guards below
@@ -92,11 +101,31 @@ public abstract class BgDecisionData : IDecisionFilterData
     private readonly DescriptiveData? _descriptive;
 
     /// <summary>
-    /// The one constructor, reachable only from the two kinds in this
-    /// library: the kind is fixed here, before any member is set, so every
-    /// init guard can read it.
+    /// The constructor code builds a record through, reachable only from the
+    /// two kinds in this library: the kind is fixed here, before any member is
+    /// set, so every init guard can read it.
     /// </summary>
     private protected BgDecisionData(DecisionKind kind) => _kind = kind;
+
+    /// <summary>
+    /// The constructor a document is read through, reachable only from each
+    /// kind's serializer constructor: the kind is fixed as for code, the
+    /// record is marked as read, and the kind the document states is held to
+    /// it — all before any other member is set.
+    /// </summary>
+    /// <exception cref="JsonException"><paramref name="statedKind"/> is not <paramref name="kind"/>.</exception>
+    private protected BgDecisionData(DecisionKind kind, DecisionKind statedKind)
+    {
+        _kind = kind;
+        _read = true;
+        Kind = statedKind;
+    }
+
+    /// <summary>
+    /// Whether this record is being read from a document — for a kind's own
+    /// rules, which refuse a breach as the base's do.
+    /// </summary>
+    private protected bool IsRead => _read;
 
     /// <summary>
     /// The decision's kind — the value form of its type: every
@@ -107,7 +136,8 @@ public abstract class BgDecisionData : IDecisionFilterData
     /// </summary>
     /// <exception cref="JsonException">
     /// Thrown on read when the document states the other kind — reachable
-    /// only from JSON (the setter is internal, for the serializer alone).
+    /// only from JSON: the serializer passes the stated kind to the kind's
+    /// serializer constructor, which sets it here.
     /// </exception>
     [JsonInclude, JsonRequired, JsonPropertyOrder(-5)]
     public DecisionKind Kind
@@ -141,11 +171,18 @@ public abstract class BgDecisionData : IDecisionFilterData
         get => _id!;
         init
         {
-            ArgumentNullException.ThrowIfNull(value, nameof(Id));
-            if (!DecisionRules.IdAgrees(value, _kind))
-                throw new ArgumentException(DecisionRules.IdKindMessage, nameof(Id));
-            if (_descriptive is not null && !DecisionRules.StartAgrees(value, _descriptive.IsStandardStart))
-                throw new ArgumentException(DecisionRules.StartMessage, nameof(Id));
+            try
+            {
+                ArgumentNullException.ThrowIfNull(value, nameof(Id));
+                if (!DecisionRules.IdAgrees(value, _kind))
+                    throw new ArgumentException(DecisionRules.IdKindMessage, nameof(Id));
+                if (_descriptive is not null && !DecisionRules.StartAgrees(value, _descriptive.IsStandardStart))
+                    throw new ArgumentException(DecisionRules.StartMessage, nameof(Id));
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
             _id = value;
         }
     }
@@ -176,10 +213,17 @@ public abstract class BgDecisionData : IDecisionFilterData
         get => _position!;
         init
         {
-            ArgumentNullException.ThrowIfNull(value, nameof(Position));
-            if (!DecisionRules.CrawfordAllows(_kind, value.IsCrawford))
-                throw new ArgumentException(DecisionRules.CrawfordMessage, nameof(Position));
-            PositionStated(value);
+            try
+            {
+                ArgumentNullException.ThrowIfNull(value, nameof(Position));
+                if (!DecisionRules.CrawfordAllows(_kind, value.IsCrawford))
+                    throw new ArgumentException(DecisionRules.CrawfordMessage, nameof(Position));
+                PositionStated(value);
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
             _position = value;
         }
     }
@@ -197,9 +241,16 @@ public abstract class BgDecisionData : IDecisionFilterData
         get => _descriptive!;
         init
         {
-            ArgumentNullException.ThrowIfNull(value, nameof(Descriptive));
-            if (_id is not null && !DecisionRules.StartAgrees(_id, value.IsStandardStart))
-                throw new ArgumentException(DecisionRules.StartMessage, nameof(Descriptive));
+            try
+            {
+                ArgumentNullException.ThrowIfNull(value, nameof(Descriptive));
+                if (_id is not null && !DecisionRules.StartAgrees(_id, value.IsStandardStart))
+                    throw new ArgumentException(DecisionRules.StartMessage, nameof(Descriptive));
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
             _descriptive = value;
         }
     }

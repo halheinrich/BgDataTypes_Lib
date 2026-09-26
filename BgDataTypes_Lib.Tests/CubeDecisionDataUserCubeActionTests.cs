@@ -66,16 +66,22 @@ public class CubeDecisionDataUserCubeActionTests
     // ---------------------------------------------------------------------
 
     [Theory]
-    [InlineData("{\"UserDoublerAction\":\"Take\"}")]
-    [InlineData("{\"UserTakerAction\":\"Double\"}")]
-    public void Deserialize_CrossHalfValue_Throws(string json)
+    [InlineData("UserDoublerAction", "Take")]
+    [InlineData("UserTakerAction", "Double")]
+    public void Deserialize_CrossHalfValue_IsRefused_BothPaths(string member, string action)
     {
-        // Rewritten: the retired "IsCube" member is gone from the fragments —
-        // the cube category now refuses a member it does not have. The init
-        // guards run during deserialization too: corrupt wire data surfaces
-        // at read time rather than as a silently-carried invalid action.
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => JsonSerializer.Deserialize<CubeDecisionData>(json));
+        // Rewritten from Deserialize_CrossHalfValue_Throws: the init guards
+        // run during deserialization, so corrupt wire data surfaces at read
+        // time rather than as a silently-carried invalid action — and read
+        // from a document, the category refuses it as a JsonException
+        // carrying the guard's exception, not as the exception itself. The
+        // document is now a whole category with one half corrupted, rather
+        // than a fragment, so the half-guard is what refuses it.
+        var document = WirePaths.Document(TestRecords.CubeData());
+        document[member] = action;
+
+        var ex = WirePaths.AssertRefused<CubeDecisionData>(document.ToJsonString());
+        Assert.IsType<ArgumentOutOfRangeException>(ex.InnerException);
     }
 
     [Theory]

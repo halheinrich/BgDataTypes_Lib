@@ -46,8 +46,9 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `PositionData` and `DescriptiveData`, and each kind's `Decision`
   category, `CheckerPlayDecisionData` (with `PlayCandidate` beneath it) and
   `CubeDecisionData`; `DecisionRules`, the internal statement of the rules
-  that bind a decision's members. `DecisionRow` is the flat projection for
-  CSV/JSON export.
+  that bind a decision's members, and `DocumentRefusal`, the internal one
+  spelling of how a rule a document breaks is refused. `DecisionRow` is the
+  flat projection for CSV/JSON export.
 - **Identity** — two distinct keys, deliberately not one. `DecisionId`
   (with `DecisionIdJsonConverter`) is the file-navigation identity: *where
   did this record come from*. `ProblemKey` (with `ProblemKeyJsonConverter`)
@@ -881,9 +882,29 @@ Design points a maintainer needs before touching it:
   kind and each kind's category disallows unmapped members), a missing
   member, a construction rule broken — is a `JsonException` on both paths.
   Why not `[JsonPolymorphic]` (measured on .NET 10) is stated on the
-  converter's doc comment, with its one stated limit: a kind read directly
-  by its own type bypasses the converter, so a broken construction rule
-  there surfaces as the guard's own `ArgumentException`.
+  converter's doc comment. A kind read directly by its own type bypasses
+  the converter and refuses exactly as it does there (next item).
+- **A construction rule a document breaks is a `JsonException`, whatever it
+  is read as** — a record as `BgDecisionData` or as its kind, or a category
+  on its own — carrying the init guard's exception as its inner one; code
+  breaking the same rule gets the guard's exception itself. This closed the
+  converter's one stated limit (a kind read directly used to surface the
+  guard's `ArgumentException`). The mechanism, stated once on
+  `BgDataTypesJsonContext`: each type holding its members to a rule
+  (`CheckerPlayDecision`, `CubeDecision`, `CheckerPlayDecisionData`,
+  `CubeDecisionData`) has an internal `[JsonConstructor]` beside the public
+  parameterless one code uses. It binds one wire member (a kind's binds
+  `Kind`, which the base then holds to the type), marks the instance as
+  read, and runs before any init setter on both paths; each guarded setter
+  rethrows its `ArgumentException` through `DocumentRefusal` when the
+  instance is read. Measured on .NET 10 before relying on it: a generated
+  context sets init and `required` members in an object initializer
+  *before* `IJsonOnDeserializing` runs, so a callback flag cannot work, and
+  a full-member serializer constructor would need `[SetsRequiredMembers]`,
+  which silently turns off the JSON-required meaning of `required`. The
+  converter no longer catches anything; it only dispatches.
+  `PlayJsonConverter` refuses a play of more than four moves itself — it
+  used to let `Play.Add`'s `InvalidOperationException` escape.
 - **The members agree by construction.** Each init setter checks its value
   against the members already set and against the kind, which the base's
   constructor fixes before any member is set, so every rule is
@@ -1693,7 +1714,8 @@ enum converter and `BgDecisionData` bundles `BgDecisionDataJsonConverter`
 Tested without any options-level registration in
 `BgDecisionDataSerializationTests`, `DecisionRowSerializationTests`,
 `DecisionKindTests`, `DiceRollTests`, `ProblemKeyTests`, and
-`BoardWireTests`. The bytes of a full record and row of each kind are
+`BoardWireTests`; `DocumentRefusalTests` reads every rule's breach as each
+type that can hold it, on both paths. The bytes of a full record and row of each kind are
 pinned by `WireGoldenTests`, beside the retired shapes it refuses; absence
 is walked member by member by `WireAbsenceTests`.
 A `NamedCollection` specialization bundles its own closed
@@ -1799,17 +1821,15 @@ measure" is not a valid comparison on this hardware.
   and `WireAbsenceTests` fails a member that is neither kind.
 - **A Crawford cube cannot be built** (`halheinrich/backgammon#201`). A
   `CubeDecision`'s `Position` refuses a Crawford position with
-  `ArgumentException`, from an initializer in any member order; read as a
-  `BgDecisionData` it is a `JsonException`; a row holding one is refused on
+  `ArgumentException`, from an initializer in any member order; read from
+  JSON it is a `JsonException`; a row holding one is refused on
   read. So a fixture that wants the Crawford flag builds a Crawford *play*,
   and a test that needs a Crawford cube *key* (still in `ProblemKey`'s
   grammar, for old stats documents) builds it from the key string, never
   from a record.
-- **Read a record as `BgDecisionData`, not as its kind.** The converter is
-  where every refusal becomes a `JsonException`; a kind read directly by
-  its own type still requires a matching `"Kind"` and refuses the other
-  kind's members, but a broken construction rule surfaces as the init
-  guard's `ArgumentException` (the converter's stated limit). A consumer's
+- **Embed a record as `BgDecisionData`, not as its kind.** Every read
+  refuses malformed input as a `JsonException` — as the base, as a kind, or
+  as a category — but only the base reads either kind: a consumer's
   document embeds `BgDecisionData`, never a kind, and a collection of
   records is a consumer's document: its context declares it and chains this
   one.

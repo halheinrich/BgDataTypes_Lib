@@ -76,6 +76,26 @@ namespace BgDataTypes_Lib;
 /// <see cref="PlayCandidate"/>) keep the serializer's default and ignore a
 /// member they do not know: no member of theirs can belong to the other kind.
 /// </para>
+/// <para>
+/// <b>A construction rule a document breaks is a
+/// <see cref="System.Text.Json.JsonException"/></b>, whatever type the
+/// document is read as: a record as <see cref="BgDecisionData"/> or as its own
+/// kind, or one of its categories on its own. Code that breaks a rule gets
+/// the init guard's <see cref="ArgumentException"/>; a document gets the same
+/// fault as a <see cref="System.Text.Json.JsonException"/> carrying it, so a
+/// reader that absorbs malformed input absorbs every one. A type tells the
+/// two apart by how it was constructed. Each type that holds its members to a
+/// rule has an internal serializer constructor
+/// (<see cref="JsonConstructorAttribute"/>) beside the public one code uses:
+/// it takes one wire member, because a serializer constructor must bind one
+/// (a kind's takes its <c>"Kind"</c>), and marks the instance as read. It
+/// runs before any init setter on both paths. Nothing later can mark the
+/// read in time: measured on .NET 10 (2026-09-25), a generated context sets
+/// the init and <c>required</c> members in an object initializer before
+/// <see cref="IJsonOnDeserializing"/> runs. <see cref="DecisionRow"/> needs no
+/// such constructor. It has no public one, and it holds a row read from JSON
+/// to its rules whole, in <see cref="IJsonOnDeserialized"/>.
+/// </para>
 ///
 /// <para>
 /// <b>The composition pattern</b> (the halheinrich/backgammon#129 arc's

@@ -50,6 +50,10 @@ public sealed class PlayJsonConverter : JsonConverter<Play>
             if (reader.TokenType == JsonTokenType.EndArray)
                 return play;
 
+            // A document breaking the play's own rule is malformed input like
+            // any other: refused here, not left to Add's InvalidOperationException.
+            if (play.Count == 4)
+                throw new JsonException("A play has at most 4 moves.");
             var move = JsonSerializer.Deserialize(ref reader, moveTypeInfo);
             play.Add(move);
         }

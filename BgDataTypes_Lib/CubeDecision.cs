@@ -24,6 +24,19 @@ public sealed class CubeDecision : BgDecisionData
     }
 
     /// <summary>
+    /// The serializer's constructor, for a record read from a document: it
+    /// takes the kind the document states, which must be
+    /// <see cref="DecisionKind.Cube"/>, and marks the record as read, so every
+    /// rule it holds its members to refuses a breach as a
+    /// <see cref="System.Text.Json.JsonException"/> (the wire rule on
+    /// <see cref="BgDataTypesJsonContext"/>).
+    /// </summary>
+    [JsonConstructor]
+    internal CubeDecision(DecisionKind kind) : base(DecisionKind.Cube, kind)
+    {
+    }
+
+    /// <summary>
     /// The cube analysis, the user's cube errors and played actions, and the
     /// scoring policy — see <see cref="CubeDecisionData"/>.
     /// </summary>
@@ -33,7 +46,14 @@ public sealed class CubeDecision : BgDecisionData
         get => _decision!;
         init
         {
-            ArgumentNullException.ThrowIfNull(value, nameof(Decision));
+            try
+            {
+                ArgumentNullException.ThrowIfNull(value, nameof(Decision));
+            }
+            catch (ArgumentException fault) when (IsRead)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
             _decision = value;
         }
     }

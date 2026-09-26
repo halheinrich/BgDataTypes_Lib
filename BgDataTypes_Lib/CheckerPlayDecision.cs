@@ -18,8 +18,9 @@ namespace BgDataTypes_Lib;
 /// <see cref="BoardState.IsSamePlay"/>. Whichever of <see cref="BgDecisionData.Position"/>
 /// and <see cref="Decision"/> is set second checks every candidate and refuses
 /// the first invalid one with an <see cref="ArgumentException"/> naming it and
-/// the fault; read through <see cref="BgDecisionData"/> it is a
-/// <see cref="System.Text.Json.JsonException"/>, on both paths.
+/// the fault; read from JSON, as <see cref="BgDecisionData"/> or as this type,
+/// it is a <see cref="System.Text.Json.JsonException"/> carrying that
+/// exception, on both paths.
 /// </para>
 /// <para>
 /// <b>The after-boards are derived, never stored</b> (the arc's rule: no
@@ -49,6 +50,19 @@ public sealed class CheckerPlayDecision : BgDecisionData
     }
 
     /// <summary>
+    /// The serializer's constructor, for a record read from a document: it
+    /// takes the kind the document states, which must be
+    /// <see cref="DecisionKind.CheckerPlay"/>, and marks the record as read, so
+    /// every rule it holds its members to refuses a breach as a
+    /// <see cref="System.Text.Json.JsonException"/> (the wire rule on
+    /// <see cref="BgDataTypesJsonContext"/>).
+    /// </summary>
+    [JsonConstructor]
+    internal CheckerPlayDecision(DecisionKind kind) : base(DecisionKind.CheckerPlay, kind)
+    {
+    }
+
+    /// <summary>
     /// The roll, the analysed candidates, and which of them are best and
     /// played — see <see cref="CheckerPlayDecisionData"/>.
     /// </summary>
@@ -62,9 +76,16 @@ public sealed class CheckerPlayDecision : BgDecisionData
         get => _decision!;
         init
         {
-            ArgumentNullException.ThrowIfNull(value, nameof(Decision));
-            if (StatedPosition is { } position)
-                Derive(position, value, nameof(Decision));
+            try
+            {
+                ArgumentNullException.ThrowIfNull(value, nameof(Decision));
+                if (StatedPosition is { } position)
+                    Derive(position, value, nameof(Decision));
+            }
+            catch (ArgumentException fault) when (IsRead)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
             _decision = value;
         }
     }
