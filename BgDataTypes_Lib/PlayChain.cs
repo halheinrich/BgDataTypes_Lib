@@ -25,8 +25,8 @@ namespace BgDataTypes_Lib;
 /// hits, so the hit stays visible — see <see cref="CanonicalPlay"/> for the
 /// collapse and hit-attribution rules.
 ///
-/// The record-struct equality serves display grouping (the formatter's "(2)"
-/// for identical chains) and is not play identity, which is
-/// <see cref="BoardState.IsSamePlay"/>.
+/// The record-struct equality serves display grouping (the "(2)" of
+/// <see cref="CanonicalPlay.ToString"/> for identical chains) and is not play
+/// identity, which is <see cref="BoardState.IsSamePlay"/>.
 /// </summary>
 public readonly record struct PlayChain(int FrPt, int ToPt);
