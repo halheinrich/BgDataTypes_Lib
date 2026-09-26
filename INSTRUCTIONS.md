@@ -1407,9 +1407,18 @@ the record's. The format, field by field, is stated once, on
 - **The format's spellings of money are the encoder's alone.** For money it
   writes a match length of 0 and the session's scores; for a match, its
   length less each away score. Field 8 is Crawford for a match, Jacoby plus
-  twice beaver for money. A match's maxCube field is 10 (`2^10`), what XG
-  writes for every match (all 69,824 distinct match XGIDs in the corpus); a
-  money session's is its limit's exponent.
+  twice beaver for money. A money session's maxCube field is its limit's
+  exponent.
+- **A match has no cube limit, so its maxCube field is always 10**
+  (decided at the umbrella's review of halheinrich/backgammon#273,
+  2026-09-26). A match's length already bounds what its cube can win, so no
+  record and no `MatchTerms` holds a limit for the field to spell. XG
+  writes 10 for every match: all 69,824 distinct match XGIDs in the corpus
+  state it (the converter's copy wrote the match header's cube-limit
+  exponent instead). The converter's boundary guards the assumption: it
+  refuses a match header stating any other limit, so real data would expose
+  it. The encoder's `MatchMaxCubeField` states the decision where it is
+  applied.
 - **Culture-invariant**: numbers are written invariant, so a culture's minus
   sign (`sv-SE`'s U+2212) cannot change the opponent's `-1`. The converter's
   copy formatted with the ambient culture.

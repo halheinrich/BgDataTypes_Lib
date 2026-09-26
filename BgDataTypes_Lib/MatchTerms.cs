@@ -6,6 +6,14 @@ namespace BgDataTypes_Lib;
 /// A producer states the real length — XG's raw sentinel for a money session
 /// (99999) is a money session's <see cref="MoneyTerms"/>, never a match.
 /// </summary>
+/// <remarks>
+/// <b>No cube limit</b> (decided at the umbrella's review of
+/// halheinrich/backgammon#273, 2026-09-26): a match's length already bounds
+/// what its cube can win, so the limit is a money session's alone
+/// (<see cref="MoneyTerms.CubeLimit"/>). A producer refuses a match header
+/// stating one; the XGID's field for it is a constant for every match
+/// (the internal encoder states it, with the corpus evidence).
+/// </remarks>
 public sealed class MatchTerms : SessionTerms
 {
     private readonly int _length;

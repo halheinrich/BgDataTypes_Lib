@@ -48,9 +48,8 @@ namespace BgDataTypes_Lib;
 /// format's own spelling of money.</description></item>
 /// <item><description><b>maxCube</b> — the exponent of a money session's
 /// <see cref="MoneySession.CubeLimit"/>; for a match, which has no cube
-/// limit, 10 (<c>2^10</c>), what XG writes there: every one of the 69,824
-/// distinct match XGIDs in the local corpus states it
-/// (<see cref="MatchMaxCubeField"/>).</description></item>
+/// limit, always 10 (<see cref="MatchMaxCubeField"/>, which states the
+/// decision and its evidence).</description></item>
 /// </list>
 /// <para>
 /// The format's 0s for money (the match length, and the away scores it
@@ -66,10 +65,21 @@ internal static class XgidEncoder
     internal const string Prefix = "XGID=";
 
     /// <summary>
-    /// The maxCube field of a match's XGID. A match has no cube limit; XG
-    /// writes its default, <c>2^10</c>, there — as every match XGID in the
-    /// local corpus does (69,824 distinct ones, measured 2026-09-26).
+    /// The maxCube field of every match's XGID: 10 (<c>2^10</c>), whatever
+    /// the match.
     /// </summary>
+    /// <remarks>
+    /// <b>Decided, not defaulted</b> (the umbrella's review of
+    /// halheinrich/backgammon#273, 2026-09-26): a match has no cube limit —
+    /// its length already bounds what its cube can win — so no record, and
+    /// no <see cref="MatchTerms"/>, holds one for this field to spell. XG
+    /// writes 10 there for every match: all 69,824 distinct match XGIDs in
+    /// the local corpus state it (measured 2026-09-26, where the converter's
+    /// copy wrote the match header's cube-limit exponent instead). The
+    /// assumption is guarded where it could break, at the converter's
+    /// boundary: a match header stating any other limit is refused there, so
+    /// real data that contradicts it is exposed rather than re-spelled.
+    /// </remarks>
     internal const int MatchMaxCubeField = 10;
 
     /// <summary>

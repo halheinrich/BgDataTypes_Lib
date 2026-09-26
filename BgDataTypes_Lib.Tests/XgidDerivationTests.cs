@@ -172,13 +172,24 @@ public class XgidDerivationTests
         Assert.Equal(["12", "30", field, "0", "8"], Fields(record)[5..]);
     }
 
-    [Fact]
-    public void AMatchsMaxCube_IsXgsDefault_ForAMatchHasNoCubeLimit()
+    [Theory]
+    [InlineData(1, 1, 1, false)]
+    [InlineData(7, 7, 7, false)]
+    [InlineData(25, 3, 11, false)]
+    [InlineData(5, 1, 4, true)]
+    public void EveryMatchsMaxCube_Is10_ForAMatchHasNoCubeLimit(int length, int onRollNeeds, int opponentNeeds, bool isCrawford)
     {
-        // A match has no cube limit; XG writes 10 (2^10) in every match XGID.
-        Assert.Equal("10", Fields(TestRecords.CheckerPlay())[9]);
-        Assert.Equal(10, XgidEncoder.MatchMaxCubeField);
+        // Rewritten from AMatchsMaxCube_IsXgsDefault_ForAMatchHasNoCubeLimit:
+        // decided at the umbrella's review of halheinrich/backgammon#273. A
+        // match's length bounds its cube, so no match member holds a limit
+        // for the field to spell, and it is 10 (2^10) whatever the match —
+        // what XG writes for every match in the corpus.
+        var record = TestRecords.CheckerPlay(position: TestRecords.Position(session: TestRecords.MatchSession(
+            length: length, onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isCrawford: isCrawford)));
+
+        Assert.Equal("10", Fields(record)[9]);
         Assert.Null(typeof(MatchSession).GetProperty("CubeLimit"));
+        Assert.Null(typeof(MatchTerms).GetProperty("CubeLimit"));
     }
 
     [Fact]
