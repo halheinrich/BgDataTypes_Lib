@@ -59,7 +59,6 @@ public class BgDataTypesJsonContextTests
                 dice: [6, 4],
                 plays: [
                     TestRecords.Candidate(
-                        moveNotation: "24/18 13/9",
                         play: [new(24, 18), new(13, 9)],
                         depth: "Rollout: 1296 trials. 3-ply",
                         depthAbbreviation: "3p1296",
@@ -74,7 +73,6 @@ public class BgDataTypesJsonContextTests
                         loseGammonPct: 0.143,
                         loseBgPct: 0.006),
                     TestRecords.Candidate(
-                        moveNotation: "24/18 24/20*",
                         play: [new(24, 18), new(24, -20)],
                         depth: "3-ply",
                         depthAbbreviation: "3-ply",

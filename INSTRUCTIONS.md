@@ -219,7 +219,7 @@ Design points:
   `PlayOutcomeData` and `DecisionRow`; `DecisionRow.SourceFile` and
   `IsJacoby`. Every other serialized member is required, the record halves
   and `Xgid` included. `WireAbsenceTests` walks the graph from the context's
-  own metadata (99 members across eight types) and pins both halves of the
+  own metadata (98 members across eight types) and pins both halves of the
   rule on both paths, plus that every member is exactly one kind.
 - **`Unknown` is a value, not an absence.** `AnalysisMode`/`AnalysisLevel`
   (on candidates, cube analyses and rows) are required: "not recorded" is
@@ -283,7 +283,7 @@ what a board is compared and stored as.
 | `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
 | `PlayChain` | `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a route from a source to a landing point, which the notation writes as one `from/to`, joining consecutive moves and eliding the touch-down points between. It stops where its moves stop or at a hit point whose mark it carries, so it is not a checker's whole trajectory: an intermediate hit splits one trajectory into two chains (`13/10*/8` is written `13/10* 10/8`). Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | `readonly struct`, fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by `Play.ToCanonical()` — no public constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `MoveNotation`, `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`. `MoveNotation` is the display string; `Play` is the structural sequence of moves (complement, not duplicate — used to apply the candidate and to match a play against the candidates with `BoardState.IndexOfSamePlay`). `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
+| `PlayCandidate` | `Play`, `Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`, `AnalysisLevel`, `Equity`, `EquityLoss` (non-nullable, `0.0` = best), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LosePct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`. `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. `EquityLoss == 0.0` is the test for "is this a best play"; `DecisionData.BestPlayIndex` names the canonical single best when one is needed. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 | `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `TryDerive` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. Both doors run the same fact validation, and facts that would force a guess get **no key** rather than a wrong one (see "ProblemKey" below and Pitfalls). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
@@ -374,6 +374,13 @@ it is `play.ToCanonical().ToString()`. Design points:
   difference. BgMoveGen's copy is deleted in its own consumer leg.
 - **Invariant text.** Point numbers are written with the invariant culture,
   so the notation never varies with the machine's locale.
+- **Never stored.** Notation is derived wherever it is shown — a candidate's
+  is `PlayCandidate.Notation`, from its `Play`. A stored copy can disagree
+  with the play it describes (a converted match stored `8/3* 7/3` over a
+  play marking the hit on the 7-point checker), so no record carries one:
+  `PlayCandidate.MoveNotation` is retired from the wire, and an old document
+  carrying it reads with the member ignored. Do not add a notation member to
+  a record.
 
 ### BoardPosition
 
@@ -1138,7 +1145,8 @@ public sealed class DecisionRow : IDecisionFilterData
 
 public class PositionData    { /* required init-only properties per Architecture table; Mop is a BoardPosition; IsJacoby? */ }
 public class DescriptiveData { /* required init-only properties per Architecture table; Title?, Date?, Event?, SourceFile? */ }
-public class PlayCandidate   { /* required init-only properties per Architecture table; the six probabilities nullable */ }
+public class PlayCandidate   { /* required init-only properties per Architecture table; the six probabilities nullable */
+                               [JsonIgnore] public string Notation { get; }  /* Play.ToCanonical().ToString(); never stored */ }
 
 public class DecisionData
 {

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace BgDataTypes_Lib;
 
 /// <summary>
@@ -12,18 +14,27 @@ namespace BgDataTypes_Lib;
 /// </summary>
 public class PlayCandidate
 {
-    /// <summary>Move notation, e.g. "8/5(2) 6/3(2)".</summary>
-    public required string MoveNotation { get; init; }
-
     /// <summary>
-    /// Structural play — the sequence of (FrPt, ToPt) moves that produces
-    /// this candidate. Complements <see cref="MoveNotation"/>: the notation
-    /// is for display, the <see cref="Play"/> for applying and matching the
-    /// candidate (e.g. submitted-play grading, which finds a submitted play
-    /// among the candidates with <see cref="BoardState.IndexOfSamePlay"/>
-    /// from the decision's position).
+    /// The candidate's play — the sequence of (FrPt, ToPt) moves that
+    /// produces it, and the one stored form of it. It is applied and matched
+    /// (submitted-play grading finds a submitted play among the candidates
+    /// with <see cref="BoardState.IndexOfSamePlay"/> from the decision's
+    /// position), and it is displayed through <see cref="Notation"/>, which
+    /// is derived from it.
     /// </summary>
     public required Play Play { get; init; }
+
+    /// <summary>
+    /// The candidate's play in standard notation, e.g. <c>"8/5(2) 6/3(2)"</c>:
+    /// <see cref="Play"/> written by the one formatter of play notation,
+    /// <see cref="CanonicalPlay.ToString"/>, so it can never disagree with
+    /// the play. Derived on each read and never stored: it is not on the
+    /// wire, and a document that still carries the retired
+    /// <c>MoveNotation</c> member reads with that member ignored
+    /// (halheinrich/backgammon#273). The empty string for a pass.
+    /// </summary>
+    [JsonIgnore]
+    public string Notation => Play.ToCanonical().ToString();
 
     /// <summary>Analysis depth label for this candidate, e.g. "3-ply",
     /// "XG Roller++", "Rollout: 1296 trials. 3-ply". Rendered in the

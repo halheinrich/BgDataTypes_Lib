@@ -137,8 +137,12 @@ internal static class TestRecords
         Flagged = flagged,
     };
 
+    /// <summary>
+    /// A candidate. Its notation is not a member (halheinrich/backgammon#273):
+    /// it is derived from <paramref name="play"/>, so a test that cares how a
+    /// candidate reads passes the play that reads that way.
+    /// </summary>
     public static PlayCandidate Candidate(
-        string moveNotation = "",
         Play play = default,
         string depth = "",
         string depthAbbreviation = "",
@@ -154,7 +158,6 @@ internal static class TestRecords
         double? loseGammonPct = null,
         double? loseBgPct = null) => new()
     {
-        MoveNotation = moveNotation,
         Play = play,
         Depth = depth,
         DepthAbbreviation = depthAbbreviation,

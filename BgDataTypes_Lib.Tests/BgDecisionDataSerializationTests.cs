@@ -65,13 +65,13 @@ public class BgDecisionDataSerializationTests
         // is EquityLoss == 0.0 (or membership-by-equity equivalence). Identifying
         // a canonical best uses DecisionData.BestPlayIndex.
         var original = TestRecords.Candidate(
-            moveNotation: "8/5(2) 6/3(2)",
+            play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
             equity: -0.142,
             equityLoss: 0.0);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
-        Assert.Equal(original.MoveNotation, restored.MoveNotation);
+        Assert.Equal("8/5(2) 6/3(2)", restored.Notation);
         Assert.Equal(original.Equity, restored.Equity);
         Assert.Equal(0.0, restored.EquityLoss);
     }
@@ -80,7 +80,7 @@ public class BgDecisionDataSerializationTests
     public void PlayCandidate_RoundTrip_PopulatedEquityLoss()
     {
         var original = TestRecords.Candidate(
-            moveNotation: "13/8 13/11",
+            play: [new(13, 8), new(13, 11)],
             equity: -0.187,
             equityLoss: 0.045);
         var json = JsonSerializer.Serialize(original, Options);
@@ -93,7 +93,7 @@ public class BgDecisionDataSerializationTests
     public void PlayCandidate_RoundTrip_Probabilities_AllPopulated()
     {
         var original = TestRecords.Candidate(
-            moveNotation: "8/5(2) 6/3(2)",
+            play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
             equity: -0.142,
             winPct: 0.481,
             winGammonPct: 0.112,
@@ -116,7 +116,7 @@ public class BgDecisionDataSerializationTests
     public void PlayCandidate_RoundTrip_Probabilities_AllNull()
     {
         var original = TestRecords.Candidate(
-            moveNotation: "8/5(2) 6/3(2)",
+            play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
             equity: -0.142);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
@@ -133,7 +133,7 @@ public class BgDecisionDataSerializationTests
     public void PlayCandidate_RoundTrip_Probabilities_PartiallyPopulated()
     {
         var original = TestRecords.Candidate(
-            moveNotation: "13/8 13/11",
+            play: [new(13, 8), new(13, 11)],
             equity: -0.187,
             winPct: 0.476,
             losePct: 0.524
@@ -154,14 +154,14 @@ public class BgDecisionDataSerializationTests
     public void PlayCandidate_RoundTripWithDepth()
     {
         var original = TestRecords.Candidate(
-            moveNotation: "8/5(2) 6/3(2)",
+            play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
             depth: "Rollout: 1296 trials. 3-ply",
             equity: -0.142);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
         Assert.Equal(original.Depth, restored.Depth);
-        Assert.Equal(original.MoveNotation, restored.MoveNotation);
+        Assert.Equal("8/5(2) 6/3(2)", restored.Notation);
         Assert.Equal(original.Equity, restored.Equity);
     }
 
@@ -169,21 +169,21 @@ public class BgDecisionDataSerializationTests
     public void PlayCandidate_Depth_AbsentIsRefused()
     {
         // Rewritten from PlayCandidate_Depth_DefaultsToEmpty.
-        AssertAbsentIsRefused(TestRecords.Candidate(moveNotation: "8/5 6/1"), "Depth");
+        AssertAbsentIsRefused(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "Depth");
     }
 
     [Fact]
     public void PlayCandidate_DepthAbbreviation_RoundTrip()
     {
         var original = TestRecords.Candidate(
-            moveNotation: "8/5(2) 6/3(2)",
+            play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
             depthAbbreviation: "3p1296",
             equity: -0.142);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
         Assert.Equal(original.DepthAbbreviation, restored.DepthAbbreviation);
-        Assert.Equal(original.MoveNotation, restored.MoveNotation);
+        Assert.Equal("8/5(2) 6/3(2)", restored.Notation);
         Assert.Equal(original.Equity, restored.Equity);
     }
 
@@ -191,35 +191,35 @@ public class BgDecisionDataSerializationTests
     public void PlayCandidate_DepthAbbreviation_AbsentIsRefused()
     {
         // Rewritten from PlayCandidate_DepthAbbreviation_DefaultsToEmpty.
-        AssertAbsentIsRefused(TestRecords.Candidate(moveNotation: "8/5 6/1"), "DepthAbbreviation");
+        AssertAbsentIsRefused(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "DepthAbbreviation");
     }
 
     [Fact]
     public void PlayCandidate_DepthRank_RoundTrip()
     {
         var original = TestRecords.Candidate(
-            moveNotation: "8/5(2) 6/3(2)",
+            play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
             depthRank: 7,
             equity: -0.142);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
         Assert.Equal(7, restored.DepthRank);
-        Assert.Equal(original.MoveNotation, restored.MoveNotation);
+        Assert.Equal("8/5(2) 6/3(2)", restored.Notation);
     }
 
     [Fact]
     public void PlayCandidate_DepthRank_AbsentIsRefused()
     {
         // Rewritten from PlayCandidate_DepthRank_DefaultsToZero.
-        AssertAbsentIsRefused(TestRecords.Candidate(moveNotation: "8/5 6/1"), "DepthRank");
+        AssertAbsentIsRefused(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "DepthRank");
     }
 
     [Fact]
     public void PlayCandidate_AnalysisModeAndLevel_RoundTrip()
     {
         var original = TestRecords.Candidate(
-            moveNotation: "8/5(2) 6/3(2)",
+            play: [new(8, 5), new(8, 5), new(6, 3), new(6, 3)],
             analysisMode: AnalysisMode.Rollout,
             analysisLevel: AnalysisLevel.Ply3,
             equity: -0.142);
@@ -239,7 +239,7 @@ public class BgDecisionDataSerializationTests
         // Rewritten from PlayCandidate_AnalysisModeAndLevel_DefaultToUnknown.
         // "Not recorded" is spelled Unknown by the producer; an absent member
         // is not read as it.
-        AssertAbsentIsRefused(TestRecords.Candidate(moveNotation: "8/5 6/1"), "AnalysisMode", "AnalysisLevel");
+        AssertAbsentIsRefused(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "AnalysisMode", "AnalysisLevel");
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public class BgDecisionDataSerializationTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlayCandidate>(legacy, Options));
 
         var full = JsonNode.Parse(JsonSerializer.Serialize(
-            TestRecords.Candidate(moveNotation: "8/5 6/1", depth: "3-ply"), Options))!.AsObject();
+            TestRecords.Candidate(play: [new(8, 5), new(6, 1)], depth: "3-ply"), Options))!.AsObject();
         full["DepthClass"] = "Ply3";
         var restored = JsonSerializer.Deserialize<PlayCandidate>(full.ToJsonString(), Options)!;
 
@@ -269,20 +269,25 @@ public class BgDecisionDataSerializationTests
     {
         // Rewritten from PlayCandidate_Play_DefaultsToEmpty: an absent play
         // would read as the empty play, a pass.
-        AssertAbsentIsRefused(TestRecords.Candidate(moveNotation: "8/5 6/1"), "Play");
+        AssertAbsentIsRefused(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "Play");
     }
 
     [Fact]
     public void PlayCandidate_Play_RoundTrip_Empty()
     {
+        // Rewritten for halheinrich/backgammon#273: the fixture stored the
+        // notation "8/5 6/1" beside an empty play, the disagreement a stored
+        // copy allowed. The notation is the play's now, so a pass reads as
+        // the empty string.
         var original = TestRecords.Candidate(
-            moveNotation: "8/5 6/1",
+            play: [],
             equity: -0.142);
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PlayCandidate>(json, Options)!;
 
         Assert.Equal(0, restored.Play.Count);
         Assert.Contains("\"Play\":[]", json);
+        Assert.Equal(string.Empty, restored.Notation);
     }
 
     [Fact]
@@ -291,7 +296,6 @@ public class BgDecisionDataSerializationTests
         Play play = [new(13, 7), new(8, 5)];
 
         var original = TestRecords.Candidate(
-            moveNotation: "13/7 8/5",
             equity: -0.118,
             play: play);
         var json = JsonSerializer.Serialize(original, Options);
@@ -301,6 +305,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(new Move(13, 7), restored.Play[0]);
         Assert.Equal(new Move(8, 5), restored.Play[1]);
         Assert.True(restored.Play.IsSameEncoding(original.Play));
+        Assert.Equal("13/7 8/5", restored.Notation);
     }
 
     [Fact]
@@ -309,7 +314,6 @@ public class BgDecisionDataSerializationTests
         Play play = [new(13, -7)];   // hit on the 7-point
 
         var original = TestRecords.Candidate(
-            moveNotation: "13/7*",
             equity: 0.05,
             play: play);
         var json = JsonSerializer.Serialize(original, Options);
@@ -318,6 +322,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(1, restored.Play.Count);
         Assert.Equal(13, restored.Play[0].FrPt);
         Assert.Equal(-7, restored.Play[0].ToPt);
+        Assert.Equal("13/7*", restored.Notation);
     }
 
     [Fact]
@@ -331,7 +336,6 @@ public class BgDecisionDataSerializationTests
                 dice: [6, 4],
                 plays: [
                     TestRecords.Candidate(
-                        moveNotation: "24/18 13/9",
                         equity: 0.211,
                         play: play)
                 ],
@@ -344,6 +348,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(2, restoredPlay.Count);
         Assert.Equal(new Move(24, 18), restoredPlay[0]);
         Assert.Equal(new Move(13, 9), restoredPlay[1]);
+        Assert.Equal("24/18 13/9", restored.Decision.Plays[0].Notation);
     }
 
     [Fact]
@@ -556,8 +561,8 @@ public class BgDecisionDataSerializationTests
         var original = TestRecords.Decision(
             dice: [3, 5],
             plays: [
-                TestRecords.Candidate(moveNotation: "8/5 6/1", depth: "3-ply", equity: -0.120),
-                TestRecords.Candidate(moveNotation: "8/3 6/1", depth: "3-ply", equity: -0.165, equityLoss: 0.045)
+                TestRecords.Candidate(play: [new(8, 5), new(6, 1)], depth: "3-ply", equity: -0.120),
+                TestRecords.Candidate(play: [new(8, 3), new(6, 1)], depth: "3-ply", equity: -0.165, equityLoss: 0.045)
             ],
             isCube: false);
 
@@ -566,7 +571,7 @@ public class BgDecisionDataSerializationTests
 
         Assert.Equal(original.Dice, restored.Dice);
         Assert.Equal(2, restored.Plays.Count);
-        Assert.Equal("8/5 6/1", restored.Plays[0].MoveNotation);
+        Assert.Equal("8/5 6/1", restored.Plays[0].Notation);
         Assert.Equal("3-ply", restored.Plays[0].Depth);
         Assert.Equal("3-ply", restored.Plays[1].Depth);
         Assert.Equal(0.045, restored.Plays[1].EquityLoss);
@@ -699,8 +704,8 @@ public class BgDecisionDataSerializationTests
             decision: TestRecords.Decision(
                 dice: [6, 4],
                 plays: [
-                    TestRecords.Candidate(moveNotation: "24/18 24/20", depth: "3-ply", equity: 0.211),
-                    TestRecords.Candidate(moveNotation: "24/18 13/9",  depth: "3-ply", equity: 0.198, equityLoss: 0.013)
+                    TestRecords.Candidate(play: [new(24, 18), new(24, 20)], depth: "3-ply", equity: 0.211),
+                    TestRecords.Candidate(play: [new(24, 18), new(13, 9)],  depth: "3-ply", equity: 0.198, equityLoss: 0.013)
                 ],
                 isCube: false),
             descriptive: TestRecords.Descriptive(
@@ -735,8 +740,8 @@ public class BgDecisionDataSerializationTests
         var original = TestRecords.Decision(
             dice: [3, 5],
             plays: [
-                TestRecords.Candidate(moveNotation: "8/5 6/1", equity: -0.120),
-                TestRecords.Candidate(moveNotation: "8/3 6/1", equity: -0.165, equityLoss: 0.045)
+                TestRecords.Candidate(play: [new(8, 5), new(6, 1)], equity: -0.120),
+                TestRecords.Candidate(play: [new(8, 3), new(6, 1)], equity: -0.165, equityLoss: 0.045)
             ],
             isCube: false,
             userPlayIndex: 1,
@@ -1086,11 +1091,11 @@ public class BgDecisionDataSerializationTests
                 bestPlayIndex: 1,
                 plays: [
                     TestRecords.Candidate(
-                        moveNotation: "8/5 6/1",
+                        play: [new(8, 5), new(6, 1)],
                         analysisMode: AnalysisMode.Evaluation,
                         analysisLevel: AnalysisLevel.Ply3),
                     TestRecords.Candidate(
-                        moveNotation: "8/3 6/1",
+                        play: [new(8, 3), new(6, 1)],
                         analysisMode: AnalysisMode.Rollout,
                         analysisLevel: AnalysisLevel.Ply1)
                 ]));
@@ -1113,7 +1118,7 @@ public class BgDecisionDataSerializationTests
                 bestPlayIndex: 2,
                 plays: [
                     TestRecords.Candidate(
-                        moveNotation: "8/5 6/1",
+                        play: [new(8, 5), new(6, 1)],
                         analysisMode: AnalysisMode.Evaluation,
                         analysisLevel: AnalysisLevel.Ply3)
                 ]));
@@ -1500,7 +1505,7 @@ public class BgDecisionDataSerializationTests
                 isCrawford: true),
             decision: TestRecords.Decision(
                 dice: [6, 4],
-                plays: [TestRecords.Candidate(moveNotation: "24/18 13/9", equity: 0.198)],
+                plays: [TestRecords.Candidate(play: [new(24, 18), new(13, 9)], equity: 0.198)],
                 isCube: false,
                 userPlayError: 0.013),
             descriptive: TestRecords.Descriptive(
