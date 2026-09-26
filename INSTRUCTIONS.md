@@ -455,13 +455,15 @@ everything the ruling makes a ranking's, as a `RankedPlays`
 
 - the order and each candidate's `Rank` (1 for the best);
 - `Best`, the ranking's first;
-- each candidate's `Error`: the best's equity minus its own;
-- whether each candidate `IsScored`. **Under depth first, a candidate at a
-  different depth rank from the best's whose equity is higher than the
-  best's is not scored** — a consumer treats it as an off-list play. Every
-  other candidate is scored, so no scored error is ever negative; under
-  equity every candidate is scored. An equal equity at another depth is
-  scored, with error 0;
+- whether each candidate `IsScored`, and a scored candidate's `Error`: the
+  best's equity minus its own, never negative. **Under depth first, a
+  candidate at a different depth rank from the best's whose equity is
+  higher than the best's is not scored** — a consumer treats it as an
+  off-list play — **and has no error**: its `Error` is `null` (the
+  umbrella's third-round ruling; a negative number a caller must remember
+  to skip is the misuse the ruling prevents). `IsScored` is exactly
+  `Error is not null`. Every other candidate is scored; under equity every
+  candidate is. An equal equity at another depth is scored, with error 0;
 - `UserPlay` and `UserPlayError`, the player's error: the played
   candidate's error when the ranking scores it, **none (`null`) when it
   does not**, and for a play outside the candidates the stored
@@ -1594,8 +1596,8 @@ public sealed class RankedPlay                                // no public const
     public int Index { get; }                                 // into Plays
     public int Rank { get; }                                  // 1 for the best
     public PlayCandidate Candidate { get; }
-    public double Error { get; }                              // Best's equity − its own; ≥ 0 when scored
-    public bool IsScored { get; }                             // false only under DepthFirst, by the rule
+    public double? Error { get; }                             // Best's equity − its own, ≥ 0; null when not scored
+    public bool IsScored { get; }                             // Error is not null; false only under DepthFirst
 }
 
 public sealed class CubeDecisionData           // unmapped members refused
@@ -2304,14 +2306,13 @@ measure" is not a valid comparison on this hardware.
   standard value-type caveat, shared with `Play` and `CubeDecisionPair`.
 - **A candidate's error is a ranking's, derived; `0.0` means no loss vs.
   that ranking's best.** `RankedBy(ranking).ForCandidate(i).Error` is the
-  best's equity minus the candidate's. It is never negative for a scored
-  candidate; under depth first a candidate the ranking does not score
-  (`IsScored` false — another depth, higher equity) has a negative one,
-  which a consumer must not sum as an error: the player's error for such a
-  play is `null`. Identifying the best uses `RankedPlays.Best`; testing
-  membership in its equivalence class uses `Error == 0.0` on a scored
-  candidate. There is no ranking-free best or loss to read, and none to
-  state: a producer states equities and depths.
+  best's equity minus the candidate's, never negative, for a candidate the
+  ranking scores; for one it does not (under depth first: another depth,
+  higher equity) it is `null` — a play the ranking does not score has no
+  error, so there is nothing negative to sum by mistake. Identifying the
+  best uses `RankedPlays.Best`; testing membership in its equivalence class
+  uses `Error == 0.0`. There is no ranking-free best or loss to read, and
+  none to state: a producer states equities and depths.
 - **The cube-scoring helpers are a cube decision's only.** All six (four
   computed properties — the action pair and the claim pair — plus two
   methods) live on `CubeDecisionData`, so asking them of a checker play

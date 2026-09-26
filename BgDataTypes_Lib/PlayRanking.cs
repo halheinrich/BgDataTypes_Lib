@@ -18,16 +18,16 @@ namespace BgDataTypes_Lib;
 /// orders them by analysis depth, deepest first (<see cref="PlayCandidate.DepthRank"/>,
 /// an unrecorded depth below every recorded one), then by equity within a
 /// depth. Where both keys are equal, the stored order stands. The best play
-/// is the ranking's first; a play's error is the best play's equity minus
-/// its own.
+/// is the ranking's first; a scored play's error is the best play's equity
+/// minus its own.
 /// </para>
 /// <para>
 /// <b>Not scored, under depth first only.</b> A candidate at a different
 /// depth from the best play's (under depth first, always a shallower one)
 /// whose equity is higher than the best's is not scored
-/// (<see cref="RankedPlay.IsScored"/>): a consumer treats it as an off-list
-/// play. Every other candidate is scored, so no scored error is ever
-/// negative. Under <see cref="Equity"/> every candidate is scored.
+/// (<see cref="RankedPlay.IsScored"/>) and has no error: a consumer treats it
+/// as an off-list play. Every other candidate is scored, so no scored error
+/// is ever negative. Under <see cref="Equity"/> every candidate is scored.
 /// </para>
 /// <para>
 /// <see cref="Equity"/> is the default, and deliberately the zero value: an

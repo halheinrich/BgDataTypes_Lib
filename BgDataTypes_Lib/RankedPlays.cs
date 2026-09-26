@@ -4,8 +4,8 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// A checker-play decision's candidates under one <see cref="PlayRanking"/>:
-/// in the ranking's order, each with its rank, its error and whether it is
-/// scored, and the player's error under the ranking — every derivation
+/// in the ranking's order, each with its rank, whether it is scored and if
+/// so its error, and the player's error under the ranking — every derivation
 /// SPEC-scoring §2a makes a ranking's. Built by
 /// <see cref="CheckerPlayDecisionData.RankedBy"/>, once per decision and
 /// ranking; immutable.
@@ -37,16 +37,14 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>
         {
             int index = order[position];
             var candidate = plays[index];
-            var ranked = new RankedPlay(
-                index, position + 1, candidate, best.Equity - candidate.Equity, IsScored(ranking, best, candidate));
+            double? error = IsScored(ranking, best, candidate) ? best.Equity - candidate.Equity : null;
+            var ranked = new RankedPlay(index, position + 1, candidate, error);
             _inOrder[position] = ranked;
             _byIndex[index] = ranked;
         }
 
         UserPlay = userPlayIndex is int user ? _byIndex[user] : null;
-        UserPlayError = UserPlay is { } played
-            ? (played.IsScored ? played.Error : null)
-            : unlistedPlayError;
+        UserPlayError = UserPlay is { } played ? played.Error : unlistedPlayError;
     }
 
     /// <summary>The ranking these are ranked by.</summary>

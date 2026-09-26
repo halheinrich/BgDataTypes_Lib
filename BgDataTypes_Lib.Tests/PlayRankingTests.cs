@@ -13,10 +13,10 @@ namespace BgDataTypes_Lib.Tests;
 /// <see cref="PlayRanking.Equity"/> orders by equity and depth has no effect;
 /// <see cref="PlayRanking.DepthFirst"/> orders by depth rank, then equity;
 /// ties keep the stored order. Under depth first a candidate at a different
-/// depth from the best's whose equity is higher is not scored; every other
-/// candidate is, so no scored error is negative. Nothing answers best or
-/// error without a ranking: the filter view and the row are each built for
-/// one.
+/// depth from the best's whose equity is higher is not scored and has no
+/// error; every other candidate is scored, and its error is never negative.
+/// Nothing answers best or error without a ranking: the filter view and the
+/// row are each built for one.
 /// </summary>
 public class PlayRankingTests
 {
@@ -143,7 +143,7 @@ public class PlayRankingTests
                     bool notScored = ranking == PlayRanking.DepthFirst
                         && play.Candidate.DepthRank != best.DepthRank
                         && play.Candidate.Equity > best.Equity;
-                    Assert.Equal(best.Equity - play.Candidate.Equity, play.Error);
+                    Assert.Equal(notScored ? null : best.Equity - play.Candidate.Equity, play.Error);
                     Assert.Equal(!notScored, play.IsScored);
                     Assert.True(!play.IsScored || play.Error >= 0.0, $"trial {trial}: a scored error of {play.Error}");
                 }
@@ -169,18 +169,17 @@ public class PlayRankingTests
         Assert.True(ranked.Best.IsScored);
     }
 
-    public static TheoryData<PlayRanking, double[], bool[]> Errors => new()
+    public static TheoryData<PlayRanking, double?[]> Errors => new()
     {
-        // By candidate index: the best's equity minus each one's, and whether
-        // the ranking scores it.
-        { PlayRanking.Equity, [0.02, 0.07, 0.0, 0.07, 0.32, 0.07], [true, true, true, true, true, true] },
-        { PlayRanking.DepthFirst, [-0.05, 0.0, -0.07, 0.0, 0.25, 0.0], [false, true, false, true, true, true] },
+        // By candidate index: the best's equity minus each one's, or none
+        // where the ranking does not score it.
+        { PlayRanking.Equity, [0.02, 0.07, 0.0, 0.07, 0.32, 0.07] },
+        { PlayRanking.DepthFirst, [null, 0.0, null, 0.0, 0.25, 0.0] },
     };
 
     [Theory]
     [MemberData(nameof(Errors))]
-    public void EachError_IsTheBestsEquityMinusItsOwn_AndOnlyTheRuleLeavesOneUnscored(
-        PlayRanking ranking, double[] errors, bool[] scored)
+    public void EachScoredError_IsTheBestsEquityMinusItsOwn_AndAnUnscoredPlayHasNone(PlayRanking ranking, double?[] errors)
     {
         var data = MixedData();
         var ranked = data.RankedBy(ranking);
@@ -189,10 +188,17 @@ public class PlayRankingTests
         {
             var play = ranked.ForCandidate(index);
             Assert.Equal(index, play.Index);
-            Assert.Equal(ranked.Best.Candidate.Equity - data.Plays[index].Equity, play.Error);
-            Assert.Equal(errors[index], play.Error, 12);
-            Assert.Equal(scored[index], play.IsScored);
-            Assert.True(!play.IsScored || play.Error >= 0.0);
+            Assert.Equal(errors[index] is not null, play.IsScored);
+            if (errors[index] is double expected)
+            {
+                Assert.Equal(ranked.Best.Candidate.Equity - data.Plays[index].Equity, play.Error);
+                Assert.Equal(expected, play.Error!.Value, 12);
+                Assert.True(play.Error >= 0.0);
+            }
+            else
+            {
+                Assert.Null(play.Error);
+            }
         }
     }
 
@@ -205,7 +211,7 @@ public class PlayRankingTests
 
         var shallower = data.RankedBy(PlayRanking.DepthFirst).ForCandidate(2);
         Assert.False(shallower.IsScored);
-        Assert.True(shallower.Error < 0.0);
+        Assert.Null(shallower.Error);
 
         var byEquity = data.RankedBy(PlayRanking.Equity);
         Assert.Equal(2, byEquity.Best.Index);
@@ -240,8 +246,9 @@ public class PlayRankingTests
         var depthFirst = data.RankedBy(PlayRanking.DepthFirst);
         Assert.Equal([0, 2, 1], depthFirst.Select(p => p.Index));
         Assert.False(depthFirst.ForCandidate(1).IsScored);
+        Assert.Null(depthFirst.ForCandidate(1).Error);
         Assert.True(depthFirst.ForCandidate(2).IsScored);
-        Assert.Equal(0.1, depthFirst.ForCandidate(2).Error, 12);
+        Assert.Equal(0.1, depthFirst.ForCandidate(2).Error!.Value, 12);
 
         var byEquity = data.RankedBy(PlayRanking.Equity);
         Assert.Equal([1, 0, 2], byEquity.Select(p => p.Index));
@@ -404,8 +411,8 @@ public class PlayRankingTests
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 1000; i++)
         {
-            sink += data.RankedBy(PlayRanking.Equity).Best.Error + data.RankedBy(PlayRanking.DepthFirst).UserPlayError!.Value;
-            sink += data.RankedBy(PlayRanking.DepthFirst)[2].Error + data.RankedBy(PlayRanking.Equity).ForCandidate(5).Error;
+            sink += data.RankedBy(PlayRanking.Equity).Best.Error!.Value + data.RankedBy(PlayRanking.DepthFirst).UserPlayError!.Value;
+            sink += data.RankedBy(PlayRanking.DepthFirst)[3].Error!.Value + data.RankedBy(PlayRanking.Equity).ForCandidate(5).Error!.Value;
         }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
