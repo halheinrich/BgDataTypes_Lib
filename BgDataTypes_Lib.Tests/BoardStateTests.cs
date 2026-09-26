@@ -247,6 +247,14 @@ public class BoardStateTests
     }
 
     [Fact]
+    public void Type_IsSealed()
+    {
+        // A type that guards an invariant is not open to subclasses: a
+        // subclass could add state or ways in that the invariant never sees.
+        Assert.True(typeof(BoardState).IsSealed);
+    }
+
+    [Fact]
     public void HotPath_ApplyUndoReadsAndSnapshot_AllocateNothing()
     {
         var s = BoardState.Standard();

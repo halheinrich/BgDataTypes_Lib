@@ -30,7 +30,8 @@ namespace BgDataTypes_Lib;
 /// <see cref="ApplyPlay(Play)"/> / <see cref="TryApplyPlay(Play)"/>. So the
 /// board is always a well-formed position (<see cref="BoardPosition"/>'s
 /// invariant): every way in is one, the play rule keeps it one, and the raw
-/// pair keeps it one under its stated preconditions.
+/// pair keeps it one under its stated preconditions. The class is sealed: a
+/// type that guards an invariant is not open to subclasses.
 /// </para>
 ///
 /// <para>
@@ -55,7 +56,7 @@ namespace BgDataTypes_Lib;
 /// rule) and the list match <see cref="IndexOfSamePlay"/>.
 /// </para>
 /// </summary>
-public class BoardState
+public sealed class BoardState
 {
     private readonly int[] _points = new int[26];
 

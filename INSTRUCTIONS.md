@@ -250,8 +250,10 @@ library does not compile, and the type's own members keep
 `HighPointOccupied` in step (`ApplyMove` / `UndoMove` incrementally, a
 full recompute on construction and flip). Hot-path consumers (BgMoveGen's
 move generator) use the apply/undo primitives; non-hot-path consumers
-advance state via `ApplyPlay`. Its immutable counterpart is
-`BoardPosition`, which is what a board is compared and stored as.
+advance state via `ApplyPlay`. The class is sealed: a type that guards an
+invariant is not open to subclasses, which could add state or ways in the
+invariant never sees. Its immutable counterpart is `BoardPosition`, which is
+what a board is compared and stored as.
 
 ### Data categories
 
@@ -1187,7 +1189,7 @@ public readonly struct BoardPosition :
     public override string ToString();                        // "1:-2 6:5 …", or "empty"
 }
 
-public class BoardState
+public sealed class BoardState                    // sealed: it guards an invariant
 {
     public ReadOnlySpan<int> Points { get; }      // read-only; layout of BoardPosition
     public int HighPointOccupied { get; }         // 1–25, or 0 if no on-roll checkers; private setter
