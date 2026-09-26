@@ -37,7 +37,7 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>
         {
             int index = order[position];
             var candidate = plays[index];
-            double? error = IsScored(ranking, best, candidate) ? best.Equity - candidate.Equity : null;
+            double? error = IsScored(best, candidate) ? best.Equity - candidate.Equity : null;
             var ranked = new RankedPlay(index, position + 1, candidate, error);
             _inOrder[position] = ranked;
             _byIndex[index] = ranked;
@@ -126,15 +126,18 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>
     private static int DepthKey(PlayCandidate candidate) => candidate.DepthRank ?? int.MinValue;
 
     /// <summary>
-    /// The not-scored rule: under depth first, a candidate whose equity is
-    /// higher than the best play's is not scored; every other candidate is.
-    /// SPEC-scoring §2a states the rule for a play analysed at a different
-    /// depth from the best play that shows a higher equity. Under depth first
-    /// the best play has the highest equity at its own depth, so a higher
-    /// equity is always at another depth: the depth condition is implied, and
-    /// the rule is the equity comparison alone. That every unscored candidate
-    /// is at a different depth from the best is pinned as a property.
+    /// The not-scored rule: a candidate is scored exactly when its equity is
+    /// not higher than the best play's, under either ranking. SPEC-scoring
+    /// §2a states the rule for depth first only, for a play analysed at a
+    /// different depth from the best play that shows a higher equity. Both
+    /// conditions are implied by the orders. Under depth first the best play
+    /// has the highest equity at its own depth, so a higher equity is always
+    /// at another depth. Under equity the best play has the highest equity of
+    /// all, so no candidate's is higher and every candidate is scored. Each
+    /// implication is pinned as a property: every unscored candidate is at
+    /// another depth from the best, and under equity every candidate is
+    /// scored.
     /// </summary>
-    private static bool IsScored(PlayRanking ranking, PlayCandidate best, PlayCandidate candidate) =>
-        ranking != PlayRanking.DepthFirst || candidate.Equity <= best.Equity;
+    private static bool IsScored(PlayCandidate best, PlayCandidate candidate) =>
+        candidate.Equity <= best.Equity;
 }

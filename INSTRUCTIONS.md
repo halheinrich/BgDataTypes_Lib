@@ -465,11 +465,14 @@ everything the ruling makes a ranking's, as a `RankedPlays`
   to skip is the misuse the ruling prevents). `IsScored` is exactly
   `Error is not null`. Every other candidate is scored; under equity every
   candidate is. An equal equity at another depth is scored, with error 0.
-  The rule is applied as "under depth first, a candidate whose equity is
-  higher than the best's": the best has the highest equity at its own
-  depth, so a higher equity is always at another, and the depth condition
-  SPEC-scoring §2a states is implied — pinned as a property (every unscored
-  candidate is at a different depth from the best);
+  The rule is applied, under either ranking, as "a candidate is scored
+  exactly when its equity is not higher than the best's" (the umbrella's
+  fourth-round ruling). Both of SPEC-scoring §2a's conditions are implied
+  by the orders: under depth first the best has the highest equity at its
+  own depth, so a higher equity is always at another depth; under equity
+  the best has the highest equity of all, so every candidate is scored.
+  Each is pinned as a property (every unscored candidate is at a different
+  depth from the best; under equity every candidate is scored);
 - `UserPlay`, and `PlayerResult`, the player's result, each case by name
   (see "The player's result"): `Scored` with the played candidate's error
   when the ranking scores it, **`NotScored`, with no error, when it does

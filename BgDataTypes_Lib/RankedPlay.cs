@@ -37,10 +37,11 @@ public sealed class RankedPlay
 
     /// <summary>
     /// Whether the ranking scores this candidate: exactly when it has an
-    /// <see cref="Error"/>. Under <see cref="PlayRanking.DepthFirst"/>, a
-    /// candidate whose equity is higher than the best play's is not scored —
-    /// a consumer treats it as an off-list play; every other candidate, and
-    /// every candidate under <see cref="PlayRanking.Equity"/>, is.
+    /// <see cref="Error"/>, and exactly when its equity is not higher than
+    /// the best play's. Only under <see cref="PlayRanking.DepthFirst"/> can a
+    /// candidate's be higher — one the ranking does not score, which a
+    /// consumer treats as an off-list play; under
+    /// <see cref="PlayRanking.Equity"/> every candidate is scored.
     /// </summary>
     public bool IsScored => Error is not null;
 }

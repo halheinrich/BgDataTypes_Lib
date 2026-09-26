@@ -123,12 +123,27 @@ public class PlayRankingTests
                 var best = plays[expected[0]];
                 foreach (var play in ranked)
                 {
-                    bool notScored = ranking == PlayRanking.DepthFirst && play.Candidate.Equity > best.Equity;
+                    bool notScored = play.Candidate.Equity > best.Equity;
                     Assert.Equal(notScored ? null : best.Equity - play.Candidate.Equity, play.Error);
                     Assert.Equal(!notScored, play.IsScored);
                     Assert.True(!play.IsScored || play.Error >= 0.0, $"trial {trial}: a scored error of {play.Error}");
                 }
             }
+        }
+    }
+
+    [Fact]
+    public void OverManyDecisions_UnderEquity_EveryPlayIsScored()
+    {
+        // The rule is applied under both rankings as the equity comparison;
+        // under equity the best has the highest equity of all, so no play's
+        // is higher and every play is scored. Checked on its own, against the
+        // ranking's own output.
+        foreach (var (trial, _, data) in RandomDecisions())
+        {
+            var ranked = data.RankedBy(PlayRanking.Equity);
+            foreach (var play in ranked)
+                Assert.True(play.IsScored, $"trial {trial}: candidate {play.Index} is unscored under equity");
         }
     }
 
