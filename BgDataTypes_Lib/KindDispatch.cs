@@ -27,13 +27,23 @@ namespace BgDataTypes_Lib;
 /// options say so.
 /// </para>
 /// <para>
+/// <b>Or it is a member's.</b> A family whose kind is one of its members'
+/// kind — a session's is its terms' (<see cref="Session"/>) — states it once,
+/// in that member, never again beside it. The dispatch then finds the member,
+/// once, wherever it sits, and the kind inside it, once, wherever it sits
+/// there; the refusals are the same, naming the member's kind
+/// (<c>"Terms.Kind"</c>).
+/// </para>
+/// <para>
 /// <b>Every refusal is a <see cref="JsonException"/></b>, on the reflection
 /// path and through <see cref="BgDataTypesJsonContext"/> alike: a document
 /// that is not an object, a missing kind, a kind stated twice, an unknown or
 /// non-string kind (the strict enum token of
-/// <see cref="StrictJsonStringEnumConverter{TEnum}"/>). A member of another
-/// kind is the kind's own contract's refusal — each kind disallows unmapped
-/// members — and so is every construction rule it holds its members to.
+/// <see cref="StrictJsonStringEnumConverter{TEnum}"/>); for a kind stated in a
+/// member, also that member stated twice or not an object. A member of
+/// another kind is the kind's own contract's refusal — each kind disallows
+/// unmapped members — and so is every construction rule it holds its members
+/// to.
 /// </para>
 /// </remarks>
 internal static class KindDispatch
@@ -51,16 +61,24 @@ internal static class KindDispatch
     /// <param name="options">The active options, which resolve the kind's contract.</param>
     /// <param name="document">What the family's documents are called, for a refusal's message ("decision record").</param>
     /// <param name="contractOf">The type whose contract reads a kind; <see langword="null"/> for none.</param>
+    /// <param name="within">
+    /// The member whose object states the kind, for a family whose kind is that
+    /// member's; <see langword="null"/> when the document states its own.
+    /// </param>
     /// <exception cref="JsonException">The document does not state exactly one known kind, or its kind's contract refuses it.</exception>
     internal static T? Read<T, TKind>(
-        ref Utf8JsonReader reader, JsonSerializerOptions options, string document, Func<TKind, Type?> contractOf)
+        ref Utf8JsonReader reader, JsonSerializerOptions options, string document, Func<TKind, Type?> contractOf,
+        string? within = null)
         where T : class
         where TKind : struct, Enum
     {
         if (reader.TokenType != JsonTokenType.StartObject)
             throw new JsonException($"A {document} is a JSON object (got {reader.TokenType}).");
 
-        TKind kind = Find<TKind>(reader, options, document);
+        string kindName = Named(KindMember, options);
+        TKind kind = within is null
+            ? Find<TKind>(reader, options, document, kindName)
+            : FindWithin<TKind>(reader, options, document, Named(within, options), kindName);
         Type contract = contractOf(kind)
             ?? throw new JsonException($"Unknown {document} kind {kind}.");
 
@@ -80,18 +98,20 @@ internal static class KindDispatch
     /// wherever it sits. <paramref name="scan"/> is a copy of the caller's
     /// reader, so the caller's position is untouched.
     /// </summary>
-    private static TKind Find<TKind>(Utf8JsonReader scan, JsonSerializerOptions options, string document)
+    /// <param name="scan">A copy of the reader, at the object's start.</param>
+    /// <param name="options">The active options, which name and read the kind.</param>
+    /// <param name="document">What the family's documents are called, for a refusal's message.</param>
+    /// <param name="label">How a refusal names the kind: its member's name, or the path to it.</param>
+    private static TKind Find<TKind>(Utf8JsonReader scan, JsonSerializerOptions options, string document, string label)
         where TKind : struct, Enum
     {
-        string name = options.PropertyNamingPolicy?.ConvertName(KindMember) ?? KindMember;
+        string name = Named(KindMember, options);
         var token = (JsonTypeInfo<TKind>)options.GetTypeInfo(typeof(TKind));
 
         TKind? kind = null;
         while (scan.Read() && scan.TokenType == JsonTokenType.PropertyName)
         {
-            bool isKind = options.PropertyNameCaseInsensitive
-                ? string.Equals(scan.GetString(), name, StringComparison.OrdinalIgnoreCase)
-                : scan.ValueTextEquals(name);
+            bool isKind = Is(ref scan, name, options);
             scan.Read();
             if (!isKind)
             {
@@ -99,11 +119,56 @@ internal static class KindDispatch
                 continue;
             }
             if (kind is not null)
-                throw new JsonException($"A {document} states its {name} once.");
+                throw new JsonException($"A {document} states its {label} once.");
             kind = JsonSerializer.Deserialize(ref scan, token);
         }
 
-        return kind ?? throw new JsonException(
-            $"A {document} states its {name} — {string.Join(" or ", Enum.GetNames<TKind>())}. A document without one is not a {document} of this shape.");
+        return kind ?? throw Missing<TKind>(document, label);
     }
+
+    /// <summary>
+    /// The one kind the object at <paramref name="scan"/> states in its
+    /// <paramref name="member"/>, which it states once, wherever it sits.
+    /// </summary>
+    private static TKind FindWithin<TKind>(
+        Utf8JsonReader scan, JsonSerializerOptions options, string document, string member, string kindName)
+        where TKind : struct, Enum
+    {
+        string label = $"{member}.{kindName}";
+
+        TKind? kind = null;
+        bool stated = false;
+        while (scan.Read() && scan.TokenType == JsonTokenType.PropertyName)
+        {
+            bool isMember = Is(ref scan, member, options);
+            scan.Read();
+            if (isMember)
+            {
+                if (stated)
+                    throw new JsonException($"A {document} states its {member} once.");
+                if (scan.TokenType != JsonTokenType.StartObject)
+                    throw new JsonException($"A {document}'s {member} is a JSON object (got {scan.TokenType}).");
+                stated = true;
+                kind = Find<TKind>(scan, options, document, label);
+            }
+            scan.Skip();
+        }
+
+        return kind ?? throw Missing<TKind>(document, label);
+    }
+
+    /// <summary>The refusal of a document stating no kind.</summary>
+    private static JsonException Missing<TKind>(string document, string label)
+        where TKind : struct, Enum =>
+        new($"A {document} states its {label} — {string.Join(" or ", Enum.GetNames<TKind>())}. A document without one is not a {document} of this shape.");
+
+    /// <summary>Whether the property name at <paramref name="scan"/> is <paramref name="name"/>, as the contracts match names.</summary>
+    private static bool Is(ref Utf8JsonReader scan, string name, JsonSerializerOptions options) =>
+        options.PropertyNameCaseInsensitive
+            ? string.Equals(scan.GetString(), name, StringComparison.OrdinalIgnoreCase)
+            : scan.ValueTextEquals(name);
+
+    /// <summary>A member's name under the options' naming policy.</summary>
+    private static string Named(string member, JsonSerializerOptions options) =>
+        options.PropertyNamingPolicy?.ConvertName(member) ?? member;
 }

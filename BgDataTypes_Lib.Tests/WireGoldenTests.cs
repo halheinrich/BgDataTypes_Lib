@@ -166,10 +166,10 @@ public class WireGoldenTests
     // -----------------------------------------------------------------------
 
     private const string CheckerPlayGolden =
-        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"CubeSize":2,"CubeOwner":"Opponent","Session":{"Kind":"Match","Length":7,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false}},"Descriptive":{"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"Dice":[5,4],"Plays":[{"Play":[{"FrPt":8,"ToPt":-3},{"FrPt":7,"ToPt":3}],"AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","RolloutTrials":null,"BookEdition":null,"UnrecognizedLevelCode":null,"Equity":0.25,"WinPct":0.61,"WinGammonPct":0.21,"WinBgPct":0.01,"LoseGammonPct":0.11,"LoseBgPct":0.02},{"Play":[{"FrPt":11,"ToPt":6},{"FrPt":7,"ToPt":-3}],"AnalysisMode":"Rollout","AnalysisLevel":"XgRoller","RolloutTrials":1296,"BookEdition":null,"UnrecognizedLevelCode":null,"Equity":0.125,"WinPct":0.58,"WinGammonPct":0.19,"WinBgPct":0.015,"LoseGammonPct":0.12,"LoseBgPct":0.025}],"UserPlayIndex":1,"UnlistedPlayError":null}}""";
+        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"CubeSize":2,"CubeOwner":"Opponent","Session":{"Terms":{"Kind":"Match","Length":7},"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false}},"Descriptive":{"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"Dice":[5,4],"Plays":[{"Play":[{"FrPt":8,"ToPt":-3},{"FrPt":7,"ToPt":3}],"AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","RolloutTrials":null,"BookEdition":null,"UnrecognizedLevelCode":null,"Equity":0.25,"WinPct":0.61,"WinGammonPct":0.21,"WinBgPct":0.01,"LoseGammonPct":0.11,"LoseBgPct":0.02},{"Play":[{"FrPt":11,"ToPt":6},{"FrPt":7,"ToPt":-3}],"AnalysisMode":"Rollout","AnalysisLevel":"XgRoller","RolloutTrials":1296,"BookEdition":null,"UnrecognizedLevelCode":null,"Equity":0.125,"WinPct":0.58,"WinGammonPct":0.19,"WinBgPct":0.015,"LoseGammonPct":0.12,"LoseBgPct":0.025}],"UserPlayIndex":1,"UnlistedPlayError":null}}""";
 
     private const string CubeGolden =
-        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"CubeSize":2,"CubeOwner":"OnRoll","Session":{"Kind":"Money","IsJacoby":false,"IsBeaver":true,"CubeLimit":64,"OnRollScore":3,"OpponentScore":5}},"Descriptive":{"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","RolloutTrials":12960,"BookEdition":"V2","UnrecognizedLevelCode":null,"NoDoubleEquity":0.75,"DoubleTakeEquity":0.5,"CubelessNoDoubleEquity":0.375,"CubelessDoubleTakeEquity":0.625,"WinPctAfterNoDouble":0.51,"GammonPctAfterNoDouble":0.12,"BgPctAfterNoDouble":0.013,"LoseGammonPctAfterNoDouble":0.14,"LoseBgPctAfterNoDouble":0.015,"WinPctAfterDoubleTake":0.52,"GammonPctAfterDoubleTake":0.16,"BgPctAfterDoubleTake":0.017,"LoseGammonPctAfterDoubleTake":0.18,"LoseBgPctAfterDoubleTake":0.019,"ProbOfOpponentErrorJustifyingDouble":0.2,"UserDoublerAction":"Double","UserTakerAction":null,"UnstatedDoublerActionError":null,"UnstatedTakerActionError":0.04}}""";
+        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"CubeSize":2,"CubeOwner":"OnRoll","Session":{"Terms":{"Kind":"Money","IsJacoby":false,"IsBeaver":true,"CubeLimit":64},"OnRollScore":3,"OpponentScore":5}},"Descriptive":{"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","RolloutTrials":12960,"BookEdition":"V2","UnrecognizedLevelCode":null,"NoDoubleEquity":0.75,"DoubleTakeEquity":0.5,"CubelessNoDoubleEquity":0.375,"CubelessDoubleTakeEquity":0.625,"WinPctAfterNoDouble":0.51,"GammonPctAfterNoDouble":0.12,"BgPctAfterNoDouble":0.013,"LoseGammonPctAfterNoDouble":0.14,"LoseBgPctAfterNoDouble":0.015,"WinPctAfterDoubleTake":0.52,"GammonPctAfterDoubleTake":0.16,"BgPctAfterDoubleTake":0.017,"LoseGammonPctAfterDoubleTake":0.18,"LoseBgPctAfterDoubleTake":0.019,"ProbOfOpponentErrorJustifyingDouble":0.2,"UserDoublerAction":"Double","UserTakerAction":null,"UnstatedDoublerActionError":null,"UnstatedTakerActionError":0.04}}""";
 
     private const string CheckerPlayRowGolden =
         """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=a-BaBBDABa-Ab---b--bbAb-b-:1:-1:1:54:4:2:0:7:10","Ranking":"Equity","Error":0.125,"Result":"Scored","Player":"Alice","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"SessionKind":"Match","MatchLength":7,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":null,"IsBeaver":null,"CubeLimit":null,"OnRollScore":null,"OpponentScore":null,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
@@ -366,10 +366,13 @@ public class WireGoldenTests
         // Added for the session kinds (halheinrich/backgammon#273). The match
         // context left its flat members — the position's away scores,
         // Crawford flag and Jacoby stamp, the descriptive category's length —
-        // for one member, the position's session, whose kind is stated first.
-        // The checker play's is a match: its length, away scores and Crawford
-        // flag carried value for value. The stamp is gone, not moved: it was
-        // a Jacoby fact on a match, which has none. Nothing else changed.
+        // for one member, the position's session. Rewritten for the composed
+        // session: the session's terms come first and state its kind, the
+        // length is the terms', and the away scores and Crawford flag stand
+        // beside them. The checker play's is a match: its length, away scores
+        // and Crawford flag carried value for value. The stamp is gone, not
+        // moved: it was a Jacoby fact on a match, which has none. Nothing
+        // else changed.
         var previous = JsonNode.Parse(CheckerPlayGoldenAtCa83ab1)!;
         var today = JsonNode.Parse(CheckerPlayGolden)!;
 
@@ -379,11 +382,13 @@ public class WireGoldenTests
             Assert.False(today["Descriptive"]!.AsObject().ContainsKey(member), member);
         }
         var session = today["Position"]!["Session"]!;
-        Assert.Equal("Match", (string?)session["Kind"]);
-        Assert.Equal((int)previous["Descriptive"]!["MatchLength"]!, (int)session["Length"]!);
+        Assert.Null(session["Kind"]);
+        Assert.Equal("Match", (string?)session["Terms"]!["Kind"]);
+        Assert.Equal((int)previous["Descriptive"]!["MatchLength"]!, (int)session["Terms"]!["Length"]!);
         foreach (var member in new[] { "OnRollNeeds", "OpponentNeeds", "IsCrawford" })
             Assert.True(JsonNode.DeepEquals(previous["Position"]![member], session[member]), member);
         Assert.Null(session["IsJacoby"]);
+        Assert.Null(session["Terms"]!["IsJacoby"]);
 
         // Everything else, value for value — but the stored XGID, derived now
         // (FullRecord_DerivesItsXgid_WhichLeftTheWire).
@@ -391,11 +396,11 @@ public class WireGoldenTests
         Assert.True(JsonNode.DeepEquals(rest, Without(JsonNode.Parse(CheckerPlayGolden)!, ["Session"])));
 
         // The cube golden became a money session: the match scores and the
-        // stamp it carried are gone, and the rules, the limit and the scores
-        // are the money session's.
+        // stamp it carried are gone, the rules and the limit are the money
+        // session's terms, and the scores stand beside them.
         var cube = JsonNode.Parse(CubeGolden)!;
         Assert.True(JsonNode.DeepEquals(
-            JsonNode.Parse("""{"Kind":"Money","IsJacoby":false,"IsBeaver":true,"CubeLimit":64,"OnRollScore":3,"OpponentScore":5}"""),
+            JsonNode.Parse("""{"Terms":{"Kind":"Money","IsJacoby":false,"IsBeaver":true,"CubeLimit":64},"OnRollScore":3,"OpponentScore":5}"""),
             cube["Position"]!["Session"]));
     }
 

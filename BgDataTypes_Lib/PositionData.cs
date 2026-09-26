@@ -26,7 +26,7 @@ namespace BgDataTypes_Lib;
 /// (<see cref="BgDecisionData.Xgid"/>), derived from this category, can
 /// never be wrong for a record that exists: <see cref="CubeSize"/> is a
 /// positive power of two, never above a money session's
-/// <see cref="MoneySession.CubeLimit"/>, and <see cref="CubeOwner"/> a defined
+/// <see cref="MoneyTerms.CubeLimit"/>, and <see cref="CubeOwner"/> a defined
 /// owner. Whichever of <see cref="CubeSize"/> and <see cref="Session"/> is set
 /// second refuses a cube above the limit, naming itself; a document breaking
 /// a rule gets a <see cref="System.Text.Json.JsonException"/> carrying the
@@ -109,7 +109,7 @@ public class PositionData
     /// <summary>
     /// Face value of the doubling cube: 1 (start), 2, 4, 8, … — a positive
     /// power of two, never above a money session's
-    /// <see cref="MoneySession.CubeLimit"/>.
+    /// <see cref="MoneyTerms.CubeLimit"/>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown on init when the value is not a positive power of two, or when a
@@ -124,7 +124,7 @@ public class PositionData
             {
                 if (!SessionRules.CubeValueHolds(value))
                     throw new ArgumentOutOfRangeException(nameof(CubeSize), value, SessionRules.CubeSizeMessage);
-                if (_session is MoneySession money && value > money.CubeLimit)
+                if (_session is MoneySession money && value > money.Terms.CubeLimit)
                     throw new ArgumentOutOfRangeException(nameof(CubeSize), value, SessionRules.CubeWithinLimitMessage);
             }
             catch (ArgumentException fault) when (_read)
@@ -178,8 +178,8 @@ public class PositionData
             try
             {
                 ArgumentNullException.ThrowIfNull(value, nameof(Session));
-                if (value is MoneySession money && _cubeSize is int cube && cube > money.CubeLimit)
-                    throw new ArgumentOutOfRangeException(nameof(Session), money.CubeLimit, SessionRules.CubeWithinLimitMessage);
+                if (value is MoneySession money && _cubeSize is int cube && cube > money.Terms.CubeLimit)
+                    throw new ArgumentOutOfRangeException(nameof(Session), money.Terms.CubeLimit, SessionRules.CubeWithinLimitMessage);
             }
             catch (ArgumentException fault) when (_read)
             {

@@ -1,93 +1,71 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// A money session, as it stands at the decision: the rules its games are
-/// played under — the Jacoby and beaver rules and the cube limit — and the
-/// session's score before this game. One of the two kinds of
-/// <see cref="Session"/>; it carries a money session's facts and nothing else
-/// — no length, no away scores and no Crawford game, which belong to a match.
+/// A money session, as it stands at the decision: its terms — the Jacoby and
+/// beaver rules and the cube limit (<see cref="MoneyTerms"/>) — and the
+/// session's score before this game, the player on roll's first. One of the
+/// two kinds of <see cref="Session"/>; it carries a money session's facts and
+/// nothing else — no length, no away scores and no Crawford game, which belong
+/// to a match.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Every fact is stated.</b> Each member is required, so a money session
-/// under an unknown rule, or with no limit or score, cannot be built: the
-/// producer states what the source file records (XG's match header and game
-/// header). The beaver rule, the cube limit and the scores are the facts that
-/// only the stored XGID used to carry; they are typed members now, and the
+/// <b>Composed, not restated</b> (the umbrella's review of
+/// halheinrich/backgammon#273, 2026-09-26): the session holds its header's
+/// terms as a member and states only the oriented standing itself, the
+/// scores. It is built by <see cref="Session.Create"/> from the terms, the
+/// game's <see cref="MoneyStanding"/> and the seat on roll; code outside this
+/// library cannot build one otherwise. The beaver rule, the cube limit and
+/// the scores are the facts that only the stored XGID used to carry; the
 /// record derives its XGID from them (<see cref="BgDecisionData.Xgid"/>).
 /// </para>
 /// <para>
-/// <b>Well-formed by construction.</b> The cube limit is a positive power of
-/// two, and each score is at least 0; each init setter refuses a breach with
-/// an <see cref="ArgumentOutOfRangeException"/> naming the member, and a
-/// document breaking one gets a <see cref="System.Text.Json.JsonException"/>
-/// carrying it. A document stating a member this kind does not have — a
-/// match's — is refused, never read with the member dropped.
+/// <b>Well-formed by construction.</b> The terms hold their own rules; each
+/// score is at least 0. A document breaking a rule gets a
+/// <see cref="System.Text.Json.JsonException"/> carrying the guard's
+/// <see cref="ArgumentException"/>, and one stating a member this kind does not
+/// have — a match's — is refused, never read with the member dropped.
 /// </para>
 /// </remarks>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class MoneySession : Session
 {
-    private readonly int? _cubeLimit;
+    // Null only while construction is still stating the member.
+    private readonly MoneyTerms? _terms;
     private readonly int? _onRollScore;
     private readonly int? _opponentScore;
 
-    /// <summary>Creates a money session; its members are set by the initializer.</summary>
-    public MoneySession() : base(SessionKind.Money)
+    /// <summary>The constructor <see cref="Session.Create"/> builds a money session through; its members are set by the initializer.</summary>
+    internal MoneySession() : base(SessionKind.Money, read: false)
     {
     }
 
     /// <summary>
     /// The serializer's constructor. It binds the document's
-    /// <paramref name="kind"/>, which must be <see cref="SessionKind.Money"/>;
-    /// why the pattern exists is stated once, on
-    /// <see cref="BgDataTypesJsonContext"/> ("The serializer constructors").
+    /// <paramref name="terms"/>, the session's first member; why the pattern
+    /// exists is stated once, on <see cref="BgDataTypesJsonContext"/> ("The
+    /// serializer constructors").
     /// </summary>
     [JsonConstructor]
-    internal MoneySession(SessionKind kind) : base(SessionKind.Money, kind)
+    internal MoneySession(MoneyTerms terms) : base(SessionKind.Money, read: true) => Terms = terms;
+
+    /// <summary>
+    /// The session's terms: the Jacoby and beaver rules and the cube limit,
+    /// as its header states them. Every money session states them: there is
+    /// no unknown rule.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown on init when the value is <see langword="null"/>.</exception>
+    [JsonInclude, JsonRequired, JsonPropertyOrder(-1)]
+    public MoneyTerms Terms
     {
-    }
-
-    /// <summary>
-    /// Whether the Jacoby rule is in force: gammons and backgammons count as a
-    /// single point until the cube has been turned. With a centred cube it
-    /// voids undoubled gammons outright and shifts the doubling window, so it
-    /// can change the correct answer: it takes part in a money decision's
-    /// <see cref="ProblemKey"/> (SPEC-stats-identity.md §1, amended
-    /// 2026-08-20; halheinrich/backgammon#120) and decides whether the Too
-    /// Good verdict can occur (<see cref="CubeDecision.CanBeTooGood"/>). Every
-    /// money session states it: there is no unknown rule.
-    /// </summary>
-    public required bool IsJacoby { get; init; }
-
-    /// <summary>
-    /// Whether the beaver rule is in force: a player doubled may redouble at
-    /// once while keeping the cube (XG's match header; the XGID's field 8 spells
-    /// it, bit 2, for money only).
-    /// </summary>
-    public required bool IsBeaver { get; init; }
-
-    /// <summary>
-    /// The highest value the cube may reach in this session — a positive power
-    /// of two (XG's default is 1024, <c>2^10</c>), so a position's
-    /// <see cref="PositionData.CubeSize"/> never exceeds it. A money session's
-    /// rule: a match has no cube limit, the match length bounding what the
-    /// cube can win.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is not a positive power of two.</exception>
-    public required int CubeLimit
-    {
-        get => _cubeLimit.GetValueOrDefault();
-        init
+        get => _terms!;
+        internal init
         {
-            Guard(() =>
-            {
-                if (!SessionRules.CubeValueHolds(value))
-                    throw new ArgumentOutOfRangeException(nameof(CubeLimit), value, SessionRules.CubeLimitMessage);
-            });
-            _cubeLimit = value;
+            Guard(() => ArgumentNullException.ThrowIfNull(value, nameof(Terms)));
+            _terms = value;
         }
     }
 
@@ -97,10 +75,11 @@ public sealed class MoneySession : Session
     /// session's standing, the counterpart of a match's away scores.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is negative.</exception>
-    public required int OnRollScore
+    [JsonInclude, JsonRequired]
+    public int OnRollScore
     {
         get => _onRollScore.GetValueOrDefault();
-        init
+        internal init
         {
             Guard(() => CheckScore(value, nameof(OnRollScore)));
             _onRollScore = value;
@@ -109,10 +88,11 @@ public sealed class MoneySession : Session
 
     /// <summary>The points the opponent had won in the session before this game; at least 0.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is negative.</exception>
-    public required int OpponentScore
+    [JsonInclude, JsonRequired]
+    public int OpponentScore
     {
         get => _opponentScore.GetValueOrDefault();
-        init
+        internal init
         {
             Guard(() => CheckScore(value, nameof(OpponentScore)));
             _opponentScore = value;
@@ -122,22 +102,19 @@ public sealed class MoneySession : Session
     /// <inheritdoc/>
     public override bool Equals(Session? other) =>
         other is MoneySession money
-        && money.IsJacoby == IsJacoby
-        && money.IsBeaver == IsBeaver
-        && money.CubeLimit == CubeLimit
+        && money.Terms == Terms
         && money.OnRollScore == OnRollScore
         && money.OpponentScore == OpponentScore;
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Kind, IsJacoby, IsBeaver, CubeLimit, OnRollScore, OpponentScore);
+    public override int GetHashCode() => HashCode.Combine(Terms, OnRollScore, OpponentScore);
 
     /// <summary>
     /// The session for a reader — <c>"money, Jacoby, no beaver, cube limit
     /// 1024, 3-0"</c> — for a test failure or a log; not a wire form.
     /// </summary>
-    public override string ToString() => string.Create(
-        System.Globalization.CultureInfo.InvariantCulture,
-        $"money, {(IsJacoby ? "Jacoby" : "no Jacoby")}, {(IsBeaver ? "beaver" : "no beaver")}, cube limit {CubeLimit}, {OnRollScore}-{OpponentScore}");
+    public override string ToString() =>
+        string.Create(CultureInfo.InvariantCulture, $"{Terms}, {OnRollScore}-{OpponentScore}");
 
     private static void CheckScore(int score, string member)
     {

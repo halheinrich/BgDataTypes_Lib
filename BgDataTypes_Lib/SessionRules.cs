@@ -3,16 +3,16 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// The rules that hold a session's facts, and the cube's, to the game of
 /// backgammon — each stated once, here, with the one sentence every refusal
-/// of it carries — at every scope money versus match is stated. A record's
-/// <see cref="MatchSession"/>, <see cref="MoneySession"/> and
-/// <see cref="PositionData"/> hold their members to them in their init
+/// of it carries — at every scope money versus match is stated: a header's
+/// <see cref="MoneyTerms"/>, <see cref="MatchTerms"/>,
+/// <see cref="MoneyStanding"/> and <see cref="MatchStanding"/>; a record's
+/// <see cref="MoneySession"/>, <see cref="MatchSession"/> and
+/// <see cref="PositionData"/>; and <see cref="Session.Create"/>, which builds
+/// a session from its header. Each holds its members to them in its init
 /// guards, refusing a breach from code with the guard's
 /// <see cref="ArgumentException"/> and from a document with a
 /// <see cref="System.Text.Json.JsonException"/> carrying it (the wire rule on
-/// <see cref="BgDataTypesJsonContext"/>); the skip-early contracts'
-/// <see cref="MatchTerms"/>, <see cref="MoneyTerms"/>,
-/// <see cref="MatchStanding"/> and <see cref="MoneyStanding"/>, which are
-/// never read from a document, refuse it from code the same way.
+/// <see cref="BgDataTypesJsonContext"/>).
 /// </summary>
 internal static class SessionRules
 {
@@ -93,4 +93,22 @@ internal static class SessionRules
     /// <summary>Whether a game at <paramref name="onRollNeeds"/> and <paramref name="opponentNeeds"/> may be the Crawford game.</summary>
     internal static bool CrawfordStandingHolds(int onRollNeeds, int opponentNeeds) =>
         (onRollNeeds == 1) != (opponentNeeds == 1);
+
+    // -----------------------------------------------------------------------
+    //  A session from its header
+    //
+    //  A session is its terms and its game's standing, seen from the player
+    //  on roll. The two are of one kind — money terms with a money standing,
+    //  a match's terms with a match standing — and the seat on roll is one of
+    //  the two a header names. Session.Create applies both, and the match's
+    //  own rule binding each away score to the length, in the one place a
+    //  standing is oriented.
+    // -----------------------------------------------------------------------
+
+    /// <summary>The rule binding a standing's kind to its terms', in the one sentence every refusal carries.</summary>
+    internal const string StandingKindMessage =
+        "A session's terms and its game's standing are of one kind: money terms take a money standing, a match's terms a match standing.";
+
+    /// <summary>The seat rule, in the one sentence every refusal carries.</summary>
+    internal const string SeatMessage = "The seat on roll is player 1 or player 2.";
 }

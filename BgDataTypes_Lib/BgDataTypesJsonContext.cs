@@ -57,8 +57,11 @@ namespace BgDataTypes_Lib;
 /// object initializer that omits it does not compile, and a document that
 /// omits it is a <see cref="System.Text.Json.JsonException"/> on both the
 /// reflection path and this context's (C# <c>required</c> on the init
-/// members; <see cref="JsonRequiredAttribute"/> on <see cref="Move"/>'s
-/// constructor-bound pair, which <c>required</c> cannot reach);</description></item>
+/// members; <see cref="JsonRequiredAttribute"/> where <c>required</c> cannot
+/// reach — <see cref="Move"/>'s constructor-bound pair, and the members only
+/// this library sets, whose setters are internal: every kind's <c>Kind</c>,
+/// and a session's members, which code outside it builds through
+/// <see cref="Session.Create"/>);</description></item>
 /// <item><description>a member whose absence means something is nullable and
 /// not required: absent, it reads as <see langword="null"/> on both paths,
 /// and its own documentation says what <see langword="null"/>
@@ -90,8 +93,9 @@ namespace BgDataTypes_Lib;
 /// refused</b> (halheinrich/backgammon#273). Every decision states its
 /// <see cref="DecisionKind"/> as a real member, and no reader infers it from
 /// which members are present; see <see cref="BgDecisionDataJsonConverter"/>.
-/// So does every session its <see cref="SessionKind"/>, and every set of
-/// terms and every standing, by the same mechanism (<see cref="KindDispatch"/>).
+/// So does every set of terms and every standing its <see cref="SessionKind"/>,
+/// by the same mechanism (<see cref="KindDispatch"/>) — and every session,
+/// once, in its terms: a session's kind is its terms', stated nowhere else.
 /// The types whose members belong to one kind — the two records, their two
 /// <c>Decision</c> categories, and the two kinds of session, of terms and of
 /// standing — disallow unmapped members, so a document whose kind contradicts
@@ -131,12 +135,15 @@ namespace BgDataTypes_Lib;
 /// <see cref="MoneySession"/>, <see cref="MatchSession"/>,
 /// <see cref="MoneyTerms"/>, <see cref="MatchTerms"/>,
 /// <see cref="MoneyStanding"/>, <see cref="MatchStanding"/> — has an internal
-/// one-parameter serializer constructor beside the public parameterless one
-/// code uses. It marks the instance as read, and each guard then refuses a
-/// breach as a <see cref="System.Text.Json.JsonException"/> carrying the
-/// guard's exception. A serializer constructor must bind one wire member. A
-/// kind — of a decision, a session, terms or a standing — binds its
-/// <c>"Kind"</c>, which the base holds to the type. <b>A category binds its
+/// one-parameter serializer constructor beside the parameterless one code
+/// uses (public, but internal for the two sessions, which code outside this
+/// library builds through <see cref="Session.Create"/> alone). It marks the
+/// instance as read, and each guard then refuses a breach as a
+/// <see cref="System.Text.Json.JsonException"/> carrying the guard's
+/// exception. A serializer constructor must bind one wire member. A kind — of
+/// a decision, terms or a standing — binds its <c>"Kind"</c>, which the base
+/// holds to the type; a session, whose kind is its terms', binds its
+/// <c>"Terms"</c>, whose own contract holds their kind to the type. <b>A category binds its
 /// first member only because a serializer constructor must bind one</b>:
 /// nothing about that member is special, and binding it changes nothing
 /// about how it is read. It stays required, and the absence walk
@@ -220,6 +227,7 @@ namespace BgDataTypes_Lib;
 [JsonSerializable(typeof(CubeOwner))]
 [JsonSerializable(typeof(DecisionKind))]
 [JsonSerializable(typeof(SessionKind))]
+[JsonSerializable(typeof(Seat))]
 [JsonSerializable(typeof(BookEdition))]
 [JsonSerializable(typeof(PlayRanking))]
 [JsonSerializable(typeof(PlayerResultKind))]

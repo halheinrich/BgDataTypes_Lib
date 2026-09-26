@@ -102,10 +102,11 @@ public class WireAbsenceTests
                 break;
 
             // A session's converter dispatches on its kind, as a record's
-            // does; the walk follows it into the kind the document states,
-            // whose contract names the members (halheinrich/backgammon#273).
+            // does — the kind its terms state, the one place it is on the
+            // wire; the walk follows it into that kind, whose contract names
+            // the members, its terms' among them (halheinrich/backgammon#273).
             case JsonTypeInfoKind.None when type == typeof(Session) && node is JsonObject session:
-                Walk(document, path, (string?)session["Kind"] == nameof(SessionKind.Money)
+                Walk(document, path, (string?)session["Terms"]?["Kind"] == nameof(SessionKind.Money)
                     ? typeof(MoneySession) : typeof(MatchSession), node, members);
                 break;
         }
@@ -141,14 +142,15 @@ public class WireAbsenceTests
     {
         // Guards the walk itself: a type it silently stopped reaching would
         // take its members out of every case below. Rewritten for the two
-        // decision kinds and their categories, and again for the two session
-        // kinds (the play golden is a match, the cube golden money).
+        // decision kinds and their categories, again for the two session
+        // kinds (the play golden is a match, the cube golden money), and
+        // again for the terms each session composes.
         var owners = AllMembers().Select(m => m.Owner).ToHashSet();
 
         Type[] expected =
         [
             typeof(CheckerPlayDecision), typeof(CubeDecision), typeof(PositionData),
-            typeof(MoneySession), typeof(MatchSession),
+            typeof(MoneySession), typeof(MatchSession), typeof(MoneyTerms), typeof(MatchTerms),
             typeof(CheckerPlayDecisionData), typeof(CubeDecisionData), typeof(PlayCandidate),
             typeof(Move), typeof(DescriptiveData), typeof(DecisionRow),
         ];

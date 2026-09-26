@@ -61,7 +61,7 @@ public sealed class CubeDecision : BgDecisionData
     /// offerability fact of SPEC-scoring §3's 2026-09-02 amendment
     /// (halheinrich/backgammon#187): <see langword="false"/> exactly when the
     /// session is money under the Jacoby rule (a <see cref="MoneySession"/>
-    /// whose <see cref="MoneySession.IsJacoby"/> is set) and the cube is
+    /// whose <see cref="MoneyTerms.IsJacoby"/> is set) and the cube is
     /// centred (<see cref="PositionData.CubeOwner"/> is
     /// <see cref="CubeOwner.Centered"/>); <see langword="true"/> otherwise.
     /// Gammons do not count under Jacoby until the cube turns, so the
@@ -91,7 +91,7 @@ public sealed class CubeDecision : BgDecisionData
     /// </remarks>
     [JsonIgnore]
     public bool CanBeTooGood =>
-        !(Session is MoneySession { IsJacoby: true }
+        !(Session is MoneySession { Terms.IsJacoby: true }
           && Position.CubeOwner == CubeOwner.Centered);
 
     /// <inheritdoc/>

@@ -119,13 +119,13 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             AnalysisLevel = view.AnalysisLevel,
             Equity = equity,
             SessionKind = session.Kind,
-            MatchLength = match?.Length,
+            MatchLength = match?.Terms.Length,
             OnRollNeeds = match?.OnRollNeeds,
             OpponentNeeds = match?.OpponentNeeds,
             IsCrawford = match?.IsCrawford,
-            IsJacoby = money?.IsJacoby,
-            IsBeaver = money?.IsBeaver,
-            CubeLimit = money?.CubeLimit,
+            IsJacoby = money?.Terms.IsJacoby,
+            IsBeaver = money?.Terms.IsBeaver,
+            CubeLimit = money?.Terms.CubeLimit,
             OnRollScore = money?.OnRollScore,
             OpponentScore = money?.OpponentScore,
             Board = record.Board,
@@ -297,7 +297,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// </summary>
     public required SessionKind SessionKind { get; init; }
 
-    /// <summary>A match's length (<see cref="MatchSession.Length"/>); <see langword="null"/> for a money row — an empty CSV cell, never 0.</summary>
+    /// <summary>A match's length (<see cref="MatchTerms.Length"/>); <see langword="null"/> for a money row — an empty CSV cell, never 0.</summary>
     public int? MatchLength { get; init; }
 
     /// <summary>What the player on roll still needs in a match (<see cref="MatchSession.OnRollNeeds"/>); <see langword="null"/> for a money row, never 0.</summary>
@@ -315,7 +315,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     /// <summary>
     /// Whether a money session's Jacoby rule was in force
-    /// (<see cref="MoneySession.IsJacoby"/>); <see langword="null"/> for a match
+    /// (<see cref="MoneyTerms.IsJacoby"/>); <see langword="null"/> for a match
     /// row, which has no Jacoby rule. Every money row states it.
     /// <see cref="MatchScore"/> spells it as a suffix on the money token, the
     /// way <see cref="IsCrawford"/> spells itself as the <c>C</c> suffix on a
@@ -323,10 +323,10 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// </summary>
     public bool? IsJacoby { get; init; }
 
-    /// <summary>Whether a money session's beaver rule was in force (<see cref="MoneySession.IsBeaver"/>); <see langword="null"/> for a match row.</summary>
+    /// <summary>Whether a money session's beaver rule was in force (<see cref="MoneyTerms.IsBeaver"/>); <see langword="null"/> for a match row.</summary>
     public bool? IsBeaver { get; init; }
 
-    /// <summary>A money session's cube limit (<see cref="MoneySession.CubeLimit"/>); <see langword="null"/> for a match row, which has none.</summary>
+    /// <summary>A money session's cube limit (<see cref="MoneyTerms.CubeLimit"/>); <see langword="null"/> for a match row, which has none.</summary>
     public int? CubeLimit { get; init; }
 
     /// <summary>The points the player on roll had won in a money session before the game (<see cref="MoneySession.OnRollScore"/>); <see langword="null"/> for a match row.</summary>
@@ -361,7 +361,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// </summary>
     [JsonIgnore]
     public string MatchScore => Session.Match(
-        static money => money.IsJacoby ? "moneyJ" : "moneyNJ",
+        static money => money.Terms.IsJacoby ? "moneyJ" : "moneyNJ",
         static match => match.IsCrawford
             ? string.Create(CultureInfo.InvariantCulture, $"{match.OnRollNeeds}a{match.OpponentNeeds}aC")
             : string.Create(CultureInfo.InvariantCulture, $"{match.OnRollNeeds}a{match.OpponentNeeds}a"));
@@ -492,22 +492,23 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     }
 
     /// <summary>
-    /// The session the columns state, built as a record's session is, so its
-    /// kind's rules refuse a breach with the guard's own exception.
+    /// The session the columns state, built as a document's session is — its
+    /// terms, and the standing already seen from the player on roll, which is
+    /// how the row states it (no seat to turn it from, so not through
+    /// <see cref="Session.Create"/>) — so its kind's rules refuse a breach with
+    /// the guard's own exception.
     /// </summary>
     private Session StatedSession() => SessionKind == SessionKind.Match
         ? new MatchSession
         {
-            Length = MatchLength!.Value,
+            Terms = new MatchTerms { Length = MatchLength!.Value },
             OnRollNeeds = OnRollNeeds!.Value,
             OpponentNeeds = OpponentNeeds!.Value,
             IsCrawford = IsCrawford!.Value,
         }
         : new MoneySession
         {
-            IsJacoby = IsJacoby!.Value,
-            IsBeaver = IsBeaver!.Value,
-            CubeLimit = CubeLimit!.Value,
+            Terms = new MoneyTerms { IsJacoby = IsJacoby!.Value, IsBeaver = IsBeaver!.Value, CubeLimit = CubeLimit!.Value },
             OnRollScore = OnRollScore!.Value,
             OpponentScore = OpponentScore!.Value,
         };

@@ -46,10 +46,13 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `PositionData` and `DescriptiveData`, and each kind's `Decision`
   category, `CheckerPlayDecisionData` (with `PlayCandidate` beneath it) and
   `CubeDecisionData`; the position's session — the abstract `Session` and
-  its two sealed kinds `MoneySession` and `MatchSession` (with
-  `SessionKind`, the kind as a value, `SessionJsonConverter`, which
-  dispatches on it, and the internal `SessionRules`, the statement of a
-  match's rules; see "Money and match: the session kinds");
+  its two sealed kinds `MoneySession` and `MatchSession`, each composing
+  its kind's terms (with `SessionKind`, the kind as a value,
+  `SessionJsonConverter`, which dispatches on the kind the terms state,
+  `Session.Create`, the one operation building a session from its header's
+  terms, the game's standing and the seat on roll, a `Seat`, and the
+  internal `SessionRules`, the statement of the session's rules; see
+  "Money and match: the session kinds");
   `DecisionRules`, the internal statement of the rules
   that bind a decision's members, `FiniteNumber`, the internal statement
   of the rule every stored number keeps, `DocumentRefusal`, the internal one
@@ -273,10 +276,13 @@ Design points:
   (`MatchLength`, `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, `IsJacoby`,
   `IsBeaver`, `CubeLimit`, `OnRollScore`, `OpponentScore`: the other session
   kind's are empty) and both after-boards. Every other
-  serialized member is required, each record's and each session's `Kind`
-  included — through `[JsonRequired]`, since the type states it and code
-  never does. A session's facts are all required: a money session's Jacoby
-  rule has no "unknown" (the `PositionData.IsJacoby?` it replaced did).
+  serialized member is required, each record's, each set of terms' and
+  each standing's `Kind` included — through `[JsonRequired]`, since the type
+  states it and code never does — and so is each of a session's members,
+  through `[JsonRequired]` too: their setters are internal, since code
+  outside the library builds a session through `Session.Create` alone. A
+  session's facts are all required: a money session's Jacoby rule has no
+  "unknown" (the `PositionData.IsJacoby?` it replaced did).
   `WireAbsenceTests` walks every member of every type of the wire graph,
   taken from the context's own metadata through each kind's contract and
   each session kind's, and pins both halves of the rule on both paths,
@@ -340,8 +346,8 @@ Every decision holds the two shared categories; each kind holds its own
 | Type | Held by | Fields |
 |---|---|---|
 | `PositionData` | both kinds | `Mop`, `CubeSize` (a positive power of two, never above a money session's `CubeLimit`), `CubeOwner` (a defined owner), `Session` (a `MoneySession` or a `MatchSession`: see "Money and match: the session kinds"); derived `OnRollPipCount`, `OpponentPipCount` (the board's, by `BoardState`'s one pip rule) |
-| `MatchSession` | a match's `PositionData.Session` | `Length` (≥ 1), `OnRollNeeds`, `OpponentNeeds` (each 1 to the length), `IsCrawford` (exactly one player 1-away when set) |
-| `MoneySession` | a money session's `PositionData.Session` | `IsJacoby`, `IsBeaver`, `CubeLimit` (a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
+| `MatchSession` | a match's `PositionData.Session` | `Terms` (a `MatchTerms`: `Length`, ≥ 1), `OnRollNeeds`, `OpponentNeeds` (each 1 to the length), `IsCrawford` (exactly one player 1-away when set) |
+| `MoneySession` | a money session's `PositionData.Session` | `Terms` (a `MoneyTerms`: `IsJacoby`, `IsBeaver`, `CubeLimit`, a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
 | `DescriptiveData` | both kinds | `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it), and a match's length is the match session's |
 | `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `UserPlay?`, and for a ranking `RankedBy(ranking)` — the order, the best play, each candidate's error and whether it is scored, the player's error (see "The ranking") |
 | `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `ProbOfOpponentErrorJustifyingDouble`, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?` and the scoring policy |
@@ -418,7 +424,8 @@ asked for it exhaustively). Derived, never stored:
 Stored, as source data:
 
 - **The cube limit, the beaver rule and a money session's scores**
-  (`MoneySession.CubeLimit`, `IsBeaver`, `OnRollScore`, `OpponentScore`) —
+  (its terms' `MoneyTerms.CubeLimit` and `IsBeaver`, and
+  `MoneySession.OnRollScore` and `OpponentScore`) —
   the three facts only the stored XGID used to carry (its fields 10, 8 and
   6–7), typed members now, from which, with the rest of the record, the
   XGID is derived. The unchecked partial copy the stored string was is
@@ -429,7 +436,8 @@ Stored, as source data:
 - **`Id`, with its `IsCube`** — the identity used apart from the record
   (stats keys, file navigation), so it carries its own kind; the record
   holds the two to agreement (`DecisionRules.IdAgrees`).
-- **A match's length beside its away scores** (`MatchSession`) — each is
+- **A match's length beside its away scores** (`MatchSession`: its terms'
+  length, its own away scores) — each is
   the source file's; the away scores are the game header's score read
   against the length, but the length is not derivable from them.
 - **The equities and the win, gammon and backgammon probabilities** — the
@@ -612,7 +620,8 @@ not-scored classification is this library's.
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
 | `CubeClaimPair` | `readonly record struct (CubeClaim Claim, CubeAction Taker)` — the two-part cube answer of SPEC-scoring §3 (`halheinrich/backgammon#86`): the claim-layer counterpart of `CubeDecisionPair`, pairing the three-valued claim with the taker response if doubled. Same construction-guard idiom (`Claim` any defined member, `Taker` ∈ {`Take`, `Pass`}). A closed 3×2 of six named canonical instances: five verdict cells (`NoDoubleTake`, `DoubleTake`, `DoublePass`, `TooGoodTake`, `TooGoodPass`) plus `NoDoublePass`, the incoherent cell — representable *by ruling* (a selectable user answer; cross-disabling the axes was rejected), named by `IsIncoherent` for review surfaces. One type serves both scored roles — a user's submitted answer and the derived truth (`CubeDecisionData.BestClaimPair`). Scoring semantics stay with the consuming legs. No parse/format story: display strings are consumer copy per SPEC-scoring §3, and no wire token is ruled — its wire debut (and wire shape) belongs to the first document that embeds it. `default` is non-meaningful — see Pitfalls. |
 | `DecisionKind` | enum: `CheckerPlay`, `Cube` — the kind of a decision as a value (`BgDecisionData.Kind`, `DecisionRow.Kind`, `IDecisionFilterData.Kind`), serializes as its string token through the strict converter. The record's kind is its type; match on the record (`Match` / `Switch`) for exhaustiveness. |
-| `SessionKind` | enum: `Money`, `Match` — the kind of a session as a value (`Session.Kind`, `DecisionRow.SessionKind`), serializes as its string token through the strict converter. The session's kind is its type; match on the session (`Match` / `Switch`) for exhaustiveness. See "Money and match: the session kinds". |
+| `SessionKind` | enum: `Money`, `Match` — the kind of a session as a value (`Session.Kind`, `DecisionRow.SessionKind`), serializes as its string token through the strict converter. The session's kind is its type, and its terms'; match on the session (`Match` / `Switch`) for exhaustiveness. See "Money and match: the session kinds". |
+| `Seat` | enum: `Player1`, `Player2` — a header's seat (XG's bottom and top player), the side `GameStanding` states its facts by. `Session.Create` takes the seat on roll to turn a standing into a record's; no record holds a seat. Serializes as its string token through the strict converter. |
 | `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
 | `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
 | `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. **No equality** (`halheinrich/backgammon#273`, ruling A): `==`/`!=` are not defined, and `Equals`/`GetHashCode` throw `NotSupportedException` so every runtime route (comparers, hashed collections, `Distinct`, records and tuples holding a play) fails loudly. Play identity is `BoardState.IsSamePlay`, from a starting position — see "Play identity" below. `IsSameEncoding` compares exact encodings (order, hops, marks) for storage and round-trips; it is not identity. `ToNotation()` writes the play in standard notation, the one public way to spell a play (see "Play notation"); the internal `ToCanonical()` is the display form behind it. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly. |
@@ -1017,7 +1026,7 @@ Design points a maintainer needs before touching the type:
   grammar emitted. Both values are spelled rather than presence-encoding one
   (unlike Crawford's `cr`), because the absent spelling was the old money
   key and admitting it would give one value two spellings — one silently
-  wrong. Every money session states its rule (`MoneySession.IsJacoby`, a
+  wrong. Every money session states its rule (`MoneyTerms.IsJacoby`, a
   required `bool`), and a match states none, so the no-key rung for a money
   record without the fact, and the tolerated stamp on a match record, are
   both gone with the states they handled (halheinrich/backgammon#273).
@@ -1141,7 +1150,7 @@ derived producer-side so consumers never re-derive:
 - **`CubeDecision.CanBeTooGood`** — the offerability fact of the same
   amendment, on the cube record because only the record sees the session
   and the cube owner together: `false` iff the session is a
-  `MoneySession` under the Jacoby rule (`IsJacoby`) and
+  `MoneySession` under the Jacoby rule (its terms' `IsJacoby`) and
   `Position.CubeOwner == Centered` (gammons do not count under Jacoby until
   the cube turns, so the no-double equity never exceeds the cash); `true`
   otherwise — a match has no Jacoby rule, and a money session always states
@@ -1235,14 +1244,16 @@ Design points a maintainer needs before touching it:
   constructor's doc points there. In short: each type holding its members
   to a rule (`CheckerPlayDecision`, `CubeDecision`,
   `CheckerPlayDecisionData`, `CubeDecisionData`, `PlayCandidate`,
-  `PositionData`, `DescriptiveData`, `MoneySession`, `MatchSession`) has an
-  internal one-parameter `[JsonConstructor]`
-  beside the public parameterless one code uses. It marks the instance as
-  read, and each guarded setter rethrows its `ArgumentException` through
-  `DocumentRefusal` when the instance is read. It binds one wire member
-  because a serializer constructor must bind one: a kind binds `Kind`,
-  which the base holds to the type, and a category binds its first member
-  for that reason only. The bound member stays required, and the absence
+  `PositionData`, `DescriptiveData`, the two kinds each of session, terms
+  and standing) has an internal one-parameter `[JsonConstructor]`
+  beside the parameterless one code uses (public, but internal for the two
+  sessions, which code outside the library builds through `Session.Create`
+  alone). It marks the instance as read, and each guarded setter rethrows
+  its `ArgumentException` through `DocumentRefusal` when the instance is
+  read. It binds one wire member because a serializer constructor must
+  bind one: a kind binds `Kind`, which the base holds to the type — a
+  session binds its `Terms`, which carry its kind — and a category binds
+  its first member for that reason only. The bound member stays required, and the absence
   walk fails if it ever stops being so. Measured on .NET 10 before relying
   on it: a generated context sets init and `required` members in an
   object initializer *before* `IJsonOnDeserializing` runs, so a callback
@@ -1325,10 +1336,17 @@ always false (`PositionData`), from which `IsMoneyGame` was derived —
 beside a Jacoby fact on the position that meant nothing in a match. None
 of them is expressible now, and `MatchContextStandInTests` pins each.
 
+**A session composes its terms instead of restating them** (the umbrella's
+review of halheinrich/backgammon#273, 2026-09-26). A session is its kind's
+terms — the header's `MoneyTerms` or `MatchTerms` (see "Shared consumer
+contracts") — plus the game's standing, seen from the player on roll. So
+each kind holds its terms as a member, `Terms`, and states only the
+oriented standing itself:
+
 ```
-Session (abstract)      Kind; Match, Switch; value equality
-├── MoneySession        IsJacoby
-└── MatchSession        Length, OnRollNeeds, OpponentNeeds, IsCrawford
+Session (abstract)      Kind (its terms'); Create; Match, Switch; value equality
+├── MoneySession        Terms (MoneyTerms: IsJacoby, IsBeaver, CubeLimit); OnRollScore, OpponentScore
+└── MatchSession        Terms (MatchTerms: Length); OnRollNeeds, OpponentNeeds, IsCrawford
 ```
 
 Design points a maintainer needs before touching it:
@@ -1337,53 +1355,73 @@ Design points a maintainer needs before touching it:
   is the score context of the decision, beside the board and the cube, and
   on-roll-relative like them — a match's away scores are the player on
   roll's and the opponent's. The descriptive category lost the match
-  length, which is the match's own fact. It is named for what XG calls the
-  two — a money session and a match — and holds the session as it stands
-  at the decision.
-- **The same mechanism as the decision kinds.** A closed pair (the base's
-  constructors are `private protected`), matched exhaustively by
-  `Match`/`Switch`, with `SessionKind` the kind as a value. On the wire the
-  kind is a real `"Kind"` member, written first, read wherever it sits,
-  and refused as a `JsonException` on both paths when missing, unknown,
-  duplicated or contradicting its members — read as a `Session`, as its
-  kind, or inside a record. `SessionJsonConverter` dispatches through the
-  internal `KindDispatch`, which `BgDecisionDataJsonConverter` uses too: one
-  mechanism, each converter supplying its mapping from kind to contract.
-  Each kind disallows unmapped members, so a money session stating a match
-  fact, or a match a Jacoby rule, is refused rather than read with it
-  dropped; each has the internal serializer constructor binding its `Kind`.
-- **A match is well-formed by construction** (`SessionRules`, internal): a
-  length of at least 1; each away score at least 1 — a player 0-away has
-  won, and 0-away each was money's stand-in — and at most the length; and
-  in the Crawford game exactly one player 1-away (the Crawford game is the
-  one after a player first reaches match point, so the other is not 1-away
-  then, and a 1-point match has none; the corpus measured 7,855 Crawford
-  XGIDs with none else). Each guard is order-independent, naming the member
-  that completed the contradiction; a document gets a `JsonException`
-  carrying it.
-- **Money states its rule.** `MoneySession.IsJacoby` is a required `bool`:
-  every money session states the Jacoby rule, so there is no unknown rule.
-  The in-tree producer always knows it (XG's match header). The
-  unknown-rule rungs it removes: `ProblemKey`'s no-key rung for a money
+  length, which is the match's terms' fact. No record holds a seat: a
+  record is the player on roll's view, whatever seat that player sits in.
+- **Built by one operation: `Session.Create(terms, standing, onRoll)`.** A
+  header states the terms and the game's standing seat by seat (player 1,
+  player 2); the operation turns the standing to the `Seat` on roll — the
+  seat on roll's score or away score becomes the player on roll's, the
+  other's the opponent's, a match's Crawford flag is the game's — and holds
+  the two to each other: terms and a standing of different kinds are
+  refused (`ArgumentException` naming `standing`), and so is a match
+  standing with an away score above the terms' length
+  (`ArgumentOutOfRangeException` naming `standing`), since the standing
+  knows no length. It is the one orientation rule, and the one way code
+  outside the library builds a session: the kinds have no public
+  constructor and no public setter, so no producer orients the scores
+  itself. The library's own construction is the serializer's and the
+  row's read-back, which states the standing already on-roll-relative.
+- **On the wire the kind is stated once, in the terms.** A session is
+  `{"Terms":{"Kind":…,…},…}` and its oriented standing — never a `"Kind"`
+  of its own beside its terms' (`Session.Kind` is `[JsonIgnore]`d and
+  derived; a document stating one reads with it ignored, as every derived
+  member is). `SessionJsonConverter` dispatches through the internal
+  `KindDispatch`, which finds the `"Terms"` member and the kind inside it
+  wherever each sits, and refuses, as a `JsonException` on both paths, a
+  missing, duplicated or unknown kind, terms stated twice or not an object
+  — read as a `Session`, as its kind, or inside a record. The same
+  mechanism the decision kinds, the terms and the standings use: each
+  converter supplies its mapping from kind to contract, and the session's
+  also the member its kind is stated in. Each kind disallows unmapped
+  members, and so do its terms, so a money session stating a match fact,
+  a match a Jacoby rule, or either a fact of its terms beside them, is
+  refused rather than read with it dropped. Each kind's internal serializer
+  constructor binds its `Terms`, whose own contract holds their kind to the
+  type.
+- **A match is well-formed by construction** (`SessionRules`, internal): its
+  terms' length at least 1; each away score at least 1 — a player 0-away
+  has won, and 0-away each was money's stand-in — and at most the length;
+  and in the Crawford game exactly one player 1-away (the Crawford game is
+  the one after a player first reaches match point, so the other is not
+  1-away then, and a 1-point match has none; the corpus measured 7,855
+  Crawford XGIDs with none else). Each guard is order-independent, naming
+  the member that completed the contradiction; a document gets a
+  `JsonException` carrying it.
+- **Money states its rule.** `MoneyTerms.IsJacoby` is a required `bool`:
+  every money session's terms state the Jacoby rule, so there is no unknown
+  rule. The in-tree producer always knows it (XG's match header). The
+  unknown-rule rungs it removed: `ProblemKey`'s no-key rung for a money
   record without the fact, the row's bare `money` token, and
   `CanBeTooGood`'s unknown-rule case.
 - **The facts only the XGID carried, placed by the same rule.** The beaver
   rule is money's (XG spells it in the XGID for money only), and so is the
   cube limit: XG keeps it among the match header's money-session settings
   (beside the stakes and the automatic-double limit), and a match has no
-  cube limit — its length bounds what the cube can win. So `MoneySession`
-  carries `IsBeaver` and `CubeLimit` (a positive power of two, as XG's
-  default 1024), and its standing, `OnRollScore` and `OpponentScore` — the
-  game header's scores from the player on roll's side, each at least 0, the
-  counterpart of a match's away scores. All required. The position holds
-  its cube to them: `CubeSize` is a positive power of two, never above a
-  money session's `CubeLimit` (whichever of the two is set second refuses),
-  and `CubeOwner` is a defined owner — so the XGID derived from the record
-  can never be wrong for one that exists.
-- **A value.** A session is immutable and has value equality (the kind and
-  its facts; `==`, `!=`, a consistent hash), so a record's view, its row
-  and the row read back from JSON state one session, whatever instance each
-  holds.
+  cube limit — its length bounds what the cube can win (decided at the
+  umbrella's review; see "The XGID, derived"). So a money session's terms
+  carry `IsBeaver` and `CubeLimit` (a positive power of two, as XG's
+  default 1024), and the session its standing, `OnRollScore` and
+  `OpponentScore` — the game header's scores from the player on roll's
+  side, each at least 0, the counterpart of a match's away scores. All
+  required. The position holds its cube to them: `CubeSize` is a positive
+  power of two, never above a money session's terms' `CubeLimit` (whichever
+  of the two is set second refuses), and `CubeOwner` is a defined owner —
+  so the XGID derived from the record can never be wrong for one that
+  exists.
+- **A value.** A session is immutable and has value equality (its terms,
+  compared as values, and its standing; `==`, `!=`, a consistent hash), so
+  a record's view, its row and the row read back from JSON state one
+  session, whatever instance each holds.
 - **Where it is read.** `IDecisionFilterData.Session` (the view's is the
   record's, the row's is built from its columns and held to the kind's
   rules on read); `DecisionRules.CrawfordAllows(kind, session)`;
@@ -1399,7 +1437,7 @@ writes eXtreme Gammon's position string from the record's own members on
 each read, through the internal `XgidEncoder`, moved here from
 `ConvertXgToJson_Lib` (whose copy goes in its own leg). The stored string
 was an unchecked partial copy of the record, carrying three facts nothing
-else held; those are `MoneySession` members now (above), and every field is
+else held; those are the money session's terms and scores now (above), and every field is
 the record's. The format, field by field, is stated once, on
 `XgidEncoder`'s doc comment. Design points:
 
@@ -1596,10 +1634,15 @@ Hal's ruling of 2026-09-26). The match length of 0, the `IsMoneyGame`
 derived from it, and the money convention of away scores 0 with
 `IsCrawfordGame` false are gone with the members that held them. The three
 scopes — a session's terms, a game's standing (seat-anchored, since both
-players roll within a game), a decision's `Session` (both, from the player
-on roll's side) — are three closed pairs, each matched exhaustively
-(`Match`/`Switch`), each a value (equality over the kind and its facts),
-sharing `SessionKind` and the rules of the internal `SessionRules`.
+players roll within a game), a decision's `Session` (the terms, composed,
+and the standing from the player on roll's side) — are three closed pairs,
+each matched exhaustively (`Match`/`Switch`), each a value (equality over
+the kind and its facts), sharing `SessionKind` and the rules of the
+internal `SessionRules`. **A producer builds a record's session from the
+other two**, through `Session.Create(Terms, Standing, onRoll)` with the
+`Seat` on roll at the decision — the one orientation rule, and the only way
+code outside the library builds one (see "Money and match: the session
+kinds").
 
 **The terms and the standing are wire types** (the umbrella's review of
 halheinrich/backgammon#273). A producer serializes its header types — the
@@ -1748,7 +1791,9 @@ record), a builder per category — `Position`, `CheckerPlayData`,
 `CubeData`, `Descriptive`, `Candidate` — and one per session kind,
 `MatchSession` (by default a 7-point match at 0-0) and `MoneySession` (by
 default under the Jacoby rule), which `Position` takes as its `session`
-argument. Each yields a well-formed value of
+argument — each built as a producer builds one, through `Session.Create`
+with the player on roll in seat 1, so its arguments are the player on
+roll's. Each yields a well-formed value of
 its type with realistic defaults, and takes the members a test cares about
 as named arguments spelled as the members are: a checker play is the
 opening 3-1 from the standard start at 0-0 in a 7-point match, with three
@@ -1843,33 +1888,40 @@ public sealed class MatchStanding : GameStanding { public required int Away1, Aw
 public enum DecisionKind { CheckerPlay, Cube }    // the kind as a value; strict string token
 
 // Money versus match is one of two types (halheinrich/backgammon#273): a
-// closed pair, dispatched on "Kind" as the decision kinds are.
+// closed pair, dispatched on the kind its terms state, as the decision
+// kinds are on theirs.
 public enum SessionKind { Money, Match }          // the kind as a value; strict string token
+public enum Seat { Player1, Player2 }             // a header's seat; strict string token; no record holds one
 
+// A session composes its terms and states its standing from the player on
+// roll's side. Wire: {"Terms":{"Kind":…,…}, <the standing>} — the kind once.
 [JsonConverter(typeof(SessionJsonConverter))]
 public abstract class Session : IEquatable<Session>, IEqualityOperators<Session, Session, bool>
 {
-    [JsonInclude, JsonRequired] public SessionKind Kind { get; internal init; }  // written first; the type's
+    [JsonIgnore] public SessionKind Kind { get; }  // its terms' kind; not on the session's wire
+    // The one way code outside the library builds a session, and the one
+    // orientation rule: the seat on roll's standing becomes the player on
+    // roll's. Refuses terms and a standing of different kinds, and an away
+    // score past the terms' length, each naming "standing".
+    public static Session Create(SessionTerms terms, GameStanding standing, Seat onRoll);
     public abstract TResult Match<TResult>(Func<MoneySession, TResult> money, Func<MatchSession, TResult> match);
     public abstract void Switch(Action<MoneySession> money, Action<MatchSession> match);
-    public abstract bool Equals(Session? other);  // + Equals(object), GetHashCode, ==, !=: the kind and its facts
+    public abstract bool Equals(Session? other);  // + Equals(object), GetHashCode, ==, !=: the terms and the standing
 }
 
-public sealed class MoneySession : Session       // unmapped members refused
+public sealed class MoneySession : Session       // no public constructor or setter; unmapped members refused
 {
-    public required bool IsJacoby { get; init; }     // every money session states its rule
-    public required bool IsBeaver { get; init; }
-    public required int CubeLimit { get; init; }     // a positive power of two (XG's default 1024)
-    public required int OnRollScore { get; init; }   // >= 0: the session's score before the game
-    public required int OpponentScore { get; init; } // >= 0
+    [JsonInclude, JsonRequired] public MoneyTerms Terms { get; internal init; }   // the rules and the cube limit
+    [JsonInclude, JsonRequired] public int OnRollScore { get; internal init; }    // >= 0: the session's score before the game
+    [JsonInclude, JsonRequired] public int OpponentScore { get; internal init; }  // >= 0
 }
 
-public sealed class MatchSession : Session       // unmapped members refused
+public sealed class MatchSession : Session       // no public constructor or setter; unmapped members refused
 {
-    public required int Length { get; init; }        // >= 1
-    public required int OnRollNeeds { get; init; }   // 1..Length
-    public required int OpponentNeeds { get; init; } // 1..Length
-    public required bool IsCrawford { get; init; }   // exactly one player 1-away when set
+    [JsonInclude, JsonRequired] public MatchTerms Terms { get; internal init; }   // the length
+    [JsonInclude, JsonRequired] public int OnRollNeeds { get; internal init; }    // 1..Terms.Length
+    [JsonInclude, JsonRequired] public int OpponentNeeds { get; internal init; }  // 1..Terms.Length
+    [JsonInclude, JsonRequired] public bool IsCrawford { get; internal init; }    // exactly one player 1-away when set
 }
 
 [JsonConverter(typeof(BgDecisionDataJsonConverter))]  // dispatches on "Kind"; names no member
@@ -1908,7 +1960,7 @@ public sealed class CubeDecision : BgDecisionData
 {
     public required CubeDecisionData Decision { get; init; }
     // Offerability of the Too Good verdict (SPEC-scoring §3, 2026-09-02):
-    // false iff Session is MoneySession { IsJacoby: true } && cube centred.
+    // false iff Session is MoneySession { Terms.IsJacoby: true } && cube centred.
     [JsonIgnore] public bool CanBeTooGood { get; }
 }
 
@@ -2525,14 +2577,23 @@ measure" is not a valid comparison on this hardware.
   before the creator runs, and a nullable member's default is the `null`
   both paths give. A member added with an initializer reopens it.
 - **Money is a session kind, never a 0.** A money record's position holds a
-  `MoneySession`, which states its Jacoby rule and has no length, away
-  scores or Crawford flag; a match's holds a `MatchSession`, whose length
-  and away scores are at least 1. Do not read money off a match length or
-  away score of 0 — no surface carries one — and do not look for an
-  unknown Jacoby rule: every money session states it, so the old no-key
-  rung, the bare `money` CSV token and the unknown-rule Too Good case are
-  gone. A producer building a money record states `IsJacoby` because the
-  member is required; one that cannot tell the rule has no record to build.
+  `MoneySession`, whose terms state its Jacoby rule and which has no
+  length, away scores or Crawford flag; a match's holds a `MatchSession`,
+  whose terms' length and whose away scores are at least 1. Do not read
+  money off a match length or away score of 0 — no surface carries one —
+  and do not look for an unknown Jacoby rule: every money session's terms
+  state it, so the old no-key rung, the bare `money` CSV token and the
+  unknown-rule Too Good case are gone. A producer building money terms
+  states `IsJacoby` because the member is required; one that cannot tell
+  the rule has no record to build.
+- **Build a session through `Session.Create`, never by orienting the
+  standing yourself.** A producer has the header's terms and the game's
+  standing by seat, and the seat on roll at each decision; the operation is
+  the one place the standing is turned to the player on roll, and the
+  kinds leave no other way in. Pass the seat of the player on roll at the
+  decision, not the seat that started the game. Code holding on-roll facts
+  already (a builder, a test) passes them as seat 1's with `Seat.Player1`,
+  which turns nothing.
 - **`DecisionRow.MatchScore` is computed, not stored.** It is spelled from
   the row's `Session` — the session columns typed — on every access. Do not
   try to set it.
@@ -2748,7 +2809,7 @@ measure" is not a valid comparison on this hardware.
   a hint that it is reachable.
 - **Never re-derive Too Good offerability from the session.**
   `CubeDecision.CanBeTooGood` is the one site; spelling
-  `Session is MoneySession { IsJacoby: true } && CubeOwner == Centered` in a
+  `Session is MoneySession { Terms.IsJacoby: true } && CubeOwner == Centered` in a
   consumer creates a second source of the ruling.
 - **A `NamedCollection` specialization is a closed pattern, and every part
   of it is load-bearing.** The shape (the saved-filter document of

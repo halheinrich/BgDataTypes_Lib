@@ -56,7 +56,7 @@ public class DocumentRefusalTests
         yield return ("a match's away score of 0, inside a record", TestRecords.CheckerPlay(),
             d => d["Position"]!["Session"]!["OnRollNeeds"] = 0, typeof(ArgumentOutOfRangeException));
         yield return ("a match of length 0, inside a record", TestRecords.Cube(),
-            d => d["Position"]!["Session"]!["Length"] = 0, typeof(ArgumentOutOfRangeException));
+            d => d["Position"]!["Session"]!["Terms"]!["Length"] = 0, typeof(ArgumentOutOfRangeException));
         yield return ("an away score past the match's length, inside a record", TestRecords.CheckerPlay(),
             d => d["Position"]!["Session"]!["OpponentNeeds"] = 8, typeof(ArgumentOutOfRangeException));
         yield return ("a Crawford game with no player 1-away, inside a record", TestRecords.CheckerPlay(),
@@ -134,9 +134,9 @@ public class DocumentRefusalTests
         yield return ("an away score of 0, read as the kind", typeof(MatchSession), TestRecords.MatchSession(),
             d => d["OpponentNeeds"] = 0, typeof(ArgumentOutOfRangeException));
         yield return ("a match of length 0", typeof(MatchSession), TestRecords.MatchSession(),
-            d => d["Length"] = 0, typeof(ArgumentOutOfRangeException));
+            d => d["Terms"]!["Length"] = 0, typeof(ArgumentOutOfRangeException));
         yield return ("a length below an away score", typeof(MatchSession), TestRecords.MatchSession(),
-            d => d["Length"] = 5, typeof(ArgumentOutOfRangeException));
+            d => d["Terms"]!["Length"] = 5, typeof(ArgumentOutOfRangeException));
         yield return ("a Crawford game with no player 1-away", typeof(Session), TestRecords.MatchSession(),
             d => d["IsCrawford"] = true, typeof(ArgumentException));
         yield return ("a Crawford game with both players 1-away", typeof(MatchSession),
@@ -145,7 +145,7 @@ public class DocumentRefusalTests
         yield return ("a null session", typeof(PositionData), TestRecords.Position(),
             d => d["Session"] = null, typeof(ArgumentNullException));
         yield return ("a cube limit that is not a power of two", typeof(Session), TestRecords.MoneySession(),
-            d => d["CubeLimit"] = 1000, typeof(ArgumentOutOfRangeException));
+            d => d["Terms"]!["CubeLimit"] = 1000, typeof(ArgumentOutOfRangeException));
         yield return ("a negative money score, read as the kind", typeof(MoneySession), TestRecords.MoneySession(),
             d => d["OnRollScore"] = -1, typeof(ArgumentOutOfRangeException));
         yield return ("a cube of 0", typeof(PositionData), TestRecords.Position(),
@@ -259,8 +259,6 @@ public class DocumentRefusalTests
     [InlineData(typeof(PlayCandidate))]
     [InlineData(typeof(DescriptiveData))]
     [InlineData(typeof(PositionData))]
-    [InlineData(typeof(MoneySession))]
-    [InlineData(typeof(MatchSession))]
     [InlineData(typeof(MoneyTerms))]
     [InlineData(typeof(MatchTerms))]
     [InlineData(typeof(MoneyStanding))]
@@ -278,5 +276,22 @@ public class DocumentRefusalTests
 
         var code = Assert.Single(constructors, c => c.IsPublic);
         Assert.Empty(code.GetParameters());
+    }
+
+    [Theory]
+    [InlineData(typeof(MoneySession), typeof(MoneyTerms))]
+    [InlineData(typeof(MatchSession), typeof(MatchTerms))]
+    public void ASessionsConstructors_AreAllInternal_TheSerializersBindingItsTerms(Type type, Type terms)
+    {
+        // Rewritten for the composed session (split from the theory above):
+        // code outside the library builds a session through Session.Create
+        // alone, so no constructor is public; the serializer's binds the
+        // session's first member, its terms, which carry its kind.
+        var constructors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        Assert.All(constructors, c => Assert.True(c.IsAssembly, $"{type.Name}'s {c} is not internal"));
+
+        var serializer = Assert.Single(constructors, c => c.IsDefined(typeof(JsonConstructorAttribute)));
+        Assert.Equal(terms, Assert.Single(serializer.GetParameters()).ParameterType);
+        Assert.Empty(Assert.Single(constructors, c => !c.IsDefined(typeof(JsonConstructorAttribute))).GetParameters());
     }
 }

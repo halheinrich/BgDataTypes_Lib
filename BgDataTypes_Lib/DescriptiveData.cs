@@ -7,7 +7,7 @@ namespace BgDataTypes_Lib;
 /// who was playing, and where the decision was recorded. Producer-supplied
 /// from the source file's headers (see <c>ConvertXgToJson_Lib</c>). A match's
 /// length is not here: it is the match's own fact, on
-/// <see cref="MatchSession.Length"/>, so a money session has none to state
+/// <see cref="MatchTerms.Length"/>, so a money session has none to state
 /// (halheinrich/backgammon#273; it used to be 0 here). Every member but
 /// the nullable ones is <c>required</c>, per the wire rule stated on
 /// <see cref="BgDataTypesJsonContext"/>, and each nullable member's

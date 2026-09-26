@@ -9,12 +9,14 @@ namespace BgDataTypes_Lib.Tests;
 /// <summary>
 /// Money versus match is one of two types (halheinrich/backgammon#273, Hal's
 /// ruling of 2026-09-26): <see cref="MoneySession"/> and
-/// <see cref="MatchSession"/>, each carrying only its own facts. Pinned here,
-/// as <see cref="DecisionKindTests"/> pins the decision kinds: the kind on
-/// the wire (explicit, first, read wherever it sits, refused as a
+/// <see cref="MatchSession"/>, each composing its kind's terms and stating
+/// only the oriented standing beside them (the umbrella's review of
+/// 2026-09-26). Pinned here, as <see cref="DecisionKindTests"/> pins the
+/// decision kinds: the kind on the wire — stated once, in the terms, read
+/// wherever the terms and the kind sit, refused as a
 /// <see cref="JsonException"/> on both paths when missing, duplicated,
-/// unknown or contradicted — read as a session, as its kind, or inside a
-/// record), the separation of the two kinds' facts through the public
+/// unknown or contradicted, read as a session, as its kind, or inside a
+/// record — the separation of the two kinds' facts through the public
 /// surface, the closed pair that makes <see cref="Session.Match{TResult}"/>
 /// exhaustive, and the session as a value.
 /// </summary>
@@ -48,11 +50,22 @@ public class SessionKindTests
         return (alone.ToJsonString(), record.ToJsonString());
     }
 
-    private static void AssertRefusedAloneAndInARecord(Session session, Action<JsonObject> edit)
+    /// <summary>The terms object inside a session document, to edit.</summary>
+    private static JsonObject TermsOf(JsonObject session) => session["Terms"]!.AsObject();
+
+    private static void AssertRefusedAloneAndInARecord(Session session, Action<JsonObject> edit, string? saying = null)
     {
         var (alone, inRecord) = Edited(session, edit);
-        WirePaths.AssertRefused<Session>(alone);
-        WirePaths.AssertRefused<BgDecisionData>(inRecord);
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            var asSession = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Session>(alone, options));
+            var asRecord = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<BgDecisionData>(inRecord, options));
+            if (saying is not null)
+            {
+                Assert.Contains(saying, asSession.Message);
+                Assert.Contains(saying, asRecord.Message);
+            }
+        }
     }
 
     // ── Round trips ───────────────────────────────────────────────
@@ -102,33 +115,41 @@ public class SessionKindTests
         Assert.Equal(document.Decisions.Select(d => d.Session), restored.Decisions.Select(d => d.Session));
     }
 
-    // ── The kind is explicit ──────────────────────────────────────
+    // ── The kind is stated once, in the terms ─────────────────────
 
     [Fact]
-    public void TheKind_IsWrittenFirst_WhateverTheStaticType_BothPaths()
+    public void TheKind_IsStatedOnce_InTheTermsWrittenFirst_WhateverTheStaticType_BothPaths()
     {
+        // Rewritten: the session's kind is its terms', so the document states
+        // it there — first in the terms, which are first in the session — and
+        // never again beside them.
         foreach (var session in BothKinds())
             foreach (var (_, options) in WirePaths.Both)
             {
-                string expected = $"{{\"Kind\":\"{session.Kind}\",";
+                string expected = $"{{\"Terms\":{{\"Kind\":\"{session.Kind}\",";
                 Assert.StartsWith(expected, JsonSerializer.Serialize(session, options));
                 Assert.StartsWith(expected, JsonSerializer.Serialize(session, session.GetType(), options));
                 Assert.Contains("\"Session\":" + expected,
                     JsonSerializer.Serialize<BgDecisionData>(RecordsIn(session)[0], options));
+                Assert.Null(SessionDocument(session)["Kind"]);
             }
     }
 
     [Fact]
-    public void TheKind_IsReadWhereverItSits_BothPaths()
+    public void TheTermsAndTheirKind_AreReadWhereverTheySit_BothPaths()
     {
-        // JSON objects are unordered: a kind stated last reads as one stated first.
+        // JSON objects are unordered: terms stated last, with their kind
+        // stated last in them, read as terms and a kind stated first.
         foreach (var session in BothKinds())
         {
             var (alone, inRecord) = Edited(session, document =>
             {
-                var kind = document["Kind"]!.DeepClone();
-                document.Remove("Kind");
-                document.Add("Kind", kind);
+                var terms = TermsOf(document).DeepClone().AsObject();
+                var kind = terms["Kind"]!.DeepClone();
+                terms.Remove("Kind");
+                terms.Add("Kind", kind);
+                document.Remove("Terms");
+                document.Add("Terms", terms);
             });
 
             foreach (var (_, options) in WirePaths.Both)
@@ -156,9 +177,10 @@ public class SessionKindTests
         var session = TestRecords.MatchSession();
         Action<JsonObject> edit = document =>
         {
-            document.Remove("Kind");
+            var terms = TermsOf(document);
+            terms.Remove("Kind");
             if (kindJson.Length > 0)
-                document.Insert(0, "Kind", JsonNode.Parse(kindJson));
+                terms.Insert(0, "Kind", JsonNode.Parse(kindJson));
         };
 
         if (name == "differently cased name")
@@ -174,33 +196,44 @@ public class SessionKindTests
             return;
         }
 
-        AssertRefusedAloneAndInARecord(session, edit);
+        // A missing kind is refused by the dispatch, which says where a
+        // session states it — not by whichever kind's contract a guessed kind
+        // would reach, whose complaint would not name the kind.
+        AssertRefusedAloneAndInARecord(session, edit,
+            name == "missing" ? "A session states its Terms.Kind — Money or Match." : null);
+    }
 
-        if (name == "missing")
-        {
-            // Refused by the dispatch, which says what a session states — not
-            // by whichever kind's contract a guessed kind would reach, whose
-            // complaint (a member it does not map) would not name the kind.
-            var (alone, inRecord) = Edited(session, edit);
-            foreach (var (_, options) in WirePaths.Both)
+    [Theory]
+    [InlineData(null)]          // missing
+    [InlineData("null")]
+    [InlineData("\"Money\"")]   // a string
+    [InlineData("[]")]          // an array
+    public void MissingOrMalformedTerms_AreRefused_BothPaths_AloneAndInsideARecord(string? termsJson)
+    {
+        // Added: the terms carry the session's kind, so a session without an
+        // object of terms states no kind — the dispatch refuses it, saying so.
+        AssertRefusedAloneAndInARecord(TestRecords.MoneySession(), document =>
             {
-                Assert.Contains("A session states its Kind — Money or Match.",
-                    Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Session>(alone, options)).Message);
-                Assert.Contains("A session states its Kind — Money or Match.",
-                    Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<BgDecisionData>(inRecord, options)).Message);
-            }
-        }
+                document.Remove("Terms");
+                if (termsJson is not null)
+                    document.Insert(0, "Terms", JsonNode.Parse(termsJson));
+            },
+            termsJson is null ? "A session states its Terms.Kind" : "A session's Terms is a JSON object");
     }
 
     [Fact]
-    public void AKindStatedTwice_IsRefused_BothPaths()
+    public void TermsOrTheirKind_StatedTwice_AreRefused_BothPaths()
     {
         foreach (var second in new[] { "Match", "Money" })
         {
-            var json = SessionDocument(TestRecords.MatchSession()).ToJsonString()[..^1] + $",\"Kind\":\"{second}\"}}";
+            var document = SessionDocument(TestRecords.MatchSession());
+            var termsJson = document["Terms"]!.ToJsonString();
 
-            var ex = WirePaths.AssertRefused<Session>(json);
-            Assert.Contains("once", ex.Message);
+            string kindTwice = document.ToJsonString().Replace(termsJson, termsJson[..^1] + $",\"Kind\":\"{second}\"}}");
+            Assert.Contains("states its Terms.Kind once", WirePaths.AssertRefused<Session>(kindTwice).Message);
+
+            string termsTwice = document.ToJsonString()[..^1] + $",\"Terms\":{{\"Kind\":\"{second}\",\"Length\":7}}}}";
+            Assert.Contains("states its Terms once", WirePaths.AssertRefused<Session>(termsTwice).Message);
         }
     }
 
@@ -209,31 +242,57 @@ public class SessionKindTests
     {
         // Each kind's document relabelled as the other: its members are the
         // other kind's, and the stated kind's are missing.
-        AssertRefusedAloneAndInARecord(TestRecords.MoneySession(), document => document["Kind"] = "Match");
-        AssertRefusedAloneAndInARecord(TestRecords.MatchSession(), document => document["Kind"] = "Money");
+        AssertRefusedAloneAndInARecord(TestRecords.MoneySession(), document => TermsOf(document)["Kind"] = "Match");
+        AssertRefusedAloneAndInARecord(TestRecords.MatchSession(), document => TermsOf(document)["Kind"] = "Money");
+    }
+
+    [Fact]
+    public void ASessionKindStatedBesideTheTerms_IsIgnored_TheTermsDecide_BothPaths()
+    {
+        // Added: the session's Kind is derived from its terms and is not a
+        // wire member of its own; a document stating one reads with it
+        // ignored, as every derived member is (the record's Xgid). The terms'
+        // kind decides, whatever the ignored one says.
+        foreach (var session in BothKinds())
+        {
+            var (alone, inRecord) = Edited(session, document =>
+                document.Insert(0, "Kind", session.Kind == SessionKind.Money ? "Match" : "Money"));
+
+            foreach (var (_, options) in WirePaths.Both)
+            {
+                Assert.Equal(session, JsonSerializer.Deserialize<Session>(alone, options));
+                Assert.Equal(session, JsonSerializer.Deserialize<BgDecisionData>(inRecord, options)!.Session);
+            }
+        }
     }
 
     public static TheoryData<string, string> ForeignMembers => new()
     {
-        // (kind, the other kind's member)
+        // (kind, a member it does not have beside its terms — the other
+        // kind's standing, or a fact of its own terms restated)
         { "Money", "Length" },
         { "Money", "OnRollNeeds" },
         { "Money", "OpponentNeeds" },
         { "Money", "IsCrawford" },
+        { "Money", "IsJacoby" },
+        { "Money", "IsBeaver" },
+        { "Money", "CubeLimit" },
         { "Match", "IsJacoby" },
         { "Match", "IsBeaver" },
         { "Match", "CubeLimit" },
         { "Match", "OnRollScore" },
         { "Match", "OpponentScore" },
+        { "Match", "Length" },
     };
 
     [Theory]
     [MemberData(nameof(ForeignMembers))]
-    public void AMemberOfTheOtherKind_IsRefused_NotDropped_BothPaths(string kind, string member)
+    public void AMemberTheKindDoesNotHave_IsRefused_NotDropped_BothPaths(string kind, string member)
     {
         // A money session cannot state a match fact, nor a match a money
-        // fact: a full, valid document of the stated kind carrying one member
-        // the other kind has is never read with the member dropped.
+        // fact, and neither restates its terms' facts beside them: a full,
+        // valid document of the stated kind carrying one such member is never
+        // read with the member dropped.
         Session session = kind == "Money" ? TestRecords.MoneySession() : TestRecords.MatchSession();
         var (alone, inRecord) = Edited(session, document =>
             document[member] = member is "IsJacoby" or "IsCrawford" or "IsBeaver" ? JsonValue.Create(false) : JsonValue.Create(1));
@@ -245,21 +304,24 @@ public class SessionKindTests
     [Fact]
     public void AKindReadAsItsOwnType_RequiresItsOwnKind_BothPaths()
     {
-        // A kind read directly bypasses the converter, but its own contract
-        // still requires the kind — its serializer constructor takes it — and
-        // refuses the other one.
+        // A kind read directly bypasses the converter, but its terms' own
+        // contract still requires the kind — their serializer constructor
+        // takes it — and refuses the other one.
         var match = SessionDocument(TestRecords.MatchSession());
         foreach (var (_, options) in WirePaths.Both)
             Assert.IsType<MatchSession>(JsonSerializer.Deserialize<MatchSession>(match.ToJsonString(), options));
 
         var wrong = match.DeepClone().AsObject();
-        wrong["Kind"] = "Money";
+        TermsOf(wrong)["Kind"] = "Money";
         WirePaths.AssertRefused<MatchSession>(wrong.ToJsonString());
 
         var missing = match.DeepClone().AsObject();
-        missing.Remove("Kind");
+        TermsOf(missing).Remove("Kind");
         WirePaths.AssertRefused<MatchSession>(missing.ToJsonString());
-        WirePaths.AssertRefused<MoneySession>(SessionDocument(TestRecords.MoneySession()).ToJsonString().Replace("\"Kind\":\"Money\",", ""));
+
+        var money = SessionDocument(TestRecords.MoneySession());
+        TermsOf(money).Remove("Kind");
+        WirePaths.AssertRefused<MoneySession>(money.ToJsonString());
     }
 
     // ── A money session states no match fact, a match no money fact ──
@@ -272,15 +334,17 @@ public class SessionKindTests
     [Fact]
     public void TheKinds_ShareOnlyTheBasesMembers()
     {
-        // What a match has beyond the base, a money session does not, and the
-        // reverse; so code reading one kind's fact off the other cannot
-        // compile.
+        // Rewritten for the composed session: what a match has beyond the
+        // base, a money session does not, and the reverse — each its own
+        // terms and its own standing.
         var shared = PublicMembers(typeof(Session));
         var money = PublicMembers(typeof(MoneySession)).Except(shared).Order().ToArray();
         var match = PublicMembers(typeof(MatchSession)).Except(shared).Order().ToArray();
 
-        Assert.Equal(["CubeLimit", "IsBeaver", "IsJacoby", "OnRollScore", "OpponentScore"], money);
-        Assert.Equal(["IsCrawford", "Length", "OnRollNeeds", "OpponentNeeds"], match);
+        Assert.Equal(["OnRollScore", "OpponentScore", "Terms"], money);
+        Assert.Equal(["IsCrawford", "OnRollNeeds", "OpponentNeeds", "Terms"], match);
+        Assert.Equal(typeof(MoneyTerms), typeof(MoneySession).GetProperty("Terms")!.PropertyType);
+        Assert.Equal(typeof(MatchTerms), typeof(MatchSession).GetProperty("Terms")!.PropertyType);
     }
 
     [Fact]
@@ -288,7 +352,7 @@ public class SessionKindTests
     {
         var shared = PublicMembers(typeof(Session));
 
-        foreach (var member in new[] { "IsJacoby", "Length", "OnRollNeeds", "OpponentNeeds", "IsCrawford", "MatchLength", "IsMoneyGame" })
+        foreach (var member in new[] { "Terms", "IsJacoby", "IsBeaver", "CubeLimit", "Length", "OnRollNeeds", "OpponentNeeds", "IsCrawford", "MatchLength", "IsMoneyGame" })
             Assert.DoesNotContain(member, shared);
     }
 
@@ -354,14 +418,17 @@ public class SessionKindTests
     }
 
     [Fact]
-    public void TheKind_IsTheTypes_AndCodeCannotSetIt()
+    public void TheKind_IsTheTermsKind_AndNothingCanSetIt()
     {
+        // Rewritten: the kind is fixed by the type, which its terms' kind
+        // decides; it has no setter at all, since no document states it on
+        // the session.
+        foreach (var session in BothKinds())
+            Assert.Equal(session.Match(money => money.Terms.Kind, match => match.Terms.Kind), session.Kind);
         Assert.Equal(SessionKind.Money, TestRecords.MoneySession().Kind);
         Assert.Equal(SessionKind.Match, TestRecords.MatchSession().Kind);
 
-        var kind = typeof(Session).GetProperty(nameof(Session.Kind))!;
-        Assert.False(kind.SetMethod!.IsPublic);
-        Assert.False(kind.SetMethod.IsFamily);
+        Assert.Null(typeof(Session).GetProperty(nameof(Session.Kind))!.SetMethod);
     }
 
     // ── A value ───────────────────────────────────────────────────

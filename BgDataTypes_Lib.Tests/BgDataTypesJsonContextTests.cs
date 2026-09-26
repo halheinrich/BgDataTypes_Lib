@@ -253,6 +253,8 @@ public class BgDataTypesJsonContextTests
         AssertContextMatchesReflection(CubeClaim.TooGood);
         AssertContextMatchesReflection(CubeOwner.Opponent);
         AssertContextMatchesReflection(DecisionKind.Cube);
+        AssertContextMatchesReflection(SessionKind.Money);
+        AssertContextMatchesReflection(Seat.Player2);
     }
 
     // -----------------------------------------------------------------------
@@ -345,6 +347,10 @@ public class BgDataTypesJsonContextTests
         // through the context is pinned on the bare token.
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CubeClaim>(
             "2", ContextOptions));
+
+        // So has Seat, which no record holds: a producer's header may.
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Seat>("1", ContextOptions));
+        Assert.Equal(Seat.Player2, JsonSerializer.Deserialize<Seat>("\"Player2\"", ContextOptions));
     }
 
     private static void AssertOnlyTheNumericTokenIsRefused<T>(T full, string member, int ordinal)
@@ -392,7 +398,7 @@ public class BgDataTypesJsonContextTests
         Type[] roots =
         [
             typeof(BgDecisionData), typeof(CheckerPlayDecision), typeof(CubeDecision),
-            typeof(Session), typeof(MoneySession), typeof(MatchSession), typeof(SessionKind),
+            typeof(Session), typeof(MoneySession), typeof(MatchSession), typeof(SessionKind), typeof(Seat),
             typeof(SessionTerms), typeof(MoneyTerms), typeof(MatchTerms),
             typeof(GameStanding), typeof(MoneyStanding), typeof(MatchStanding),
             typeof(DecisionRow), typeof(DecisionKind),

@@ -89,7 +89,7 @@ public class CubeDecisionTooGoodOfferabilityTests
         foreach (var session in sessions)
             foreach (var owner in Enum.GetValues<CubeOwner>())
                 if (!Make(session, owner).CanBeTooGood)
-                    withheld.Add($"{session.Kind}{(session is MoneySession { IsJacoby: true } ? "J" : "")}/{owner}");
+                    withheld.Add($"{session.Kind}{(session is MoneySession { Terms.IsJacoby: true } ? "J" : "")}/{owner}");
 
         Assert.Equal(["MoneyJ/Centered"], withheld);
     }

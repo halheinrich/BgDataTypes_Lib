@@ -48,7 +48,7 @@ public sealed class MatchTerms : SessionTerms
     {
     }
 
-    /// <summary>The match's length: the points a player needs to win it, at least 1 (<see cref="MatchSession.Length"/>).</summary>
+    /// <summary>The match's length: the points a player needs to win it, at least 1.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is below 1.</exception>
     public required int Length
     {

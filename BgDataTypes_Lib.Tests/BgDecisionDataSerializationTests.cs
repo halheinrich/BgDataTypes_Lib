@@ -575,7 +575,7 @@ public class BgDecisionDataSerializationTests
         Assert.Equal(original.CubeSize, restored.CubeSize);
         Assert.Equal(original.CubeOwner, restored.CubeOwner);
         var match = Assert.IsType<MatchSession>(restored.Session);
-        Assert.Equal((7, 3, 5, false), (match.Length, match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
+        Assert.Equal((7, 3, 5, false), (match.Terms.Length, match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
     }
 
     [Theory]
@@ -591,7 +591,7 @@ public class BgDecisionDataSerializationTests
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<PositionData>(json, Options)!;
 
-        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(restored.Session).IsJacoby);
+        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(restored.Session).Terms.IsJacoby);
     }
 
     [Fact]
@@ -602,7 +602,7 @@ public class BgDecisionDataSerializationTests
         // no-key rung's input. The rule is required now, so the absence is
         // refused rather than read as anything.
         var document = WirePaths.Document(TestRecords.Position(session: TestRecords.MoneySession()));
-        document["Session"]!.AsObject().Remove("IsJacoby");
+        document["Session"]!["Terms"]!.AsObject().Remove("IsJacoby");
 
         WirePaths.AssertRefused<PositionData>(document.ToJsonString());
     }
@@ -610,10 +610,12 @@ public class BgDecisionDataSerializationTests
     [Fact]
     public void PositionData_MoneySessionsJacobyRule_SerializesUnderItsOwnName_InsideTheSession()
     {
-        // Rewritten from PositionData_IsJacoby_SerializesUnderItsOwnName.
+        // Rewritten from PositionData_IsJacoby_SerializesUnderItsOwnName, and
+        // again for the composed session: the rule is the terms', which state
+        // the session's kind.
         var json = JsonSerializer.Serialize(TestRecords.Position(session: TestRecords.MoneySession(isJacoby: true)), Options);
 
-        Assert.Contains("\"Session\":{\"Kind\":\"Money\",\"IsJacoby\":true,", json);
+        Assert.Contains("\"Session\":{\"Terms\":{\"Kind\":\"Money\",\"IsJacoby\":true,", json);
     }
 
     // -----------------------------------------------------------------------
@@ -784,7 +786,7 @@ public class BgDecisionDataSerializationTests
 
         Assert.Equal(original.Position.Mop, restored.Position.Mop);
         Assert.Equal(original.Position.CubeOwner, restored.Position.CubeOwner);
-        Assert.Equal(5, Assert.IsType<MatchSession>(restored.Session).Length);
+        Assert.Equal(5, Assert.IsType<MatchSession>(restored.Session).Terms.Length);
         Assert.Equal(original.Decision.Dice, restored.Decision.Dice);
         Assert.Equal(2, restored.Decision.Plays.Count);
         Assert.Equal(0.211 - 0.198, restored.Decision.RankedBy(PlayRanking.Equity).ForCandidate(1).Error);
@@ -1032,7 +1034,7 @@ public class BgDecisionDataSerializationTests
         IDecisionFilterData data = TestRecords.CheckerPlay(
             position: TestRecords.Position(session: TestRecords.MatchSession(length: 11))).ViewFor(PlayRanking.Equity);
 
-        Assert.Equal(11, Assert.IsType<MatchSession>(data.Session).Length);
+        Assert.Equal(11, Assert.IsType<MatchSession>(data.Session).Terms.Length);
     }
 
     [Fact]
@@ -1074,7 +1076,7 @@ public class BgDecisionDataSerializationTests
         IDecisionFilterData data = TestRecords.CheckerPlay(
             position: TestRecords.Position(session: TestRecords.MoneySession(isJacoby: isJacoby))).ViewFor(PlayRanking.Equity);
 
-        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(data.Session).IsJacoby);
+        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(data.Session).Terms.IsJacoby);
     }
 
     [Fact]
@@ -1098,7 +1100,7 @@ public class BgDecisionDataSerializationTests
         // the unknown rung is gone. A money session states its rule — the
         // member is required — so a money view under an unknown rule cannot
         // exist to be matched by neither money token.
-        var isJacoby = typeof(MoneySession).GetProperty(nameof(MoneySession.IsJacoby))!;
+        var isJacoby = typeof(MoneyTerms).GetProperty(nameof(MoneyTerms.IsJacoby))!;
 
         Assert.Equal(typeof(bool), isJacoby.PropertyType);
         Assert.True(isJacoby.IsDefined(typeof(System.Runtime.CompilerServices.RequiredMemberAttribute), inherit: false));
@@ -1115,7 +1117,7 @@ public class BgDecisionDataSerializationTests
 
         Assert.DoesNotContain("IsMoneyGame", json);
         Assert.DoesNotContain("MatchLength", json);
-        Assert.Contains("\"Session\":{\"Kind\":\"Money\",", json);
+        Assert.Contains("\"Session\":{\"Terms\":{\"Kind\":\"Money\",", json);
 
         var restored = JsonSerializer.Deserialize<BgDecisionData>(json, Options)!;
         Assert.IsType<MoneySession>(restored.Session);

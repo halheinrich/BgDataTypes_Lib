@@ -17,7 +17,7 @@ namespace BgDataTypes_Lib;
 /// A fact participates iff it can change the correct answer — and only then:
 /// the on-roll-relative board (both bars), the session's score — a match's
 /// away-scores pair and Crawford flag, or money with its Jacoby rule
-/// (<see cref="MoneySession.IsJacoby"/> — <b>money keys only</b>: with a
+/// (<see cref="MoneyTerms.IsJacoby"/> — <b>money keys only</b>: with a
 /// centered cube it voids undoubled gammons and shifts the doubling window,
 /// and it is meaningless off money) — the cube state (size and owner — for
 /// both decision kinds), and, for checker plays only, the dice in canonical
@@ -219,7 +219,7 @@ public sealed class ProblemKey :
         // The score field from the session's kind: money into the money
         // production, a match into the match one.
         Score score = position.Session.Match(
-            static money => Score.Money(money.IsJacoby),
+            static money => Score.Money(money.Terms.IsJacoby),
             static match => Score.Match(match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
 
         if (!AreValidFacts(position.Mop, score, position.CubeSize, position.CubeOwner))

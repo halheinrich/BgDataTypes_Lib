@@ -135,41 +135,39 @@ public static class TestRecords
     };
 
     /// <summary>
-    /// A match, as it stands at the decision; each argument is the member of
-    /// the same name. By default a 7-point match at 0-0 — both players
-    /// 7-away — outside the Crawford game.
+    /// A match, as it stands at the decision: <paramref name="length"/> is its
+    /// terms', the rest the player on roll's standing. Built as a producer
+    /// builds one, through <see cref="Session.Create"/> — the terms, and a
+    /// standing with the player on roll in seat 1, so each argument reaches
+    /// the session's member of the same name unturned. By default a 7-point
+    /// match at 0-0 — both players 7-away — outside the Crawford game.
     /// </summary>
     public static MatchSession MatchSession(
         int length = 7,
         int onRollNeeds = 7,
         int opponentNeeds = 7,
-        bool isCrawford = false) => new()
-    {
-        Length = length,
-        OnRollNeeds = onRollNeeds,
-        OpponentNeeds = opponentNeeds,
-        IsCrawford = isCrawford,
-    };
+        bool isCrawford = false) => (MatchSession)Session.Create(
+            new MatchTerms { Length = length },
+            new MatchStanding { Away1 = onRollNeeds, Away2 = opponentNeeds, IsCrawford = isCrawford },
+            Seat.Player1);
 
     /// <summary>
-    /// A money session, as it stands at the decision; each argument is the
-    /// member of the same name. By default XG's defaults for a money session —
-    /// the Jacoby rule, no beaver rule, a cube limit of 1024 — at the
-    /// session's start, 0-0.
+    /// A money session, as it stands at the decision: the rules and the limit
+    /// are its terms', the scores the player on roll's standing. Built as a
+    /// producer builds one, through <see cref="Session.Create"/>, with the
+    /// player on roll in seat 1. By default XG's defaults for a money
+    /// session — the Jacoby rule, no beaver rule, a cube limit of 1024 — at
+    /// the session's start, 0-0.
     /// </summary>
     public static MoneySession MoneySession(
         bool isJacoby = true,
         bool isBeaver = false,
         int cubeLimit = 1024,
         int onRollScore = 0,
-        int opponentScore = 0) => new()
-    {
-        IsJacoby = isJacoby,
-        IsBeaver = isBeaver,
-        CubeLimit = cubeLimit,
-        OnRollScore = onRollScore,
-        OpponentScore = opponentScore,
-    };
+        int opponentScore = 0) => (MoneySession)Session.Create(
+            new MoneyTerms { IsJacoby = isJacoby, IsBeaver = isBeaver, CubeLimit = cubeLimit },
+            new MoneyStanding { Score1 = onRollScore, Score2 = opponentScore },
+            Seat.Player1);
 
     /// <summary>
     /// A checker play's decision category; each argument is the member of the

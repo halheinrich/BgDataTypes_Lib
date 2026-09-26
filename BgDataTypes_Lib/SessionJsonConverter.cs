@@ -4,16 +4,18 @@ using System.Text.Json.Serialization;
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// The wire form of a <see cref="Session"/>: it dispatches on the session's
-/// explicit <c>"Kind"</c> member and delegates the document to that kind's
+/// The wire form of a <see cref="Session"/>: it dispatches on the kind the
+/// session's terms state — <c>"Terms"</c>'s <c>"Kind"</c>, the one place a
+/// session's kind is on the wire — and delegates the document to that kind's
 /// generated contract — <see cref="MoneySession"/>'s or
-/// <see cref="MatchSession"/>'s, resolved through the active options — and does
-/// nothing else. It is the decision kind's mechanism reused, not a second one:
-/// finding the kind wherever it sits and refusing a document without exactly
-/// one known kind are stated once, on the internal <see cref="KindDispatch"/>,
-/// and this converter supplies only the mapping from each kind to its
-/// contract. It names no member of either kind. Bundled on the type;
-/// consumers register nothing.
+/// <see cref="MatchSession"/>'s, resolved through the active options — and
+/// does nothing else. It is the one dispatch mechanism, not a second one:
+/// finding the terms and their kind wherever they sit and refusing a document
+/// without exactly one of each are stated once, on the internal
+/// <see cref="KindDispatch"/>, and this converter supplies only the member
+/// the kind is stated in and the mapping from each kind to its contract. It
+/// names no other member of either kind. Bundled on the type; consumers
+/// register nothing.
 /// </summary>
 /// <remarks>
 /// Why a dispatching converter and not <see cref="JsonPolymorphicAttribute"/>
@@ -35,7 +37,8 @@ public sealed class SessionJsonConverter : JsonConverter<Session>
                 SessionKind.Money => typeof(MoneySession),
                 SessionKind.Match => typeof(MatchSession),
                 _ => null,
-            });
+            },
+            within: nameof(MatchSession.Terms));
 
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Session value, JsonSerializerOptions options) =>

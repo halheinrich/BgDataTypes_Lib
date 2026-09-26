@@ -736,7 +736,7 @@ public class ProblemKeyTests
         foreach (var record in new[] { MoneyPlay(isJacoby: true), CubeDecision(session: Money(true)) })
         {
             var document = WirePaths.Document(record);
-            document["Position"]!["Session"]!.AsObject().Remove("IsJacoby");
+            document["Position"]!["Session"]!["Terms"]!.AsObject().Remove("IsJacoby");
             WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
         }
         Assert.False(ProblemKey.TryParse(RetiredV2MoneyPlayKey, null, out _));

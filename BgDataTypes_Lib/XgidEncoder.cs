@@ -47,7 +47,7 @@ namespace BgDataTypes_Lib;
 /// <item><description><b>matchLength</b> — a match's length; 0 for money, the
 /// format's own spelling of money.</description></item>
 /// <item><description><b>maxCube</b> — the exponent of a money session's
-/// <see cref="MoneySession.CubeLimit"/>; for a match, which has no cube
+/// <see cref="MoneyTerms.CubeLimit"/>; for a match, which has no cube
 /// limit, always 10 (<see cref="MatchMaxCubeField"/>, which states the
 /// decision and its evidence).</description></item>
 /// </list>
@@ -91,9 +91,9 @@ internal static class XgidEncoder
     {
         var (score1, score2, crawfordJacoby, matchLength, maxCube) = position.Session.Match(
             static money => (money.OnRollScore, money.OpponentScore,
-                (money.IsJacoby ? 1 : 0) + (money.IsBeaver ? 2 : 0), 0, Exponent(money.CubeLimit)),
-            static match => (match.Length - match.OnRollNeeds, match.Length - match.OpponentNeeds,
-                match.IsCrawford ? 1 : 0, match.Length, MatchMaxCubeField));
+                (money.Terms.IsJacoby ? 1 : 0) + (money.Terms.IsBeaver ? 2 : 0), 0, Exponent(money.Terms.CubeLimit)),
+            static match => (match.Terms.Length - match.OnRollNeeds, match.Terms.Length - match.OpponentNeeds,
+                match.IsCrawford ? 1 : 0, match.Terms.Length, MatchMaxCubeField));
 
         var xgid = new StringBuilder(Prefix, 64);
         for (int slot = 0; slot < BoardPosition.SlotCount; slot++)

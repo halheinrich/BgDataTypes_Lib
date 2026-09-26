@@ -103,13 +103,15 @@ public class MatchContextStandInTests
     public void AMoneySessionUnderAnUnknownRule_CannotBeStated()
     {
         // The rule is a required bool: two values, no null for "not stamped".
-        var isJacoby = typeof(MoneySession).GetProperty(nameof(MoneySession.IsJacoby))!;
+        // Rewritten for the composed session: the rule is the terms'.
+        var isJacoby = typeof(MoneyTerms).GetProperty(nameof(MoneyTerms.IsJacoby))!;
         Assert.Equal(typeof(bool), isJacoby.PropertyType);
 
         var document = WirePaths.Document<Session>(TestRecords.MoneySession());
-        document["IsJacoby"] = null;
+        var terms = document["Terms"]!.AsObject();
+        terms["IsJacoby"] = null;
         WirePaths.AssertRefused<Session>(document.ToJsonString());
-        document.Remove("IsJacoby");
+        terms.Remove("IsJacoby");
         WirePaths.AssertRefused<Session>(document.ToJsonString());
     }
 

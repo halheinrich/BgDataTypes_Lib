@@ -319,7 +319,7 @@ public class DecisionRowSerializationTests
             var match = Assert.IsType<MatchSession>(record.Session);
             Assert.Same(record.Session, row.Session);
             Assert.Equal(SessionKind.Match, row.SessionKind);
-            Assert.Equal(match.Length, row.MatchLength);
+            Assert.Equal(match.Terms.Length, row.MatchLength);
             Assert.Equal(match.OnRollNeeds, row.OnRollNeeds);
             Assert.Equal(match.OpponentNeeds, row.OpponentNeeds);
             Assert.Equal(match.IsCrawford, row.IsCrawford);
@@ -1352,7 +1352,7 @@ public class DecisionRowSerializationTests
         // Rewritten: the filter reads the rule off the money session.
         IDecisionFilterData data = PlayRow(session: Money(isJacoby));
 
-        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(data.Session).IsJacoby);
+        Assert.Equal(isJacoby, Assert.IsType<MoneySession>(data.Session).Terms.IsJacoby);
         Assert.Equal(expectedScore, ((DecisionRow)data).MatchScore);
     }
 

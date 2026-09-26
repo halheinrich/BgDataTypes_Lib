@@ -69,12 +69,19 @@ public class TestRecordsTests
     {
         // Added with the session kinds (halheinrich/backgammon#273): the
         // position's default session is the match both records sit in, and
-        // money's default rule is XG's default.
+        // money's default terms are XG's defaults. Rewritten for the composed
+        // session: the builders reach Session.Create with the player on roll
+        // in seat 1, so each argument is the member of the same name.
         var match = TestRecords.MatchSession();
         var money = TestRecords.MoneySession();
 
-        Assert.Equal((7, 7, 7, false), (match.Length, match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
-        Assert.True(money.IsJacoby);
+        Assert.Equal((7, 7, 7, false), (match.Terms.Length, match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
+        Assert.Equal((true, false, 1024, 0, 0),
+            (money.Terms.IsJacoby, money.Terms.IsBeaver, money.Terms.CubeLimit, money.OnRollScore, money.OpponentScore));
+        var custom = TestRecords.MatchSession(length: 9, onRollNeeds: 2, opponentNeeds: 5);
+        Assert.Equal((9, 2, 5), (custom.Terms.Length, custom.OnRollNeeds, custom.OpponentNeeds));
+        var scored = TestRecords.MoneySession(onRollScore: 4, opponentScore: 1);
+        Assert.Equal((4, 1), (scored.OnRollScore, scored.OpponentScore));
         Assert.Equal(match, TestRecords.Position().Session);
         Assert.Equal(match, TestRecords.CheckerPlay().Session);
         Assert.Equal(match, TestRecords.Cube().Session);
