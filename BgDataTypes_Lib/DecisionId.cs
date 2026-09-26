@@ -71,31 +71,45 @@ public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<Decisio
     /// <summary>
     /// Bare filename (no directory component). Must not contain
     /// the canonical-form separator <c>':'</c> — see the
-    /// "Filename invariant" remark on <see cref="DecisionId"/>.
+    /// "Filename invariant" remark on <see cref="DecisionId"/> — and is never
+    /// empty or white space: every decision comes from a file, and a record's
+    /// <c>SourceFile</c> is this name.
     /// </summary>
     public abstract string Filename { get; init; }
 
     /// <summary>
     /// Internal seam for derived records to enforce the
-    /// "no <c>':'</c> in <see cref="Filename"/>" invariant inside their
-    /// property initializers. Returns the input unchanged on success;
-    /// throws on null or colon.
+    /// <see cref="Filename"/> invariant — text, and no <c>':'</c> — inside
+    /// their property initializers. Returns the input unchanged on success;
+    /// throws on null, empty or white space, or a colon.
     /// </summary>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="filename"/> is <see langword="null"/>.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="filename"/> contains <c>':'</c>.
+    /// Thrown when <paramref name="filename"/> is empty or white space, or
+    /// contains <c>':'</c>.
     /// </exception>
     private protected static string ValidateFilename(string filename)
     {
         ArgumentNullException.ThrowIfNull(filename);
-        if (filename.Contains(':'))
-            throw new ArgumentException(
-                $"DecisionId.Filename must not contain ':' (got '{filename}').",
-                nameof(filename));
+        if (FilenameFault(filename) is { } fault)
+            throw new ArgumentException(fault, nameof(filename));
         return filename;
     }
+
+    /// <summary>
+    /// The way <paramref name="filename"/> breaks the invariant, or
+    /// <see langword="null"/> when it keeps it — shared by the constructors,
+    /// which throw it, and <see cref="TryParse(ReadOnlySpan{char}, IFormatProvider, out DecisionId)"/>,
+    /// which returns <see langword="false"/> instead.
+    /// </summary>
+    private static string? FilenameFault(ReadOnlySpan<char> filename) =>
+        filename.IsWhiteSpace()
+            ? "DecisionId.Filename is a file's name; empty or white-space text is none."
+            : filename.Contains(':')
+                ? $"DecisionId.Filename must not contain ':' (got '{filename}')."
+                : null;
 
     // -----------------------------------------------------------------------
     //  Where the decision sits in its file (halheinrich/backgammon#124)
@@ -183,14 +197,16 @@ public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<Decisio
         int firstColon = s.IndexOf(':');
         if (firstColon < 0)
         {
-            // No ':' → Xgp shape: bare filename.
+            // No ':' → Xgp shape: bare filename, which must still be a name.
+            if (FilenameFault(s) is not null)
+                return false;
             result = new XgpDecisionId(s.ToString());
             return true;
         }
 
         // Has ':' → Xg shape: <filename>:g<Game>:m<MoveNumber>:<cube|play>
         var filename = s[..firstColon];
-        if (filename.IsEmpty)
+        if (FilenameFault(filename) is not null)
             return false;
 
         var rest = s[(firstColon + 1)..];

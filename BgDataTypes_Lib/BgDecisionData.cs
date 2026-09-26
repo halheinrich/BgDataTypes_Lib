@@ -97,6 +97,7 @@ public abstract class BgDecisionData : IDecisionFilterData
     // rejects an explicit null (halheinrich/backgammon#221). The guards below
     // read an unset member as "nothing to agree with yet".
     private readonly DecisionId? _id;
+    private readonly string? _xgid;
     private readonly PositionData? _position;
     private readonly DescriptiveData? _descriptive;
 
@@ -192,10 +193,29 @@ public abstract class BgDecisionData : IDecisionFilterData
     /// <see cref="Position"/> because it is a digest of the whole decision
     /// context (position, cube/match state, and the decision itself), not a
     /// property of the minimal derived <see cref="PositionData"/>. Mirrors
-    /// <see cref="DecisionRow.Xgid"/>.
+    /// <see cref="DecisionRow.Xgid"/>. Source data, not a copy: it carries the
+    /// cube limit, the beaver rule and a money game's header scores, which no
+    /// other member holds (INSTRUCTIONS.md, "Stored or derived"). Every
+    /// decision has one, so it is never empty text.
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
     [JsonPropertyOrder(-3)]
-    public required string Xgid { get; init; }
+    public required string Xgid
+    {
+        get => _xgid!;
+        init
+        {
+            try
+            {
+                StatedText.Check(value, nameof(Xgid));
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
+            _xgid = value;
+        }
+    }
 
     /// <summary>
     /// Board, score context and cube state at the moment of the decision.
@@ -331,7 +351,7 @@ public abstract class BgDecisionData : IDecisionFilterData
 
     /// <inheritdoc/>
     [JsonIgnore]
-    public string Player => Descriptive.OnRollName;
+    public string? Player => Descriptive.OnRollName;
     /// <inheritdoc/>
     [JsonIgnore]
     public int OnRollNeeds => Position.OnRollNeeds;

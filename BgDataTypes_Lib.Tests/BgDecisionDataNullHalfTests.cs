@@ -26,7 +26,7 @@ public class BgDecisionDataNullHalfTests
         var ex = Assert.Throws<ArgumentNullException>(() => new CubeDecision
         {
             Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
-            Xgid = "",
+            Xgid = "XGID=x",
             Position = null!,
             Decision = TestRecords.CubeData(),
             Descriptive = TestRecords.Descriptive(),
@@ -43,7 +43,7 @@ public class BgDecisionDataNullHalfTests
         var cube = Assert.Throws<ArgumentNullException>(() => new CubeDecision
         {
             Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
-            Xgid = "",
+            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = null!,
             Descriptive = TestRecords.Descriptive(),
@@ -51,7 +51,7 @@ public class BgDecisionDataNullHalfTests
         var play = Assert.Throws<ArgumentNullException>(() => new CheckerPlayDecision
         {
             Id = new XgDecisionId("m.xg", 1, 1, IsCube: false),
-            Xgid = "",
+            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = null!,
             Descriptive = TestRecords.Descriptive(),
@@ -69,7 +69,7 @@ public class BgDecisionDataNullHalfTests
         var id = Assert.Throws<ArgumentNullException>(() => new CubeDecision
         {
             Id = null!,
-            Xgid = "",
+            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = TestRecords.CubeData(),
             Descriptive = TestRecords.Descriptive(),
@@ -77,7 +77,7 @@ public class BgDecisionDataNullHalfTests
         var descriptive = Assert.Throws<ArgumentNullException>(() => new CubeDecision
         {
             Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
-            Xgid = "",
+            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = TestRecords.CubeData(),
             Descriptive = null!,

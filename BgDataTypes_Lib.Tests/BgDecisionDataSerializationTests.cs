@@ -186,10 +186,13 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void PlayCandidate_Depth_AbsentIsRefused()
+    public void PlayCandidate_Depth_AbsentReadsAsNoneRecorded()
     {
-        // Rewritten from PlayCandidate_Depth_DefaultsToEmpty.
-        AssertAbsentIsRefused(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "Depth");
+        // Rewritten from PlayCandidate_Depth_AbsentIsRefused (itself from
+        // PlayCandidate_Depth_DefaultsToEmpty): "no label recorded" is null
+        // now, its one spelling, so the member is nullable and its absence
+        // reads as that null — never as empty text.
+        Assert.Null(ReadWithout(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "Depth").Depth);
     }
 
     [Fact]
@@ -208,10 +211,11 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void PlayCandidate_DepthAbbreviation_AbsentIsRefused()
+    public void PlayCandidate_DepthAbbreviation_AbsentReadsAsNoneRecorded()
     {
-        // Rewritten from PlayCandidate_DepthAbbreviation_DefaultsToEmpty.
-        AssertAbsentIsRefused(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "DepthAbbreviation");
+        // Rewritten from PlayCandidate_DepthAbbreviation_AbsentIsRefused, as
+        // the label's test above.
+        Assert.Null(ReadWithout(TestRecords.Candidate(play: [new(8, 5), new(6, 1)]), "DepthAbbreviation").DepthAbbreviation);
     }
 
     [Fact]
@@ -401,10 +405,11 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void CubeDecisionData_Depth_AbsentIsRefused()
+    public void CubeDecisionData_Depth_AbsentReadsAsNoneRecorded()
     {
-        // Rewritten from DecisionData_CubeDepth_AbsentIsRefused.
-        AssertAbsentIsRefused(TestRecords.CubeData(), "Depth");
+        // Rewritten from CubeDecisionData_Depth_AbsentIsRefused (itself from
+        // DecisionData_CubeDepth_AbsentIsRefused): "no label recorded" is null.
+        Assert.Null(ReadWithout(TestRecords.CubeData(), "Depth").Depth);
     }
 
     [Fact]
@@ -420,10 +425,10 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void CubeDecisionData_DepthAbbreviation_AbsentIsRefused()
+    public void CubeDecisionData_DepthAbbreviation_AbsentReadsAsNoneRecorded()
     {
-        // Rewritten from DecisionData_CubeDepthAbbreviation_AbsentIsRefused.
-        AssertAbsentIsRefused(TestRecords.CubeData(), "DepthAbbreviation");
+        // Rewritten from CubeDecisionData_DepthAbbreviation_AbsentIsRefused.
+        Assert.Null(ReadWithout(TestRecords.CubeData(), "DepthAbbreviation").DepthAbbreviation);
     }
 
     [Fact]
@@ -1455,7 +1460,10 @@ public class BgDecisionDataSerializationTests
         // each at its own level of the record — the cubeless equities on the
         // cube decision's category, their one home.
         AssertAbsentIsRefused<BgDecisionData>(TestRecords.Cube(xgid: "XGID=x"), "Xgid");
-        AssertAbsentIsRefused(TestRecords.Descriptive(comment: "note", flagged: true), "Comment", "Flagged");
+        AssertAbsentIsRefused(TestRecords.Descriptive(comment: "note", flagged: true), "Flagged");
+        // Rewritten: the comment's absence is "none recorded" now — null, its
+        // one spelling — not a refusal.
+        Assert.Null(ReadWithout(TestRecords.Descriptive(comment: "note"), "Comment").Comment);
         AssertAbsentIsRefused(
             TestRecords.CubeData(cubelessNoDoubleEquity: 0.2, cubelessDoubleTakeEquity: 0.3),
             "CubelessNoDoubleEquity", "CubelessDoubleTakeEquity");

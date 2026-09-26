@@ -10,8 +10,9 @@ namespace BgDataTypes_Lib;
 /// not flagged per-candidate, and so is what a candidate gives up against the
 /// best (<see cref="CheckerPlayDecisionData.EquityLoss"/>), which needs the
 /// other candidates. The nullable probabilities' <see langword="null"/> means
-/// the candidate was not evaluated; every other stored member is
-/// <c>required</c>, per the wire rule stated on
+/// the candidate was not evaluated, and the depth label's and
+/// abbreviation's that none was recorded — never empty text; every other
+/// stored member is <c>required</c>, per the wire rule stated on
 /// <see cref="BgDataTypesJsonContext"/>.
 /// </summary>
 /// <remarks>
@@ -25,6 +26,8 @@ public class PlayCandidate
     // True while the candidate is read from a document (see the serializer's
     // constructor below): each rule then refuses as a JsonException.
     private readonly bool _read;
+    private readonly string? _depth;
+    private readonly string? _depthAbbreviation;
     private readonly double _equity;
 
     /// <summary>Creates a candidate; its members are set by the initializer.</summary>
@@ -68,15 +71,26 @@ public class PlayCandidate
 
     /// <summary>Analysis depth label for this candidate, e.g. "3-ply",
     /// "XG Roller++", "Rollout: 1296 trials. 3-ply". Rendered in the
-    /// Depth column of the move-decision play panel. Empty when the producer
-    /// recorded no label.</summary>
-    public required string Depth { get; init; }
+    /// Depth column of the move-decision play panel.
+    /// <see langword="null"/> when the producer recorded no label; never
+    /// empty.</summary>
+    /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
+    public string? Depth
+    {
+        get => _depth;
+        init => _depth = Stated(value, nameof(Depth));
+    }
 
     /// <summary>Compact display form of the analysis depth, e.g.
     /// "3-ply", "R++", "3p1296". Rendered in the Depth column of the
-    /// move-decision play panel. Empty when the producer recorded no
-    /// label.</summary>
-    public required string DepthAbbreviation { get; init; }
+    /// move-decision play panel. <see langword="null"/> when the producer
+    /// recorded none; never empty.</summary>
+    /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
+    public string? DepthAbbreviation
+    {
+        get => _depthAbbreviation;
+        init => _depthAbbreviation = Stated(value, nameof(DepthAbbreviation));
+    }
 
     /// <summary>
     /// Ordinal ranking of the analysis depth; higher = deeper / more
@@ -84,11 +98,14 @@ public class PlayCandidate
     /// <see cref="AnalysisMode"/> and <see cref="AnalysisLevel"/>, which
     /// determine it, so never stored (the grid is stated on the internal
     /// <c>AnalysisDepthRank</c>). Used by BackgammonDiagram_Lib to flag
-    /// out-of-order analysis depths across sorted-by-equity plays. 0 is the
-    /// floor: the mode, or an evaluation's level, not recorded.
+    /// out-of-order analysis depths across sorted-by-equity plays.
+    /// <see langword="null"/> when the depth is not recorded — the mode
+    /// <see cref="AnalysisMode.Unknown"/>, or an evaluation's level
+    /// <see cref="AnalysisLevel.Unknown"/> — never a floor rank standing for
+    /// it.
     /// </summary>
     [JsonIgnore]
-    public int DepthRank => AnalysisDepthRank.Of(AnalysisMode, AnalysisLevel);
+    public int? DepthRank => AnalysisDepthRank.Of(AnalysisMode, AnalysisLevel);
 
     /// <summary>How this candidate's numbers were produced — the mode axis of
     /// the two-axis depth taxonomy behind the <see cref="Depth"/> /
@@ -150,4 +167,18 @@ public class PlayCandidate
     public double? LoseGammonPct { get; init; }
     /// <summary>XG's backgammon-loss figure for this play. Fraction in [0, 1]; null when not evaluated.</summary>
     public double? LoseBgPct { get; init; }
+
+    /// <summary><paramref name="value"/>, once it keeps the text rule (<see cref="StatedText"/>).</summary>
+    private string? Stated(string? value, string member)
+    {
+        try
+        {
+            StatedText.Check(value, member);
+        }
+        catch (ArgumentException fault) when (_read)
+        {
+            throw DocumentRefusal.Of(fault);
+        }
+        return value;
+    }
 }

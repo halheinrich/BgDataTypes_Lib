@@ -45,7 +45,7 @@ public sealed class CubeDecisionData
     /// bind a member.
     /// </summary>
     [JsonConstructor]
-    internal CubeDecisionData(string depth)
+    internal CubeDecisionData(string? depth)
     {
         _read = true;
         Depth = depth;
@@ -55,20 +55,50 @@ public sealed class CubeDecisionData
     //  The cube analysis
     // -----------------------------------------------------------------------
 
+    private readonly string? _depth;
+    private readonly string? _depthAbbreviation;
+
     /// <summary>Analysis depth label of the cube analysis, e.g. "3-ply",
     /// "Rollout: 1296 trials. 3-ply"; see <see cref="PlayCandidate.Depth"/>
-    /// for a candidate's.</summary>
-    public required string Depth { get; init; }
+    /// for a candidate's. <see langword="null"/> when the producer recorded
+    /// no label; never empty.</summary>
+    /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
+    public string? Depth
+    {
+        get => _depth;
+        init => _depth = Stated(value, nameof(Depth));
+    }
 
-    /// <summary>Compact display form of <see cref="Depth"/>.</summary>
-    public required string DepthAbbreviation { get; init; }
+    /// <summary>Compact display form of <see cref="Depth"/>.
+    /// <see langword="null"/> when the producer recorded none; never
+    /// empty.</summary>
+    /// <exception cref="ArgumentException">Thrown on init when the value is empty or white space.</exception>
+    public string? DepthAbbreviation
+    {
+        get => _depthAbbreviation;
+        init => _depthAbbreviation = Stated(value, nameof(DepthAbbreviation));
+    }
 
     /// <summary>Ordinal ranking of the cube analysis's depth, derived from
     /// <see cref="AnalysisMode"/> and <see cref="AnalysisLevel"/> and never
-    /// stored; see <see cref="PlayCandidate.DepthRank"/> for
-    /// semantics.</summary>
+    /// stored; <see langword="null"/> when the depth is not recorded. See
+    /// <see cref="PlayCandidate.DepthRank"/> for semantics.</summary>
     [JsonIgnore]
-    public int DepthRank => AnalysisDepthRank.Of(AnalysisMode, AnalysisLevel);
+    public int? DepthRank => AnalysisDepthRank.Of(AnalysisMode, AnalysisLevel);
+
+    /// <summary><paramref name="value"/>, once it keeps the text rule (<see cref="StatedText"/>).</summary>
+    private string? Stated(string? value, string member)
+    {
+        try
+        {
+            StatedText.Check(value, member);
+        }
+        catch (ArgumentException fault) when (_read)
+        {
+            throw DocumentRefusal.Of(fault);
+        }
+        return value;
+    }
 
     /// <summary>How the cube analysis's numbers were produced — the mode axis
     /// of the two-axis depth taxonomy; see

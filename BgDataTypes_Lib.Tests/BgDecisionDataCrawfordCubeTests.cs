@@ -33,7 +33,7 @@ public class BgDecisionDataCrawfordCubeTests
         var ex = Assert.Throws<ArgumentException>(() => new CubeDecision
         {
             Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
-            Xgid = "",
+            Xgid = "XGID=x",
             Decision = TestRecords.CubeData(),
             Position = Crawford(),
             Descriptive = TestRecords.Descriptive(),
@@ -53,7 +53,7 @@ public class BgDecisionDataCrawfordCubeTests
         var ex = Assert.Throws<ArgumentException>(() => new CubeDecision
         {
             Id = new XgDecisionId("m.xg", 1, 2, IsCube: true),
-            Xgid = "",
+            Xgid = "XGID=x",
             Position = Crawford(),
             Decision = TestRecords.CubeData(),
             Descriptive = TestRecords.Descriptive(),

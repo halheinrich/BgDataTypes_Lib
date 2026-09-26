@@ -179,6 +179,7 @@ public class DocumentRefusalTests
     [InlineData(typeof(CheckerPlayDecisionData))]
     [InlineData(typeof(CubeDecisionData))]
     [InlineData(typeof(PlayCandidate))]
+    [InlineData(typeof(DescriptiveData))]
     public void TheSerializersConstructor_IsInternal_AndCodesIsPublicAndParameterless(Type type)
     {
         // The read mode is set only by the constructor the serializer uses,

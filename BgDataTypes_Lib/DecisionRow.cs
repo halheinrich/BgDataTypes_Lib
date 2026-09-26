@@ -114,7 +114,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// </summary>
     public required DecisionId Id { get; init; }
 
-    /// <summary>XGID position string.</summary>
+    /// <summary>XGID position string (<see cref="BgDecisionData.Xgid"/>); never empty text.</summary>
     public required string Xgid { get; init; }
 
     /// <summary>
@@ -140,8 +140,12 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     [JsonIgnore]
     public bool IsMoneyGame => MatchLength == 0;
 
-    /// <summary>Name of the player who made the decision.</summary>
-    public required string Player { get; init; }
+    /// <summary>
+    /// Name of the player who made the decision
+    /// (<see cref="IDecisionFilterData.Player"/>); <see langword="null"/> when
+    /// the source recorded no name — an empty CSV cell — never empty text.
+    /// </summary>
+    public string? Player { get; init; }
 
     /// <summary>
     /// The file the decision came from — its bare name with extension, no
@@ -201,9 +205,10 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// Human-readable analysis depth label, e.g. "3-ply", "Rollout: 1296
     /// trials. 3-ply": a checker play's best candidate's
     /// (<see cref="PlayCandidate.Depth"/>), a cube decision's cube analysis's
-    /// (<see cref="CubeDecisionData.Depth"/>).
+    /// (<see cref="CubeDecisionData.Depth"/>). <see langword="null"/> when
+    /// the producer recorded no label — an empty CSV cell — never empty text.
     /// </summary>
-    public required string AnalysisDepth { get; init; }
+    public string? AnalysisDepth { get; init; }
 
     /// <summary>How the analysis behind this decision was produced — the mode
     /// axis of the two-axis depth taxonomy
@@ -343,6 +348,9 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
                 "A checker-play row states the board its best play leaves.",
             DecisionKind.Cube when Roll is not null || AfterBestBoard is not null || AfterPlayerBoard is not null =>
                 "A cube row's checker-play columns are empty: Roll, AfterBestBoard and AfterPlayerBoard.",
+            _ when !StatedText.Holds(Xgid) => StatedText.Message(nameof(Xgid)),
+            _ when !StatedText.Holds(Player) => StatedText.Message(nameof(Player)),
+            _ when !StatedText.Holds(AnalysisDepth) => StatedText.Message(nameof(AnalysisDepth)),
             _ when !DecisionRules.CrawfordAllows(Kind, IsCrawford) => DecisionRules.CrawfordMessage,
             _ when !DecisionRules.IdAgrees(Id, Kind) => DecisionRules.IdKindMessage,
             _ when !DecisionRules.StartAgrees(Id, IsStandardStart) => DecisionRules.StartMessage,
@@ -389,8 +397,11 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             Equity.ToString("G6", invariant));
     }
 
-    private static string CsvEscape(string value)
+    /// <summary><paramref name="value"/> as a CSV cell; <see langword="null"/> (none recorded) is an empty one.</summary>
+    private static string CsvEscape(string? value)
     {
+        if (value is null)
+            return string.Empty;
         if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
             return $"\"{value.Replace("\"", "\"\"")}\"";
         return value;

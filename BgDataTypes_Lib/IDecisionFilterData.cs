@@ -19,8 +19,12 @@ public interface IDecisionFilterData
     /// </summary>
     DecisionKind Kind { get; }
 
-    /// <summary>Name of the player who made the decision.</summary>
-    string Player { get; }
+    /// <summary>
+    /// Name of the player who made the decision; <see langword="null"/> when
+    /// the source recorded no name — never empty text, the one spelling of
+    /// "none recorded" (<see cref="DescriptiveData.OnRollName"/>).
+    /// </summary>
+    string? Player { get; }
 
     /// <summary>Away score for the player on roll. 0 for money games.</summary>
     int OnRollNeeds { get; }

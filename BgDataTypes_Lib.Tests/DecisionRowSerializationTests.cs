@@ -40,10 +40,10 @@ public class DecisionRowSerializationTests
         string xgid = "XGID=x",
         double? error = null,
         int matchLength = 7,
-        string player = "Alice",
+        string? player = "Alice",
         bool? isStandardStart = null,
         int[]? dice = null,
-        string analysisDepth = "3-ply",
+        string? analysisDepth = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
         double equity = 0.1604,
@@ -87,9 +87,9 @@ public class DecisionRowSerializationTests
         string xgid = "XGID=x",
         double? error = null,
         int matchLength = 7,
-        string player = "Alice",
+        string? player = "Alice",
         bool? isStandardStart = null,
-        string analysisDepth = "3-ply",
+        string? analysisDepth = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
         double equity = 0.512,
@@ -230,18 +230,23 @@ public class DecisionRowSerializationTests
     }
 
     [Fact]
-    public void DecisionRow_RoundTrip_EmptyStrings()
+    public void DecisionRow_RoundTrip_NoneRecorded()
     {
-        // Rewritten from DecisionRow_RoundTrip_EmptyStringsAndNullSourceFile
-        // (itself from DecisionRow_RoundTrip_StringDefaults): the empty
-        // strings are stated values, and round-trip as such. The source file
-        // is no longer a column that can be null: it is the Id's.
-        var restored = RoundTrip(PlayRow(xgid: "", player: "", analysisDepth: ""));
+        // Rewritten from DecisionRow_RoundTrip_EmptyStrings (itself from
+        // DecisionRow_RoundTrip_EmptyStringsAndNullSourceFile and
+        // DecisionRow_RoundTrip_StringDefaults): empty text no longer means
+        // "none recorded" — null does, its one spelling — so a player and a
+        // depth label that were not recorded round-trip as null, and an empty
+        // one cannot be stated. The XGID and the source file are never none.
+        var restored = RoundTrip(PlayRow(player: null, analysisDepth: null));
 
-        Assert.Equal(string.Empty, restored.Xgid);
-        Assert.Equal(string.Empty, restored.Player);
+        Assert.Null(restored.Player);
+        Assert.Null(restored.AnalysisDepth);
+        Assert.Equal("XGID=x", restored.Xgid);
         Assert.Equal("match.xg", restored.SourceFile);
-        Assert.Equal(string.Empty, restored.AnalysisDepth);
+        Assert.Throws<ArgumentException>(() => PlayRow(player: ""));
+        Assert.Throws<ArgumentException>(() => PlayRow(analysisDepth: " "));
+        Assert.Throws<ArgumentException>(() => PlayRow(xgid: ""));
     }
 
     [Fact]

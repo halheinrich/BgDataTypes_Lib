@@ -28,27 +28,33 @@ namespace BgDataTypes_Lib;
 /// the source file carries. An explicit rollout ranks 100 plus its inner
 /// level's grid rank — a 3-ply rollout 130 — so rollouts order among
 /// themselves by the grid and all outrank the book; a rollout whose inner
-/// level is not recorded ranks at the rollout floor, 100.
+/// level is not recorded ranks at the rollout floor, 100, which is still a
+/// rank: the rollout itself is recorded.
 /// </para>
 /// <para>
-/// <b>Not recorded.</b> An analysis whose mode is not recorded, and an
-/// evaluation whose level is not, rank 0 — the floor, below everything
-/// meaningful.
+/// <b>Not recorded is <see langword="null"/>.</b> An analysis whose mode is
+/// not recorded, and an evaluation whose level is not, have no rank. The
+/// producer spelled that 0, the grid's floor; a number standing for "none"
+/// is a stand-in, so the rank is <see langword="null"/> there instead.
 /// </para>
 /// </remarks>
 internal static class AnalysisDepthRank
 {
-    /// <summary>The rank of an analysis produced by <paramref name="mode"/> at <paramref name="level"/>.</summary>
-    internal static int Of(AnalysisMode mode, AnalysisLevel level) => mode switch
+    /// <summary>
+    /// The rank of an analysis produced by <paramref name="mode"/> at
+    /// <paramref name="level"/>, or <see langword="null"/> when the depth is
+    /// not recorded.
+    /// </summary>
+    internal static int? Of(AnalysisMode mode, AnalysisLevel level) => mode switch
     {
         AnalysisMode.Evaluation => GridRank(level),
         AnalysisMode.BookRollout => 99,
-        AnalysisMode.Rollout => 100 + GridRank(level),
-        _ => 0,
+        AnalysisMode.Rollout => 100 + (GridRank(level) ?? 0),
+        _ => null,
     };
 
-    /// <summary>A level's place on the evaluation grid; 0 for a level not recorded.</summary>
-    private static int GridRank(AnalysisLevel level) => level switch
+    /// <summary>A level's place on the evaluation grid; <see langword="null"/> for a level not recorded.</summary>
+    private static int? GridRank(AnalysisLevel level) => level switch
     {
         AnalysisLevel.Ply1 => 10,
         AnalysisLevel.Ply2 => 20,
@@ -61,6 +67,6 @@ internal static class AnalysisDepthRank
         AnalysisLevel.Ply6 => 60,
         AnalysisLevel.Ply7 => 70,
         AnalysisLevel.XgRollerPlusPlus => 75,
-        _ => 0,
+        _ => null,
     };
 }

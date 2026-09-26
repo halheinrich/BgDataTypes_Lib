@@ -173,8 +173,8 @@ public static class TestRecords
     /// derives from the equities, as it does the depth rank.
     /// </summary>
     public static CubeDecisionData CubeData(
-        string depth = "3-ply",
-        string depthAbbreviation = "3-ply",
+        string? depth = "3-ply",
+        string? depthAbbreviation = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
         double noDoubleEquity = 0.512,
@@ -234,13 +234,13 @@ public static class TestRecords
     /// </summary>
     public static DescriptiveData Descriptive(
         int matchLength = 7,
-        string onRollName = "Alice",
-        string opponentName = "Bob",
+        string? onRollName = "Alice",
+        string? opponentName = "Bob",
         string? title = null,
         DateOnly? date = null,
         string? @event = null,
         bool? isStandardStart = true,
-        string comment = "",
+        string? comment = null,
         bool flagged = false) => new()
     {
         MatchLength = matchLength,
@@ -264,8 +264,8 @@ public static class TestRecords
     /// </summary>
     public static PlayCandidate Candidate(
         Play? play = null,
-        string depth = "3-ply",
-        string depthAbbreviation = "3-ply",
+        string? depth = "3-ply",
+        string? depthAbbreviation = "3-ply",
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
         AnalysisLevel analysisLevel = AnalysisLevel.Ply3,
         double equity = 0.1604,

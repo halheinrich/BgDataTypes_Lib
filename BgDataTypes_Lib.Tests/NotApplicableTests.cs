@@ -239,7 +239,7 @@ public class NotApplicableTests
         {
             Descriptive = TestRecords.Descriptive(isStandardStart: true),
             Id = new XgpDecisionId("p.xgp"),
-            Xgid = "",
+            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = TestRecords.CheckerPlayData(),
         });
@@ -247,7 +247,7 @@ public class NotApplicableTests
         {
             Id = new XgpDecisionId("p.xgp"),
             Descriptive = TestRecords.Descriptive(isStandardStart: true),
-            Xgid = "",
+            Xgid = "XGID=x",
             Position = TestRecords.Position(),
             Decision = TestRecords.CheckerPlayData(),
         });

@@ -89,19 +89,20 @@ public class DerivedValuesTests
     [InlineData(AnalysisMode.Evaluation, AnalysisLevel.Ply6, 60)]
     [InlineData(AnalysisMode.Evaluation, AnalysisLevel.Ply7, 70)]
     [InlineData(AnalysisMode.Evaluation, AnalysisLevel.XgRollerPlusPlus, 75)]
-    [InlineData(AnalysisMode.Evaluation, AnalysisLevel.Unknown, 0)]
+    [InlineData(AnalysisMode.Evaluation, AnalysisLevel.Unknown, null)]
     [InlineData(AnalysisMode.BookRollout, AnalysisLevel.Unknown, 99)]
     [InlineData(AnalysisMode.BookRollout, AnalysisLevel.Ply4, 99)]
     [InlineData(AnalysisMode.Rollout, AnalysisLevel.Unknown, 100)]
     [InlineData(AnalysisMode.Rollout, AnalysisLevel.Ply3, 130)]
     [InlineData(AnalysisMode.Rollout, AnalysisLevel.XgRoller, 135)]
-    [InlineData(AnalysisMode.Unknown, AnalysisLevel.Unknown, 0)]
-    [InlineData(AnalysisMode.Unknown, AnalysisLevel.Ply3, 0)]
-    public void DepthRank_IsTheGridsRankOfTheModeAndLevel_OnACandidateAndACube(AnalysisMode mode, AnalysisLevel level, int rank)
+    [InlineData(AnalysisMode.Unknown, AnalysisLevel.Unknown, null)]
+    [InlineData(AnalysisMode.Unknown, AnalysisLevel.Ply3, null)]
+    public void DepthRank_IsTheGridsRankOfTheModeAndLevel_OnACandidateAndACube(AnalysisMode mode, AnalysisLevel level, int? rank)
     {
         // The producer's grid, unchanged in its move here: an evaluation by
-        // its level, a book hit 99, a rollout 100 plus its inner level, and
-        // the floor 0 where the mode, or an evaluation's level, is unknown.
+        // its level, a book hit 99, a rollout 100 plus its inner level. Where
+        // the mode, or an evaluation's level, is unknown there is no rank —
+        // null, "none recorded" — where the producer wrote the floor, 0.
         Assert.Equal(rank, TestRecords.Candidate(analysisMode: mode, analysisLevel: level).DepthRank);
         Assert.Equal(rank, TestRecords.CubeData(analysisMode: mode, analysisLevel: level).DepthRank);
     }
