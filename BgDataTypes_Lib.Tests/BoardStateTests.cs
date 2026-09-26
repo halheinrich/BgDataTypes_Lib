@@ -268,18 +268,17 @@ public class BoardStateTests
     [Fact]
     public void SetPosition_AllocatesNothing()
     {
+        // Measured through AllocationProbe, which warms the path and is
+        // immune to a one-off allocation that is not the path's.
         var s = BoardState.Standard();
         var a = BoardPosition.Nackgammon;
         var b = BoardPosition.Standard;
-        s.SetPosition(a);   // warm
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++)
+        long allocated = AllocationProbe.SteadyStateBytes(() =>
         {
             s.SetPosition(a);
             s.SetPosition(b);
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        });
 
         Assert.Equal(0, allocated);
         Assert.Equal(b, s.ToPosition());
@@ -316,14 +315,13 @@ public class BoardStateTests
     [Fact]
     public void HotPath_ApplyUndoReadsAndSnapshot_AllocateNothing()
     {
+        // Measured through AllocationProbe, which warms the paths outside the
+        // measurement and is immune to a one-off allocation that is not theirs.
         var s = BoardState.Standard();
         var move = new Move(13, 9);
-        int sink = Churn(s, move);   // warm the paths outside the measured window
+        int sink = 0;
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++)
-            sink += Churn(s, move);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = AllocationProbe.SteadyStateBytes(() => sink += Churn(s, move));
 
         Assert.Equal(0, allocated);
         Assert.Equal(BoardPosition.Standard, s.ToPosition());

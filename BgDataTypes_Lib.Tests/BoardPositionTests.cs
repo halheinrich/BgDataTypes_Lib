@@ -311,16 +311,16 @@ public class BoardPositionTests
     [Fact]
     public void Flipped_AllocatesNothing()
     {
+        // Measured through AllocationProbe, which warms the path and is
+        // immune to a one-off allocation that is not the path's.
         var position = new BoardPosition(BothBarsCounts);
-        int sink = position.Flipped()[0];   // warm
+        int sink = 0;
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++)
+        long allocated = AllocationProbe.SteadyStateBytes(() =>
         {
             var flipped = position.Flipped();
             sink += flipped[0] + flipped[25];
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        });
 
         Assert.Equal(0, allocated);
         Assert.NotEqual(int.MinValue, sink);
@@ -346,17 +346,12 @@ public class BoardPositionTests
     [Fact]
     public void CreateCompareAndHash_AllocateNothing()
     {
-        ReadOnlySpan<int> counts = StandardCounts;
-        ReadOnlySpan<int> other = BothBarsCounts;
+        // Measured through AllocationProbe, which warms every path first, so
+        // JIT and first-call work fall outside the measurement, and is immune
+        // to a one-off allocation that is not the path's.
+        int sink = 0;
 
-        // Warm every path first, so JIT and first-call work fall outside
-        // the measured window.
-        int sink = Exercise(counts, other);
-
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++)
-            sink += Exercise(counts, other);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = AllocationProbe.SteadyStateBytes(() => sink += Exercise(StandardCounts, BothBarsCounts));
 
         Assert.Equal(0, allocated);
         Assert.NotEqual(int.MinValue, sink);   // keep the work observable

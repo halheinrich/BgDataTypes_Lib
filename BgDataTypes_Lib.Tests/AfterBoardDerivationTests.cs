@@ -158,22 +158,21 @@ public class AfterBoardDerivationTests
     public void ReadingTheAfterBoards_AllocatesNothing()
     {
         // Computed once while the record is built, not per read: the filter
-        // reads them over many records.
-        // The rankings are built on the first read of each and kept, so the
-        // warm-up reads every door once.
+        // reads them over many records. The rankings are built on the first
+        // read of each and kept, which the probe's warm-up covers. Rewritten
+        // to measure through AllocationProbe (the rider of
+        // halheinrich/backgammon#273's match-context leg): this pin failed
+        // once on an allocation that was not the path's.
         var record = Tester(0, 1);
         var view = record.ViewFor(PlayRanking.DepthFirst);
-        int sink = record.AfterBoardOfBest(PlayRanking.Equity)[22] + record.AfterBoardOfBest(PlayRanking.DepthFirst)[22]
-            + view.AfterBestBoard!.Value[1];
+        int sink = 0;
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++)
+        long allocated = AllocationProbe.SteadyStateBytes(() =>
         {
             sink += record.AfterBoardOfBest(PlayRanking.Equity)[22] + record.AfterPlayerBoard!.Value[3];
             sink += record.AfterBoardOfBest(PlayRanking.DepthFirst)[22] + record.AfterBoardOf(2)[4];
             sink += view.AfterBestBoard!.Value[1];
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        });
 
         Assert.Equal(0, allocated);
         Assert.NotEqual(int.MinValue, sink);

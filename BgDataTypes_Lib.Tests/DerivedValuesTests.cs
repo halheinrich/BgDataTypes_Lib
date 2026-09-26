@@ -51,13 +51,13 @@ public class DerivedValuesTests
     [Fact]
     public void ReadingThePipCounts_AllocatesNothing()
     {
+        // Measured through AllocationProbe, which warms the path and is
+        // immune to a one-off allocation that is not the path's.
         var position = TestRecords.Position();
-        int sink = position.OnRollPipCount + position.OpponentPipCount;   // warm
+        int sink = 0;
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++)
-            sink += position.OnRollPipCount + position.OpponentPipCount;
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = AllocationProbe.SteadyStateBytes(
+            () => sink += position.OnRollPipCount + position.OpponentPipCount);
 
         Assert.Equal(0, allocated);
         Assert.NotEqual(int.MinValue, sink);

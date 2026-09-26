@@ -130,6 +130,15 @@ halheinrich/backgammon#187) — vacuous on an empty or absent corpus by
 design, per the AGENTS.md TestData rule, so it cannot gate and nothing on
 CI depends on it.
 
+Every pin that says a path allocates nothing measures through the
+suite's `AllocationProbe`: a warm-up of a whole window's calls, then the
+fewest bytes any of several measured windows allocated on the test thread.
+A one-off allocation the runtime makes there lands in one window at most,
+so it cannot fail a pin, while a path that allocates on its calls
+allocates in every window and still does; `AllocationProbeTests` pins both
+halves. (A single measured loop failed once on an allocation that was not
+the path's — the rider of halheinrich/backgammon#273's match-context leg.)
+
 ## Architecture
 
 Composite and category types are `class` with `init`-only properties; the

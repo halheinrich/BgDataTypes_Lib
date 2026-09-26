@@ -494,15 +494,15 @@ public class PlayRankingTests
         Assert.Same(depthFirst, data.RankedBy(PlayRanking.DepthFirst));
         Assert.NotSame(byEquity, depthFirst);
 
+        // Measured through AllocationProbe, which warms the reads and is
+        // immune to a one-off allocation that is not theirs.
         double sink = 0;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++)
+        long allocated = AllocationProbe.SteadyStateBytes(() =>
         {
             sink += data.RankedBy(PlayRanking.Equity).Best.Error!.Value
                 + (data.RankedBy(PlayRanking.DepthFirst).PlayerResult.TryGetError(out double error) ? error : 0.0);
             sink += data.RankedBy(PlayRanking.DepthFirst)[3].Error!.Value + data.RankedBy(PlayRanking.Equity).ForCandidate(5).Error!.Value;
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        });
 
         Assert.Equal(0, allocated);
         Assert.True(sink > 0);

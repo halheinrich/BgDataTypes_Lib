@@ -674,16 +674,17 @@ public class PlayIdentityTests
     [Fact]
     public void PositionAfter_AllocatesNothing()
     {
+        // Measured through AllocationProbe, which warms the path and is
+        // immune to a one-off allocation that is not the path's.
         var start = TesterPosition().ToPosition();
-        int sink = BoardState.PositionAfter(start, TesterStored, "The play", "play")[3];   // warm
+        int sink = 0;
+        int call = 0;
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++)
+        long allocated = AllocationProbe.SteadyStateBytes(() =>
         {
-            var after = BoardState.PositionAfter(start, i % 2 == 0 ? TesterStored : TesterGenerated, "The play", "play");
+            var after = BoardState.PositionAfter(start, call++ % 2 == 0 ? TesterStored : TesterGenerated, "The play", "play");
             sink += after[3] + after[25];
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        });
 
         Assert.Equal(0, allocated);
         Assert.NotEqual(int.MinValue, sink);
