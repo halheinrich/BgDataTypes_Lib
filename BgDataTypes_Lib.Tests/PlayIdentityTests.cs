@@ -617,4 +617,75 @@ public class PlayIdentityTests
         Assert.Throws<ArgumentNullException>("plays",
             () => TesterPosition().IndexOfSamePlay(TesterStored, null!));
     }
+
+    // ── PositionAfter: the board a play leaves, from a value ──────
+
+    /// <summary>The board <see cref="BoardState.ApplyPlay"/> leaves, as a value.</summary>
+    private static BoardPosition AppliedFrom(BoardState start, Play play)
+    {
+        var board = start.Copy();
+        board.ApplyPlay(play);
+        return board.ToPosition();
+    }
+
+    public static TheoryData<string> ValidCaseNames =>
+        ["TesterStored", "TesterGenerated", "TesterUnmarkedFirst", "Pass", "BarEntryAndBearOff", "Doubles"];
+
+    private static (BoardState Start, Play Play) ValidCase(string name) => name switch
+    {
+        "TesterStored" => (TesterPosition(), TesterStored),
+        "TesterGenerated" => (TesterPosition(), TesterGenerated),
+        "TesterUnmarkedFirst" => (TesterPosition(), TesterUnmarkedFirst),
+        "Pass" => (TesterPosition(), []),
+        "BarEntryAndBearOff" => (Position((25, 1), (3, 2), (20, -1)), [new(25, -20), new(3, 0)]),
+        "Doubles" => (BoardState.Standard(), [new(24, 22), new(24, 22), new(13, 11), new(13, 11)]),
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
+    };
+
+    [Theory]
+    [MemberData(nameof(ValidCaseNames))]
+    public void PositionAfter_IsTheBoardApplyPlayLeaves(string name)
+    {
+        var (start, play) = ValidCase(name);
+
+        Assert.Equal(
+            AppliedFrom(start, play),
+            BoardState.PositionAfter(start.ToPosition(), play, "The play", "play"));
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidCaseNames))]
+    public void PositionAfter_InvalidPlay_IsRefusedAsApplyPlayRefusesIt(string name)
+    {
+        var (start, invalid, _) = InvalidCase(name);
+
+        var viaApply = Assert.Throws<ArgumentException>("play", () => start.Copy().ApplyPlay(invalid));
+        var viaValue = Assert.Throws<ArgumentException>("Plays",
+            () => BoardState.PositionAfter(start.ToPosition(), invalid, "Candidate 2's play", "Plays"));
+
+        // The same fault, in the caller's words for which play and which
+        // position: the reason between the two is ApplyPlay's, verbatim.
+        string reason = viaApply.Message[
+            viaApply.Message.IndexOf(": ", StringComparison.Ordinal)..viaApply.Message.IndexOf(" (Parameter", StringComparison.Ordinal)];
+        Assert.StartsWith("Candidate 2's play is invalid from its position: ", viaValue.Message);
+        Assert.Contains(reason, viaValue.Message);
+    }
+
+    [Fact]
+    public void PositionAfter_AllocatesNothing()
+    {
+        var start = TesterPosition().ToPosition();
+        int sink = BoardState.PositionAfter(start, TesterStored, "The play", "play")[3];   // warm
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            var after = BoardState.PositionAfter(start, i % 2 == 0 ? TesterStored : TesterGenerated, "The play", "play");
+            sink += after[3] + after[25];
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(0, allocated);
+        Assert.NotEqual(int.MinValue, sink);
+    }
 }

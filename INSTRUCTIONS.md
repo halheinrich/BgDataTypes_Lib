@@ -562,12 +562,17 @@ Design points a maintainer needs before touching it:
   members. The rule computes positions from `Points`, and `ApplyPlay` must
   run the same computation, so one type owns one private rule and nothing
   can drift from it. `Play` stays a pure encoding with no board knowledge.
-- **One rule, four doors.** `ApplyPlay` and `TryApplyPlay` commit what the
-  rule computes; `IsSamePlay` and `IndexOfSamePlay` compare what it
-  computes. None of them goes through `ApplyMove`, so the order a play's
-  moves are written in never reaches the board. Written order was how the
-  tester's play of `halheinrich/backgammon#273` corrupted it: the unmarked
-  landing on the blot applied first.
+- **One rule, four doors, and one internal one.** `ApplyPlay` and
+  `TryApplyPlay` commit what the rule computes; `IsSamePlay` and
+  `IndexOfSamePlay` compare what it computes. None of them goes through
+  `ApplyMove`, so the order a play's moves are written in never reaches the
+  board. Written order was how the tester's play of
+  `halheinrich/backgammon#273` corrupted it: the unmarked landing on the
+  blot applied first. The internal `PositionAfter` is the fifth: from a
+  `BoardPosition` value, the board `ApplyPlay` would leave, with no board
+  built and nothing allocated, refusing an invalid play with `ApplyPlay`'s
+  own message. It is how a record derives through the rule without holding a
+  board.
 - **Invalid is a distinct outcome.** An invalid play matches nothing, not
   even an identical encoding; the list match returns -1 for it and passes
   over invalid entries. `ApplyPlay` refuses with an `ArgumentException`

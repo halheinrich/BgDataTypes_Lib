@@ -310,7 +310,7 @@ public sealed class BoardState
     {
         var fault = Advance(in play, out var culprit);
         if (fault != PlayFault.None)
-            ThrowInvalidPlay(fault, culprit, nameof(play));
+            ThrowInvalidPlay(fault, culprit, nameof(play), "The play", "this position");
     }
 
     /// <summary>
@@ -337,6 +337,36 @@ public sealed class BoardState
         if (fault == PlayFault.None)
             SetPosition(BoardPosition.FromWellFormed(reached).Flipped());
         return fault;
+    }
+
+    /// <summary>
+    /// The board <paramref name="play"/> leaves from <paramref name="start"/>:
+    /// the position it reaches by the play rule stated on
+    /// <see cref="IsSamePlay"/>, seen from the other side — exactly the board
+    /// <see cref="ApplyPlay"/> leaves, as a value, in the next mover's frame.
+    /// No board is built and nothing is allocated, so a caller holding only a
+    /// position (a decision record) derives through the one rule at no cost
+    /// per call.
+    /// </summary>
+    /// <param name="start">The position the play is made from, in the mover's frame.</param>
+    /// <param name="play">The play.</param>
+    /// <param name="subject">What the refusal calls the play, e.g. <c>"Candidate 2's play"</c>.</param>
+    /// <param name="paramName">The member the refusal names.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="play"/> is invalid from <paramref name="start"/>; the
+    /// message names the fault and the offending move, as
+    /// <see cref="ApplyPlay"/>'s does.
+    /// </exception>
+    internal static BoardPosition PositionAfter(
+        BoardPosition start, in Play play, string subject, string paramName)
+    {
+        Span<int> counts = stackalloc int[26];
+        Span<int> reached = stackalloc int[26];
+        start.CopyTo(counts);
+        var fault = Reach(counts, in play, reached, out var culprit);
+        if (fault != PlayFault.None)
+            ThrowInvalidPlay(fault, culprit, paramName, subject, "its position");
+        return BoardPosition.FromWellFormed(reached).Flipped();
     }
 
     // ── Play identity: the one rule, from this position ───────────
@@ -592,12 +622,15 @@ public sealed class BoardState
     }
 
     /// <summary>
-    /// The <see cref="ApplyPlay"/> refusal, out of line: the message names
-    /// the fault and the offending move, for a caller holding a play it
-    /// believed valid.
+    /// The refusal of an invalid play, out of line and single-sourced for
+    /// <see cref="ApplyPlay"/> and <see cref="PositionAfter"/>: the message
+    /// names the fault and the offending move, for a caller holding a play it
+    /// believed valid. <paramref name="subject"/> and <paramref name="from"/>
+    /// say which play and which position, in the caller's words.
     /// </summary>
     [DoesNotReturn]
-    private static void ThrowInvalidPlay(PlayFault fault, Move culprit, string paramName)
+    private static void ThrowInvalidPlay(
+        PlayFault fault, Move culprit, string paramName, string subject, string from)
     {
         string hop = $"({culprit.FrPt}, {culprit.ToPt})";
         // Only a move past the encoding check has a landing point; an
@@ -613,7 +646,7 @@ public sealed class BoardState
             _ => throw new UnreachableException(),
         };
         throw new ArgumentException(
-            $"The play is invalid from this position: {reason}. See BoardState.IsSamePlay for the rule.",
+            $"{subject} is invalid from {from}: {reason}. See BoardState.IsSamePlay for the rule.",
             paramName);
     }
 
