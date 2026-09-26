@@ -25,15 +25,10 @@ namespace BgDataTypes_Lib;
 /// (<see cref="UnlistedPlayError"/>), which no ranking changes.
 /// </para>
 /// <para>
-/// <b>Retired members read ignored.</b> A document still stating a member
-/// this category retired — <c>BestPlayIndex</c>, <c>UserPlayError</c> —
-/// reads with it ignored, while a member it never had is refused. The
-/// serializer skips a name it knows and refuses one it does not, so each
-/// retired name stays known: an internal property carrying
-/// <see cref="JsonIncludeAttribute"/>, which puts it in the contract, and
-/// <see cref="JsonIgnoreAttribute"/>, which keeps it from ever being read or
-/// written (measured on .NET 10, both paths). Neither is API; what they held
-/// is a ranking's now.
+/// A document stating a member this category does not have is refused —
+/// the retired <c>BestPlayIndex</c> and <c>UserPlayError</c> like any other:
+/// the category is new with the decision kinds, so no document carries them
+/// inside it, and every document of the shape before it is refused whole.
 /// </para>
 /// <para>
 /// <b>Well-formed by construction.</b> The roll is two faces 1–6; there is
@@ -270,19 +265,6 @@ public sealed class CheckerPlayDecisionData
         var ranked = new RankedPlays(Plays, ranking, UserPlayIndex, UnlistedPlayError);
         return Interlocked.CompareExchange(ref slot, ranked, null) ?? ranked;
     }
-
-    // -----------------------------------------------------------------------
-    //  Retired members — names a document may still state, known to the
-    //  serializer only so that it skips them (see the class remarks).
-    // -----------------------------------------------------------------------
-
-    /// <summary>Retired: the best play is a ranking's (<see cref="RankedPlays.Best"/>). Never read or written.</summary>
-    [JsonInclude, JsonIgnore]
-    internal int? BestPlayIndex => null;
-
-    /// <summary>Retired: the player's error is a ranking's (<see cref="RankedPlays.UserPlayError"/>). Never read or written.</summary>
-    [JsonInclude, JsonIgnore]
-    internal double? UserPlayError => null;
 
     private const string UnlistedMessage =
         "UnlistedPlayError is the error of a user play not among the candidates; when UserPlayIndex identifies the user's play, its error is derived from the candidates and is not stated.";

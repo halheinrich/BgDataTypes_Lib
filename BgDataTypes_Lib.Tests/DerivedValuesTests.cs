@@ -273,8 +273,6 @@ public class DerivedValuesTests
         document["Position"]!["OnRollPipCount"] = 1;
         document["Position"]!["OpponentPipCount"] = 2;
         document["Descriptive"]!["SourceFile"] = "other.xg";
-        document["Decision"]!["BestPlayIndex"] = 2;
-        document["Decision"]!["UserPlayError"] = 9.0;
         document["Decision"]!["Plays"]![0]!["DepthRank"] = 1;
         document["Decision"]!["Plays"]![0]!["EquityLoss"] = 9.0;
 

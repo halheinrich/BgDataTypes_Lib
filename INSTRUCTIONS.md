@@ -315,11 +315,11 @@ stated cube action's error. A derived member is `[JsonIgnore]`d; a
 document still stating one reads with it ignored, even in the categories
 that refuse unknown members — the serializer knows the member and skips
 its JSON (measured on .NET 10, both paths) — and the derivation stands. A
-member retired outright from such a category stays known the same way:
-`CheckerPlayDecisionData` keeps `BestPlayIndex` and `UserPlayError` as
-internal `[JsonInclude, JsonIgnore]` names, never read, written or public,
-so a document stating them still reads (measured: an internal or private
-`[JsonIgnore]` alone is not in the contract, and is refused). The audit,
+member retired outright is refused like any unknown member where the
+category refuses them: `CheckerPlayDecisionData`'s `BestPlayIndex` and
+`UserPlayError` (new with the decision kinds, so no document carries them
+there; nothing outside the repo reads the exported JSON, so wire changes
+need no compatibility layer — the umbrella's third-round ruling). The audit,
 member by member, and what stays stored and why, is under "Stored or
 derived" below.
 
@@ -1575,8 +1575,7 @@ public sealed class CheckerPlayDecisionData    // unmapped members refused
     public double? UnlistedPlayError { get; init; }                   // only with no UserPlayIndex
     [JsonIgnore] public PlayCandidate? UserPlay { get; }
     public RankedPlays RankedBy(PlayRanking ranking);                 // built once per ranking; see "The ranking"
-    // Retired BestPlayIndex, UserPlayError: internal [JsonInclude, JsonIgnore]
-    // names, so a document stating them still reads.
+    // A document stating the retired BestPlayIndex or UserPlayError is refused.
 }
 
 public enum PlayRanking { Equity, DepthFirst }  // Equity the default; strict string token

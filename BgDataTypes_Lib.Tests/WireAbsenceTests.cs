@@ -109,11 +109,10 @@ public class WireAbsenceTests
     /// The CLR property behind a metadata entry. The generated metadata
     /// leaves the attribute provider unset for some [JsonIgnore]d members,
     /// so it is resolved by name — the library sets no naming policy, so a
-    /// JSON name is its property's name. Non-public too: a category's retired
-    /// names are internal members the contract knows only to skip them.
+    /// JSON name is its property's name.
     /// </summary>
     private static PropertyInfo Clr(JsonPropertyInfo property) =>
-        property.DeclaringType.GetProperty(property.Name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+        property.DeclaringType.GetProperty(property.Name, BindingFlags.Public | BindingFlags.Instance)
         ?? throw new InvalidOperationException($"No property {property.DeclaringType}.{property.Name}.");
 
     private static bool IsIgnored(JsonPropertyInfo property) =>

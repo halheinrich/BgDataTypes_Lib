@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using BgDataTypes_Lib;
@@ -1182,20 +1183,21 @@ public class BgDecisionDataSerializationTests
         // Rewritten from ..._OutOfRangeBestPlayIndex_CannotBeBuilt (itself
         // from ..._ReturnUnknown): the best play is a ranking's derivation
         // from the candidates, so there is no index to state out of range —
-        // no public member at all, and a document still stating one, in or
-        // out of range, reads with it ignored while each ranking's derivation
-        // stands. The derivation always reads a real candidate.
-        Assert.Null(typeof(CheckerPlayDecisionData).GetProperty("BestPlayIndex"));
+        // no member at all. A document stating one, or the retired player's
+        // error, is refused like any member the category does not have, read
+        // alone or inside a record (the umbrella's third-round ruling).
+        Assert.Null(typeof(CheckerPlayDecisionData).GetProperty("BestPlayIndex", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance));
+        Assert.Null(typeof(CheckerPlayDecisionData).GetProperty("UserPlayError", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance));
 
-        foreach (int stated in new[] { 2, 7 })
+        foreach (var (member, stated) in new (string, JsonNode)[] { ("BestPlayIndex", 0), ("BestPlayIndex", 7), ("UserPlayError", 0.0) })
         {
-            var document = WirePaths.Document(TestRecords.CheckerPlayData());
-            document["BestPlayIndex"] = stated;
-            foreach (var (_, options) in WirePaths.Both)
-            {
-                var read = JsonSerializer.Deserialize<CheckerPlayDecisionData>(document.ToJsonString(), options)!;
-                Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Equal(0, read.RankedBy(ranking).Best.Index));
-            }
+            var category = WirePaths.Document(TestRecords.CheckerPlayData());
+            category[member] = stated.DeepClone();
+            WirePaths.AssertRefused<CheckerPlayDecisionData>(category.ToJsonString());
+
+            var record = WirePaths.Document<BgDecisionData>(TestRecords.CheckerPlay());
+            record["Decision"]![member] = stated.DeepClone();
+            WirePaths.AssertRefused<BgDecisionData>(record.ToJsonString());
         }
     }
 
