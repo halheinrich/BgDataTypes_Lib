@@ -79,6 +79,19 @@ public class AllocationProbeTests
     }
 
     [Fact]
+    public void APathThatAllocatesOnEveryCall_IsMeasuredExactly()
+    {
+        // Ported as it stands from BgMoveGen's copy of the probe's tests
+        // (halheinrich/backgammon#273), so the pins are complete where the
+        // probe is written: two allocations a call measure exactly twice one.
+        long array = AllocationProbe.SteadyStateBytes(() => _kept = new byte[16]);
+        long twice = AllocationProbe.SteadyStateBytes(() => { _kept = new byte[16]; _kept = new byte[16]; });
+
+        Assert.True(array >= AllocationProbe.CallsPerWindow * 16L, $"measured {array}");
+        Assert.Equal(2 * array, twice);
+    }
+
+    [Fact]
     public void APathThatAllocatesOnSomeCalls_IsMeasured()
     {
         // One call in a hundred: still in every window, so still caught.

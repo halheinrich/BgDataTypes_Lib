@@ -48,7 +48,7 @@ namespace BgDataTypes_Lib;
 /// <b>Allocation-free.</b> Creating, comparing and hashing a position
 /// allocate nothing, because a consumer does them once per play: the move
 /// generator (BgMoveGen) takes the position each play reaches, for every
-/// successor it returns and every candidate board, and keys its move-entry
+/// successor it returns and every candidate, and keys its move-entry
 /// searches by position. Generating the plays compares no positions — the
 /// generator avoids duplicates by construction. The counts are stored
 /// inline and narrowed, which the invariant makes lossless (no count
@@ -136,7 +136,7 @@ public readonly struct BoardPosition :
     /// A position from counts the caller guarantees form one: a
     /// <see cref="BoardState"/>'s own board, or a board the play rule reached
     /// from it, both well-formed by <see cref="BoardState"/>'s invariant. This
-    /// is the snapshot on the move generator's hot path, so the invariant is
+    /// is the snapshot a consumer takes once per play, so the invariant is
     /// asserted in Debug builds only; outside data goes through the
     /// constructor or <see cref="TryCreate(ReadOnlySpan{int}, out BoardPosition)"/>.
     /// </summary>

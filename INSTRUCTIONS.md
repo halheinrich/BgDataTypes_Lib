@@ -766,7 +766,7 @@ needs before touching it:
   comparing and hashing allocate nothing — pinned by test with
   `GC.GetAllocatedBytesForCurrentThread`, because a consumer does them once
   per play: BgMoveGen takes the position each play reaches, for every
-  successor it returns and every candidate board, and keys its move-entry
+  successor it returns and every candidate, and keys its move-entry
   searches by position. Its play generation compares no positions; it
   avoids duplicates by construction (BgMoveGen's INSTRUCTIONS.md, "One same
   position").
@@ -829,7 +829,7 @@ below keeps it one.
   not reach it. Two boards are compared through it, never through
   `Points`. It is how a consumer takes the position a play reaches — apply
   the play, snapshot, undo, as BgMoveGen does for each successor and
-  candidate board — which is why it allocates nothing.
+  candidate — which is why it allocates nothing.
 
 After construction a board changes three ways — the reset, the raw pair
 and the turn boundary — with `Flip()` the private mechanic behind
