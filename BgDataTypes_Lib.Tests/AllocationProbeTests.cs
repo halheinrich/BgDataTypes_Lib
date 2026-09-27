@@ -71,14 +71,6 @@ public class AllocationProbeTests
     }
 
     [Fact]
-    public void APathThatAllocatesOnEveryCall_IsMeasured()
-    {
-        long allocated = AllocationProbe.SteadyStateBytes(() => _kept = new byte[16]);
-
-        Assert.True(allocated >= AllocationProbe.CallsPerWindow * 16L, $"measured {allocated}");
-    }
-
-    [Fact]
     public void APathThatAllocatesOnEveryCall_IsMeasuredExactly()
     {
         // Ported as it stands from BgMoveGen's copy of the probe's tests
