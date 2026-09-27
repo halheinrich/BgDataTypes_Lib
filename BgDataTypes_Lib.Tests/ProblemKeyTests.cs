@@ -17,6 +17,16 @@ public class ProblemKeyTests
     private const string StandardBoardToken =
         "0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0";
 
+    // Boards a decision position refuses (halheinrich/backgammon#273, Hal's
+    // ruling of 2026-09-27): each is a well-formed position, and each side
+    // borne off is a terminal one XG data can hold.
+    private const string EmptyBoardToken =
+        "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0";
+    private const string OnRollBorneOffToken =
+        "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-3,-3,-3,-2,-2,-2,0";
+    private const string OpponentBorneOffToken =
+        "0,3,3,3,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0";
+
     // Pinned wire-contract literals. These are regression pins on the
     // stats document's key grammar — a change here is a wire-format break.
     private const string PinnedPlayKey = StandardBoardToken + "/7a7/1c/31";
@@ -97,12 +107,6 @@ public class ProblemKeyTests
     {
         Assert.True(ProblemKey.TryDerive(data, out var key));
         return key!;
-    }
-
-    private static void AssertNoKey(BgDecisionData data)
-    {
-        Assert.False(ProblemKey.TryDerive(data, out var key));
-        Assert.Null(key);
     }
 
     // -----------------------------------------------------------------------
@@ -397,7 +401,7 @@ public class ProblemKeyTests
 
     [Theory]
     // Fact validation at the string door — same rungs as TryDerive.
-    [InlineData("0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0/7a7/1c/31")]        // empty board
+    [InlineData(EmptyBoardToken + "/7a7/1c/31")]            // empty board
     [InlineData("0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,3,0/7a7/1c/31")]    // 16 on-roll checkers
     [InlineData("0,-3,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0/7a7/1c/31")]    // 16 opponent checkers
     [InlineData("1,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,1,0/7a7/1c/31")]    // on-roll checker on opponent bar
@@ -522,10 +526,44 @@ public class ProblemKeyTests
         WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
     }
 
+    // The empty-board rung below was a TryDerive pin until a decision position
+    // came to hold a checker of each side (halheinrich/backgammon#273, Hal's
+    // ruling of 2026-09-27): a record can no longer stand on the empty board,
+    // or on one with a side borne off, so TryDerive never meets either. The
+    // key's text keeps its own rule, and the two part here: the empty board's
+    // text still does not parse, while a side borne off still does, so every
+    // statistics document that read before the ruling still reads.
+
     [Fact]
-    public void NoKey_EmptyBoard()
+    public void EmptyBoard_CannotBeBuilt_AndItsKeyDoesNotParse()
     {
-        AssertNoKey(PlayDecision(mop: new int[26]));
+        // Rewritten from NoKey_EmptyBoard.
+        foreach (var build in new Func<BgDecisionData>[] { () => PlayDecision(mop: new int[26]), () => CubeDecision(mop: new int[26]) })
+            Assert.Equal("Mop", Assert.Throws<ArgumentException>(build).ParamName);
+
+        Assert.True(ProblemKey.TryParse(StandardBoardToken + "/7a7/1c/31", null, out _));
+        Assert.False(ProblemKey.TryParse(EmptyBoardToken + "/7a7/1c/31", null, out _));
+        Assert.False(ProblemKey.TryParse(EmptyBoardToken + "/5a2/2o", null, out _));
+    }
+
+    [Theory]
+    [InlineData(OnRollBorneOffToken)]
+    [InlineData(OpponentBorneOffToken)]
+    public void ASideBorneOff_CannotBeBuilt_ButItsKeyStillParses(string boardToken)
+    {
+        // Added (control): the record refuses the board, and the key's parse
+        // door does not follow it — a key a record could produce before the
+        // ruling still reads back, as a play key and as a cube key.
+        int[] mop = [.. boardToken.Split(',').Select(c => int.Parse(c, CultureInfo.InvariantCulture))];
+        Assert.True(BoardPosition.TryCreate(mop, out _));
+        Assert.Equal("Mop", Assert.Throws<ArgumentException>(() => PlayDecision(mop: mop)).ParamName);
+        Assert.Equal("Mop", Assert.Throws<ArgumentException>(() => CubeDecision(mop: mop)).ParamName);
+
+        foreach (string key in new[] { boardToken + "/7a7/1c/31", boardToken + "/0a0j/2o" })
+        {
+            Assert.True(ProblemKey.TryParse(key, null, out var parsed), key);
+            Assert.Equal(key, parsed.ToString());
+        }
     }
 
     // The four malformed-board rungs below were TryDerive pins until the

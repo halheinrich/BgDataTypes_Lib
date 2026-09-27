@@ -86,10 +86,16 @@ public class BgDataTypesJsonContextTests
                 flagged: true));
     }
 
+    // Rewritten from the empty board, which is no decision position
+    // (halheinrich/backgammon#273, Hal's ruling of 2026-09-27): a middle
+    // game, each side with its full fifteen.
+    private static readonly BoardPosition MiddleGame = new(
+        [0, -2, 0, 0, 0, 2, 4, 0, 3, 0, 0, 0, -4, 4, 0, 0, 0, -3, 0, -4, -2, 0, 0, 0, 2, 0]);
+
     private static BgDecisionData FullCubeDecision() => TestRecords.Cube(
         id: new XgDecisionId("session.xg", Game: 2, MoveNumber: 7, IsCube: true),
         position: TestRecords.Position(
-            mop: BoardPosition.Empty,
+            mop: MiddleGame,
             cubeSize: 2,
             cubeOwner: CubeOwner.Centered,
             session: TestRecords.MoneySession(isJacoby: true)),

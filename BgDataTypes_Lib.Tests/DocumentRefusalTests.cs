@@ -72,6 +72,11 @@ public class DocumentRefusalTests
         yield return ("a money session's negative score, inside a record",
             TestRecords.Cube(position: TestRecords.Position(session: TestRecords.MoneySession())),
             d => d["Position"]!["Session"]!["OpponentScore"] = -2, typeof(ArgumentOutOfRangeException));
+        // Added: a decision position has a checker of each side
+        // (halheinrich/backgammon#273, Hal's ruling of 2026-09-27).
+        yield return ("a position with the opponent borne off, inside a record", TestRecords.Cube(),
+            d => d["Position"]!["Mop"] = JsonNode.Parse("[0,3,3,3,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]"),
+            typeof(ArgumentException));
         yield return ("an identifier naming the other kind", TestRecords.Cube(),
             d => d["Id"] = "match.xg:g1:m2:play", typeof(ArgumentException));
         yield return ("a standalone position stating its start", TestRecords.Cube(),
@@ -153,6 +158,9 @@ public class DocumentRefusalTests
         yield return ("a cube above the limit", typeof(PositionData),
             TestRecords.Position(session: TestRecords.MoneySession(cubeLimit: 2)),
             d => d["CubeSize"] = 4, typeof(ArgumentOutOfRangeException));
+        yield return ("a position on the empty board", typeof(PositionData), TestRecords.Position(),
+            d => d["Mop"] = JsonNode.Parse("[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]"),
+            typeof(ArgumentException));
         // Added: a header's terms and standing, now wire types, read on their
         // own as the base and as the kind (the umbrella's review of
         // halheinrich/backgammon#273).

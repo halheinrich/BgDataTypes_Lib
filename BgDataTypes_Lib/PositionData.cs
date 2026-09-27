@@ -32,12 +32,32 @@ namespace BgDataTypes_Lib;
 /// a rule gets a <see cref="System.Text.Json.JsonException"/> carrying the
 /// guard's exception.
 /// </para>
+/// <para>
+/// <b>A decision position has a checker of each side</b>
+/// (halheinrich/backgammon#273, Hal's ruling of 2026-09-27) — the one
+/// statement of the rule. <see cref="Mop"/> holds at least one of the
+/// on-roll player's checkers and at least one of the opponent's, each on a
+/// point or on the bar. A side with none has borne off all its checkers, so
+/// the game is over and no decision is made; the empty board is the case
+/// where neither side has one. The rule is this category's, not the
+/// board's: a <see cref="BoardPosition"/> stays broad enough for a terminal
+/// position, which XG and XGP data can hold (a transcription commonly
+/// records the position a final bear-off leaves), and for any other working
+/// value. So both decision kinds inherit it, and a position with a side
+/// borne off may be read from a source file but never becomes a decision
+/// record. <see cref="Mop"/> refuses a board breaking it, as the category's
+/// other rules refuse theirs; a <see cref="DecisionRow"/> read back holds
+/// its board to it too, since a row is a record's projection. Every record
+/// therefore has a <see cref="ProblemKey"/>.
+/// </para>
 /// </remarks>
 public class PositionData
 {
     // True while the category is read from a document (see the serializer's
     // constructor below): each rule then refuses as a JsonException.
     private readonly bool _read;
+
+    private readonly BoardPosition _mop;
 
     // Null only while construction is still stating them; `required`
     // guarantees each is set by the time construction ends.
@@ -69,9 +89,45 @@ public class PositionData
     /// slot 0 is the opponent's bar, 1–24 the points from the on-roll
     /// player's perspective, 25 the on-roll player's bar; positive counts are
     /// the on-roll player's checkers, negative the opponent's (the
-    /// <see cref="BoardPosition"/> layout, well-formed by its invariant).
+    /// <see cref="BoardPosition"/> layout, well-formed by its invariant). It
+    /// holds a checker of each side (see the class remarks).
     /// </summary>
-    public required BoardPosition Mop { get; init; }
+    /// <exception cref="ArgumentException">
+    /// Thrown on init when either side has no checker on the board or the
+    /// bar — the empty board among them.
+    /// </exception>
+    public required BoardPosition Mop
+    {
+        get => _mop;
+        init
+        {
+            try
+            {
+                if (!BoardHolds(value))
+                    throw new ArgumentException(BoardMessage, nameof(Mop));
+            }
+            catch (ArgumentException fault) when (_read)
+            {
+                throw DocumentRefusal.Of(fault);
+            }
+            _mop = value;
+        }
+    }
+
+    /// <summary>The decision-position rule, in the one sentence every refusal carries.</summary>
+    internal const string BoardMessage =
+        "A decision position has a checker of each side on the board or the bar: a side with none has borne off all its checkers, so the game is over and no decision is made.";
+
+    /// <summary>
+    /// Whether a decision can be made on <paramref name="board"/>: it holds a
+    /// checker of each side, on a point or on the bar (see the class remarks).
+    /// </summary>
+    internal static bool BoardHolds(BoardPosition board)
+    {
+        Span<int> counts = stackalloc int[BoardPosition.SlotCount];
+        board.CopyTo(counts);
+        return counts.ContainsAnyInRange(1, int.MaxValue) && counts.ContainsAnyInRange(int.MinValue, -1);
+    }
 
     /// <summary>
     /// The on-roll player's pip count, derived from <see cref="Mop"/> by the

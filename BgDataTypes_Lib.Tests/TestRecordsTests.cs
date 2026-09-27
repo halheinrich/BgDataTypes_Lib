@@ -131,6 +131,19 @@ public class TestRecordsTests
     }
 
     [Fact]
+    public void ThePosition_RefusesABoardNoDecisionIsMadeOn()
+    {
+        // Added (halheinrich/backgammon#273, Hal's ruling of 2026-09-27): the
+        // builder builds through the category, so it cannot make a decision
+        // position the category refuses — a side borne off, or the empty
+        // board — and no record builder can be handed one.
+        var opponentBorneOff = new BoardPosition([0, 3, 3, 3, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+        Assert.Equal("Mop", Assert.Throws<ArgumentException>(() => TestRecords.Position(mop: opponentBorneOff)).ParamName);
+        Assert.Equal("Mop", Assert.Throws<ArgumentException>(() => TestRecords.Position(mop: BoardPosition.Empty)).ParamName);
+    }
+
+    [Fact]
     public void ThePosition_CountsItsOwnPips()
     {
         // Rewritten: the pip counts are the category's derivation from its

@@ -27,6 +27,16 @@ namespace BgDataTypes_Lib.TestSupport;
 /// (<see cref="BoardState.IsSamePlay"/>).
 /// </para>
 /// <para>
+/// <b>What cannot be built.</b> Every builder builds through the types' own
+/// construction, and this assembly is granted no internals, so a builder can
+/// build nothing a producer cannot. In particular <see cref="Position"/>
+/// refuses a board with no checker of one side, or of either — a terminal
+/// position or the empty board — as the category does
+/// (<see cref="PositionData"/>): no decision is made on one, so no record
+/// stands on one. A test wanting such a board builds a
+/// <see cref="BoardPosition"/>, which stays broad enough to hold it.
+/// </para>
+/// <para>
 /// A test whose subject is construction itself (an init guard, or the order
 /// members are set in) writes its own object initializer instead.
 /// </para>

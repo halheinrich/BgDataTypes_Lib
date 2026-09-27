@@ -48,9 +48,10 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// <b>Read back whole.</b> A row read from JSON is held, once every column is
 /// read, to what a projection of a record guarantees — each kind's columns
-/// present and the other kind's empty, the roll two die faces, the session's
-/// own rules, the rules of <see cref="DecisionRules"/> — and a document
-/// breaking any of them is
+/// present and the other kind's empty, the roll two die faces, a board with a
+/// checker of each side (a decision position's, <see cref="PositionData"/>),
+/// the session's own rules, the rules of <see cref="DecisionRules"/> — and a
+/// document breaking any of them is
 /// refused with a <see cref="JsonException"/>, on the reflection path and
 /// through <see cref="BgDataTypesJsonContext"/> alike. Every column but the
 /// nullable ones is <c>required</c>, per the wire rule stated on
@@ -372,7 +373,9 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// the points, 25 the on-roll player's bar; positive counts are the
     /// on-roll player's checkers, negative the opponent's (the
     /// <see cref="BoardPosition"/> layout, as <see cref="PositionData.Mop"/>).
-    /// Not included in CSV output.
+    /// Not included in CSV output. It holds a checker of each side, as a
+    /// decision position's board does (<see cref="PositionData.Mop"/>); a row
+    /// read back is refused otherwise.
     /// </summary>
     public required BoardPosition Board { get; init; }
 
@@ -447,6 +450,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             _ when !StatedText.Holds(Xgid) => StatedText.Message(nameof(Xgid)),
             _ when !StatedText.Holds(Player) => StatedText.Message(nameof(Player)),
             _ when !StatedText.Holds(AnalysisDepth) => StatedText.Message(nameof(AnalysisDepth)),
+            _ when !PositionData.BoardHolds(Board) => PositionData.BoardMessage,
             _ => SessionColumnsFault(),
         };
         if (fault is not null)

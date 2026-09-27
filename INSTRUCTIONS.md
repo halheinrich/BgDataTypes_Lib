@@ -348,7 +348,7 @@ Every decision holds the two shared categories; each kind holds its own
 
 | Type | Held by | Fields |
 |---|---|---|
-| `PositionData` | both kinds | `Mop`, `CubeSize` (a positive power of two, never above a money session's `CubeLimit`), `CubeOwner` (a defined owner), `Session` (a `MoneySession` or a `MatchSession`: see "Money and match: the session kinds"); derived `OnRollPipCount`, `OpponentPipCount` (the board's, by `BoardState`'s one pip rule) |
+| `PositionData` | both kinds | `Mop` (a checker of each side on the board or the bar), `CubeSize` (a positive power of two, never above a money session's `CubeLimit`), `CubeOwner` (a defined owner), `Session` (a `MoneySession` or a `MatchSession`: see "Money and match: the session kinds"); derived `OnRollPipCount`, `OpponentPipCount` (the board's, by `BoardState`'s one pip rule) |
 | `MatchSession` | a match's `PositionData.Session` | `Terms` (a `MatchTerms`: `Length`, ≥ 1), `OnRollNeeds`, `OpponentNeeds` (each 1 to the length), `IsCrawford` (exactly one player 1-away when set) |
 | `MoneySession` | a money session's `PositionData.Session` | `Terms` (a `MoneyTerms`: `IsJacoby`, `IsBeaver`, `CubeLimit`, a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
 | `DescriptiveData` | both kinds | `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it), and a match's length is the match session's |
@@ -404,6 +404,26 @@ probability's bounds are not measured against real data. A test finds the
 stored numbers by reflection, so one added without the rule fails it.
 `DecisionRow`, a projection, carries the record's numbers and is not
 checked again.
+
+**A decision position has a checker of each side**
+(`halheinrich/backgammon#273`, Hal's ruling of 2026-09-27).
+`PositionData.Mop` holds at least one of the player on roll's checkers and
+one of the opponent's, each on a point or on the bar. A side with none has
+borne off all fifteen, so the game is over and no decision is made; the
+empty board is the case where neither has one. The rule is the category's,
+stated once on `PositionData` (its remarks, and the internal `BoardHolds`
+and `BoardMessage` its guard and the row's read-back share), so both
+decision kinds inherit it. It is refused as the category's other rules are:
+by code with an `ArgumentException` naming `Mop`, and by a document with a
+`JsonException` carrying it, read as the category or as a record of either
+kind. A row read back holds its `Board` to it too (see "DecisionRow").
+`BoardPosition` stays broad by the same ruling (see "BoardPosition"): XG
+and XGP data hold terminal positions — a transcription commonly records the
+position a final bear-off leaves — and such a position may be read from a
+source file but never becomes a decision record. So every record has a
+`ProblemKey` (see "ProblemKey"). `PositionBoardRuleTests` pins each side,
+both, every construction path, and the edge: one checker left, on a point
+or on the bar.
 
 ### Stored or derived
 
@@ -759,6 +779,11 @@ needs before touching it:
   counts that break the invariant, so no instance holds a malformed board.
   `default` is the empty board, which is well-formed, so unlike `DiceRoll`'s
   the default is meaningful; `Empty` names it.
+- **Broad, by ruling** (Hal, 2026-09-27, `halheinrich/backgammon#273`). The
+  invariant admits the empty board and a side borne off: a terminal position
+  is a position, and a working value may be any. Whether a decision can be
+  made on a position is a stricter question, and it is `PositionData`'s (see
+  "Data categories"), not this type's. Do not tighten this invariant to it.
 - **Representation.** The counts are stored inline as 26 `sbyte`s (an
   `[InlineArray]`), which the invariant makes lossless; the storage is
   private and every read widens to `int`. Equality is one 26-byte span
@@ -1576,7 +1601,8 @@ row read from JSON the session its columns state.
 **Read back whole.** A row read from JSON is held, once every column is
 read (`IJsonOnDeserialized`), to what a projection guarantees: the kind's
 columns present and the other kind's empty, the roll two die faces, a
-checker row's best after-board present, the session kind's columns stated
+checker row's best after-board present, a board with a checker of each side
+(a decision position's, `PositionData`'s rule), the session kind's columns stated
 and the other session kind's empty, the session's own rules (it is built
 as a record's is, so a match's away score of 0 is refused as there), and
 `DecisionRules` (Crawford, the
@@ -1822,8 +1848,10 @@ defaults follow its arguments only where the records' rules demand it — a
 standalone id gets no `IsStandardStart`, and a board other than the
 standard start gets one candidate, the pass (valid from every position),
 unless the test states its own decision — and `TestRecordsTests` pins
-them. A test whose subject is construction itself writes its own object
-initializer.
+them. A builder can build nothing a producer cannot (the posture above), so
+`Position` refuses a board with a side borne off, or the empty one, as the
+category does. A test whose subject is construction itself writes its own
+object initializer.
 
 ### Mop layout
 
@@ -2106,14 +2134,15 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     public static string CsvHeader { get; }                   // …,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result
     public string ToCsvLine();                                // null → empty cell; numbers invariant-culture
     // Read from JSON, a row is checked whole (OnDeserialized): the kind's
-    // columns present and the other's empty, the roll two faces, the
-    // session kind's columns stated and the other's empty, the session's
-    // rules, and DecisionRules; a breach is a JsonException. The three boards and
+    // columns present and the other's empty, the roll two faces, a board with
+    // a checker of each side, the session kind's columns stated and the
+    // other's empty, the session's rules, and DecisionRules; a breach is a
+    // JsonException. The three boards and
     // AnalysisMode / AnalysisLevel serialize to JSON but not to CSV; Id is
     // JSON-only too.
 }
 
-public class PositionData    { /* required init-only properties per the categories table; Mop is a BoardPosition; Session a MoneySession or MatchSession */
+public class PositionData    { /* required init-only properties per the categories table; Mop is a BoardPosition with a checker of each side; Session a MoneySession or MatchSession */
                                [JsonIgnore] public int OnRollPipCount { get; }    /* Mop's, by BoardState's pip rule */
                                [JsonIgnore] public int OpponentPipCount { get; } }
 public class DescriptiveData { /* init-only properties per the categories table; OnRollName?, OpponentName?, Title?, Date?, Event?, IsStandardStart?, Comment? */ }
@@ -2574,6 +2603,13 @@ measure" is not a valid comparison on this hardware.
   stated on `BoardState.IsSamePlay`). The builders' default candidates are
   the opening's; on another board, state the plays, or take the builder's
   pass.
+- **A decision position has a checker of each side.** A fixture's board
+  holds at least one checker of the player on roll and one of the opponent,
+  on a point or on the bar. The empty board and a side borne off are
+  `BoardPosition`s, but no record stands on one: `TestRecords.Position`
+  refuses them as the category does (see "Data categories"). A test that
+  needs such a board as a board builds the `BoardPosition`, or a
+  `BoardState` from it.
 - **`BgDecisionData.Id`, `Position`, `Descriptive` and each kind's
   `Decision` reject null at init; absent is not null**
   (`halheinrich/backgammon#221`, `halheinrich/backgammon#222`). An explicit

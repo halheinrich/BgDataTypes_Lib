@@ -184,10 +184,15 @@ public class CubeDecisionDataClaimDerivationTests
     [Fact]
     public void Derivation_IsContextFree_JacobyRedoubleDerivesTooGood()
     {
+        // Rewritten from the empty board, which is no decision position
+        // (halheinrich/backgammon#273, Hal's ruling of 2026-09-27): a blitz,
+        // the player on roll's board closed on two checkers on the bar.
+        var blitz = new BoardPosition(
+            [-2, 2, 2, 2, 2, 2, 2, 0, 3, 0, 0, 0, -3, 0, 0, 0, 0, -3, 0, -4, -3, 0, 0, 0, 0, 0]);
         var record = TestRecords.Cube(
             id: new XgpDecisionId("jacoby-redouble.xgp"),
             position: TestRecords.Position(
-                mop: BoardPosition.Empty,
+                mop: blitz,
                 cubeSize: 2,               // cube already turned:
                 cubeOwner: CubeOwner.OnRoll, // a redouble decision
                 session: TestRecords.MoneySession(isJacoby: true)
