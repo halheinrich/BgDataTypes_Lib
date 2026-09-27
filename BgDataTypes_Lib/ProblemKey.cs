@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
@@ -92,34 +93,48 @@ namespace BgDataTypes_Lib;
 /// not a stand-in on any record — so every key is byte-identical to what the
 /// previous construction wrote, and the stats documents keyed by it are
 /// unchanged. What changed is where the facts come from:
-/// <see cref="TryDerive"/> reads the record's <see cref="Session"/> by its
+/// <see cref="From"/> reads the record's <see cref="Session"/> by its
 /// kind, a <see cref="MoneySession"/> into the money production and a
 /// <see cref="MatchSession"/> into the match one, never a match length or an
 /// away score of 0.
 /// </para>
 ///
 /// <para>
-/// <b>Construction and the no-key rung.</b> There are exactly two ways to
-/// obtain a key: <see cref="TryDerive"/> (the single producer-side factory
-/// from a decision record's facts) and <c>Parse</c>/<c>TryParse</c> (the
-/// wire read-back). Consumers never assemble a key by hand — there is no
-/// public constructor, and the type is a sealed class rather than a record
-/// precisely so no <c>with</c>-expression hatch exists. Derivation that
-/// would guess is forbidden: where the record's facts are malformed,
-/// degenerate, or inconsistent (see <see cref="TryDerive"/>), there is no
-/// key — <see cref="TryDerive"/> returns <see langword="false"/> rather
-/// than throwing, and the same fact validation guards the parse door.
+/// <b>Two doors, and the no-key rung.</b> There are exactly two ways to
+/// obtain a key: <see cref="From"/> (the single producer-side factory from a
+/// decision record's facts) and <c>Parse</c>/<c>TryParse</c> (the wire
+/// read-back). Consumers never assemble a key by hand — there is no public
+/// constructor, and the type is a sealed class rather than a record
+/// precisely so no <c>with</c>-expression hatch exists. <b>Every record has
+/// a key</b> (halheinrich/backgammon#273, Hal's ruling of 2026-09-27):
+/// <see cref="From"/> has no failure case, because every fact it reads is
+/// well-formed by the record's own construction (its <c>returns</c> says
+/// how), so a consumer holding a record relies on that rather than guarding
+/// against a missing key. Text carries no such guarantee, so the parse door
+/// keeps the no-key rung, and only text reaches it: text whose facts are
+/// malformed, degenerate or inconsistent is no key, because reading a key
+/// from it would guess, and a problem filed under a wrong key is
+/// corruption.
 /// </para>
 ///
 /// <para>
-/// <b>Real-board posture.</b> Fact validation requires a physically possible
-/// position — <see cref="BoardPosition"/>'s invariant, which a record's board
-/// holds by its type and the parse door checks through
+/// <b>Real-board posture: the text's rule and the record's.</b> A key read
+/// from text needs a physically possible position —
+/// <see cref="BoardPosition"/>'s invariant, checked through
 /// <see cref="BoardPosition.TryCreate(ReadOnlySpan{int}, out BoardPosition)"/>
-/// — and, beyond it, at least one checker on the board.
-/// <see cref="ProblemKey"/> identifies real analysed decisions, whose
-/// producer-stamped boards always satisfy these bounds, so a violation is
-/// corruption and corruption gets no key.
+/// — and at least one checker on the board. A decision record's board is
+/// held to more: a checker of each side, on a point or on the bar, since no
+/// decision is made once a side has borne off (<see cref="PositionData"/>;
+/// the same ruling). The two differ deliberately. The record's rule is what
+/// makes <see cref="From"/> total. The text's is unchanged because a key that
+/// fails to parse fails its whole statistics document
+/// (<see cref="ProblemKeyJsonConverter"/> refuses it), and the statistics
+/// format, schema v3, is unchanged, so every v3 document that reads today
+/// must still read (SPEC-stats-identity.md §2, amended 2026-09-27). A key
+/// with a side borne off, which a record could produce before the ruling,
+/// therefore still parses; no record produces one now, so such a key is
+/// inert, as a Crawford cube key is (see <see cref="BgDecisionData"/>). The
+/// empty board never had a key, and its text still does not parse.
 /// </para>
 ///
 /// <para>
@@ -174,47 +189,38 @@ public sealed class ProblemKey :
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Attempts to derive the content key from a decision record's facts —
-    /// the single derivation site in the ecosystem; consumers never assemble
-    /// a key by hand.
+    /// The content key of a decision record — the single derivation site in
+    /// the ecosystem; consumers never assemble a key by hand.
     /// </summary>
-    /// <param name="data">The decision record to derive from.</param>
-    /// <param name="key">
-    /// On success, the derived key; on failure, <see langword="null"/>.
-    /// </param>
+    /// <param name="record">The decision record to derive from.</param>
     /// <returns>
-    /// <see langword="false"/> — no key, per the ratified no-key rung —
-    /// when the board is empty (it is otherwise well-formed by its type,
-    /// <see cref="BoardPosition"/>): the one rung a record can still reach.
-    /// Otherwise <see langword="true"/>. The score and the cube are no rungs
-    /// for a record (halheinrich/backgammon#273): its <see cref="Session"/> is
-    /// well-formed by its kind — a match's away scores at least 1, its
-    /// Crawford game with a 1-away side, a money session's Jacoby rule always
-    /// stated — and its position holds the cube to a positive power of two and
-    /// a defined owner, so the rules the parse door still enforces
-    /// (<see cref="AreValidFacts"/>) hold of every record by construction,
-    /// and still run here. The money rung that withheld a key from a money
-    /// record with no Jacoby fact is gone with the fact's absence. (A checker
-    /// play's dice are no rung either: they are two faces 1–6 by
-    /// construction, <see cref="CheckerPlayDecisionData.Dice"/>.) Never throws
-    /// on bad facts (degrade, never block).
+    /// The record's key, which parses back from its text to an equal key.
+    /// Every record has one (halheinrich/backgammon#273), so there is no
+    /// failure case to handle: the record's construction holds every fact the
+    /// key reads to rules at least as strict as those the parse door's no-key
+    /// rung holds a key's text to. The board has a checker of each side
+    /// (<see cref="PositionData"/>, Hal's ruling of 2026-09-27), so it is
+    /// never the empty board the rung refuses, and it is a physically
+    /// possible position by its type (<see cref="BoardPosition"/>). The
+    /// session is well-formed by its kind: a match's away scores at least 1,
+    /// its Crawford game with a 1-away side, a money session's Jacoby rule
+    /// always stated. The cube is a positive power of two with a defined
+    /// owner, and a checker play's dice are two faces 1–6
+    /// (<see cref="CheckerPlayDecisionData.Dice"/>).
     /// </returns>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="data"/> is <see langword="null"/> — a
-    /// missing record is a caller bug, not malformed facts.
+    /// Thrown when <paramref name="record"/> is <see langword="null"/> — a
+    /// missing record is a caller bug.
     /// </exception>
-    public static bool TryDerive(
-        BgDecisionData data,
-        [NotNullWhen(true)] out ProblemKey? key)
+    public static ProblemKey From(BgDecisionData record)
     {
-        ArgumentNullException.ThrowIfNull(data);
-        key = null;
+        ArgumentNullException.ThrowIfNull(record);
 
-        var position = data.Position;
+        var position = record.Position;
 
         // The decision kind rides on the dice field: a checker play's roll,
         // none for a cube decision.
-        DiceRoll? dice = data.Match<DiceRoll?>(static play => play.Dice, static _ => null);
+        DiceRoll? dice = record.Match<DiceRoll?>(static play => play.Dice, static _ => null);
 
         // The score field from the session's kind: money into the money
         // production, a match into the match one.
@@ -222,13 +228,14 @@ public sealed class ProblemKey :
             static money => Score.Money(money.Terms.IsJacoby),
             static match => Score.Match(match.OnRollNeeds, match.OpponentNeeds, match.IsCrawford));
 
-        if (!AreValidFacts(position.Mop, score, position.CubeSize, position.CubeOwner))
-            return false;
+        // The record's rules imply the text's (see <returns>), so the key
+        // parses back. Asserted in Debug builds only: no record can fail it.
+        Debug.Assert(AreValidFacts(position.Mop, score, position.CubeSize, position.CubeOwner),
+            "ProblemKey.From: a record's facts break the key's rules for text.");
 
-        key = new ProblemKey(
+        return new ProblemKey(
             FormatCanonical(position.Mop, score, position.CubeSize, position.CubeOwner, dice),
-            isCubeDecision: data.Kind == DecisionKind.Cube);
-        return true;
+            isCubeDecision: record.Kind == DecisionKind.Cube);
     }
 
     // -----------------------------------------------------------------------
@@ -238,7 +245,7 @@ public sealed class ProblemKey :
     /// <summary>
     /// The score field's facts, as the grammar's two productions: money with
     /// its Jacoby rule, or a match's away scores and Crawford flag. Both doors
-    /// reach the one emitter through it — <see cref="TryDerive"/> from the
+    /// reach the one emitter through it — <see cref="From"/> from the
     /// record's <see cref="Session"/>, the parser from the text — so the key's
     /// own representation, not a record's, is what the grammar spells.
     /// </summary>
@@ -277,21 +284,23 @@ public sealed class ProblemKey :
     }
 
     // -----------------------------------------------------------------------
-    //  Fact validation — shared by TryDerive and the parse door
+    //  Fact validation — the no-key rung, the parse door's
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// The no-key rung's fact validation (dice are validated separately at
-    /// each door, before a <see cref="DiceRoll"/> can exist). A record's
-    /// session keeps the score rules by its kind and its position the cube's,
-    /// so only an empty board can fail here for a record
-    /// (<see cref="TryDerive"/>); the parse door reaches every rule.
+    /// The no-key rung: the rules a key's text is held to (dice are validated
+    /// separately, before a <see cref="DiceRoll"/> can exist). Only text
+    /// reaches it. A record keeps each rule by its own construction, the
+    /// board's more strictly (see <see cref="From"/>, which asserts as much in
+    /// Debug builds), so no record fails here.
     /// </summary>
     private static bool AreValidFacts(BoardPosition board, Score score, int cubeSize, CubeOwner cubeOwner)
     {
-        // Board: real-board posture (see the type remarks). Well-formedness
-        // is the board's own invariant; the key adds only that a real
-        // decision has a checker on the board.
+        // Board: real-board posture, the text's rule (see the type remarks).
+        // Well-formedness is the board's own invariant; the text adds only
+        // that a key has a checker on the board. A record's board has one of
+        // each side; the text's rule stays the weaker, so every v3 document
+        // still reads.
         if (board == BoardPosition.Empty)
             return false;                              // empty board
 
@@ -399,7 +408,9 @@ public sealed class ProblemKey :
         CubeOwner.Centered => 'c',
         CubeOwner.OnRoll   => 'o',
         CubeOwner.Opponent => 'p',
-        // Unreachable behind AreValidFacts; kept as a guard for future enum growth.
+        // Unreachable: a record's owner is defined by its guard, and the
+        // parser maps only the three letters. Kept as a guard for future enum
+        // growth.
         _ => throw new ArgumentOutOfRangeException(nameof(owner), owner,
             "Undefined CubeOwner value."),
     };
@@ -430,7 +441,8 @@ public sealed class ProblemKey :
     /// <exception cref="FormatException">
     /// Thrown when <paramref name="s"/> is not the exact canonical form —
     /// including any string whose decomposed facts the no-key rung rejects
-    /// (see <see cref="TryDerive"/>).
+    /// (see the type remarks, "Two doors, and the no-key rung" and
+    /// "Real-board posture").
     /// </exception>
     public static ProblemKey Parse(string s, IFormatProvider? provider = null)
     {
@@ -582,7 +594,7 @@ public sealed class ProblemKey :
             score = Score.Match(onRollAway, opponentAway, isCrawford);
         }
 
-        // ---- The same fact validation as TryDerive guards the parse door ----
+        // ---- The no-key rung: the facts a key's text is held to ----
         if (!AreValidFacts(board, score, cubeSize, cubeOwner))
             return false;
 

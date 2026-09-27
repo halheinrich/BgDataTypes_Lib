@@ -421,9 +421,10 @@ kind. A row read back holds its `Board` to it too (see "DecisionRow").
 and XGP data hold terminal positions — a transcription commonly records the
 position a final bear-off leaves — and such a position may be read from a
 source file but never becomes a decision record. So every record has a
-`ProblemKey` (see "ProblemKey"). `PositionBoardRuleTests` pins each side,
-both, every construction path, and the edge: one checker left, on a point
-or on the bar.
+`ProblemKey`, and `ProblemKey.From` has no failure case (see
+"ProblemKey"). `PositionBoardRuleTests` pins each side, both, every
+construction path, and the edge: one checker left, on a point or on the
+bar.
 
 ### Stored or derived
 
@@ -653,7 +654,7 @@ not-scored classification is this library's.
 | `CanonicalPlay` | **internal** `readonly struct` (`halheinrich/backgammon#273`: consumers spell plays with `Play.ToNotation()` and compare them by position, so the chain form can change without breaking one), fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by the internal `Play.ToCanonical()` — no other constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
 | `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite, as every stored number is), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's error against the best is a ranking's (`CheckerPlayDecisionData.RankedBy`): it needs the other candidates and a ranking. An error of exactly 0 is the test for "is this a best play" under that ranking; `RankedPlays.Best` names its single best, the ranking's first. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
-| `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `TryDerive` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. Both doors run the same fact validation, and facts that would force a guess get **no key** rather than a wrong one (see "ProblemKey" below and Pitfalls). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
+| `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `From` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. **Every record has a key**: `From` has no failure case, since a record's rules hold every fact it reads at least as strictly as the parse door holds text. Only text reaches the no-key rung: text whose facts would force a guess is **no key** rather than a wrong one (see "ProblemKey" below). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
 ### Move encoding
 
@@ -1039,17 +1040,30 @@ contract, so a rotted copy is worse than no copy.
 
 Design points a maintainer needs before touching the type:
 
-- **Two doors, no constructor.** `TryDerive(BgDecisionData, out ProblemKey)`
-  is the single producer-side factory; `Parse`/`TryParse` is the wire
-  read-back. Both run the same fact validation, and the type is a sealed
-  class rather than a record precisely so no `with`-expression hatch
-  exists. Consumers never assemble a key — repeated consumer glue would be
-  a library gap.
-- **The no-key rung.** Derivation that would guess is forbidden: a record
-  filed under a wrong key is corruption. Malformed, degenerate, or
-  inconsistent facts yield `false` and no key, never a throw
-  (degrade, never block) — `TryDerive`'s `<returns>` carries the full
-  rejection list.
+- **Two doors, no constructor.** `From(BgDecisionData)` is the single
+  producer-side factory; `Parse`/`TryParse` is the wire read-back. The type
+  is a sealed class rather than a record precisely so no `with`-expression
+  hatch exists. Consumers never assemble a key — repeated consumer glue
+  would be a library gap.
+- **Every record has a key** (Hal's ruling of 2026-09-27,
+  `halheinrich/backgammon#273`; `SPEC-stats-identity.md` §2, amended the
+  same day). `From` returns the key, with no failure case: a record's
+  construction holds every fact the key reads at least as strictly as the
+  parse door holds a key's text — the board to a checker of each side (see
+  "Data categories"), the session to its kind's rules, the cube to a
+  positive power of two with a defined owner, a checker play's dice to two
+  faces. `From`'s `<returns>` states the implication and a `Debug.Assert`
+  checks it; `ProblemKeyTotalityTests` pins it as a property over records
+  of both kinds, swept across each rule's edges, each key reading back from
+  its text and as a statistics document's key. The producer owns the
+  guarantee, so a consumer holding a record relies on it and does not guard
+  against a missing key. It replaced `TryDerive`, whose `false` only the
+  empty board still reached.
+- **The no-key rung is the parse door's.** Derivation that would guess is
+  forbidden: a problem filed under a wrong key is corruption. So text whose
+  facts are malformed, degenerate or inconsistent is no key — `TryParse`
+  returns `false` and `Parse` throws `FormatException`. Only text reaches
+  the rung now.
 - **Strict parse, deliberately unlike `DiceRoll`.** `DiceRoll` canonicalizes
   human input; `ProblemKey` is a wire format, where two spellings of one key
   would split a problem's tallies. Enforcement is structural — the parser
@@ -1069,7 +1083,7 @@ Design points a maintainer needs before touching the type:
   money as its own production — `0a0` is the key's spelling of money, not
   a record's away scores — so every key is byte-identical to what the
   construction at `ca83ab1` wrote, and the statistics format (schema v3) is
-  unchanged. `TryDerive` reads the record's `Session` by its kind into the
+  unchanged. `From` reads the record's `Session` by its kind into the
   key's two score productions (a private `Score` of the key's own, which
   the parser also builds, so both doors reach the one emitter).
   `ProblemKeyByteIdentityTests` holds a sweep of the builders' variants —
@@ -1082,12 +1096,20 @@ Design points a maintainer needs before touching the type:
   (BgGame_Lib's), not this library's. A fact entering identity bumps the
   document version rather than the key's shape — the Jacoby suffix is that
   mechanism's first exercise (`SPEC-stats-identity.md` §3).
-- **Real-board posture.** Fact validation requires a physically possible
-  position — `BoardPosition`'s invariant, not restated in the key: a
-  record's board holds it by its type, and the parse door builds the board
-  through `BoardPosition.TryCreate` — plus a non-empty board, which is the
-  key's own rule. `ProblemKey` identifies real analysed decisions, so a
-  violation is corruption and corruption gets no key.
+- **Real-board posture: the text's rule and the record's differ, by
+  design.** A key's text needs a physically possible position —
+  `BoardPosition`'s invariant, not restated in the key: the parse door
+  builds the board through `BoardPosition.TryCreate` — plus a non-empty
+  board, the key's own rule. A record's board is held to more, a checker of
+  each side (`PositionData`'s rule), which is what makes `From` total. The
+  text's rule stays the weaker because a key that fails to parse fails its
+  whole statistics document (`ProblemKeyJsonConverter` throws) and schema
+  v3 is unchanged, so every v3 document that reads today must still read.
+  A key with a side borne off, which a record could produce before the
+  ruling, still parses; no record produces one now, so it is inert, as a
+  Crawford cube key is (see "The decision kinds"). The empty board never
+  had a key, and its text still does not parse. The key's remarks state
+  the same; `ProblemKeyTests` pins both halves.
 
 JSON shape: round-trips as the canonical string via the bundled
 `ProblemKeyJsonConverter` (type-level `[JsonConverter]` attribute on
@@ -1459,7 +1481,7 @@ Design points a maintainer needs before touching it:
 - **Where it is read.** `IDecisionFilterData.Session` (the view's is the
   record's, the row's is built from its columns and held to the kind's
   rules on read); `DecisionRules.CrawfordAllows(kind, session)`;
-  `CubeDecision.CanBeTooGood`; `ProblemKey.TryDerive`, whose text is
+  `CubeDecision.CanBeTooGood`; `ProblemKey.From`, whose text is
   unchanged (see "ProblemKey"); `DecisionRow.MatchScore`;
   `BgDecisionData.Xgid`.
 
@@ -2346,14 +2368,15 @@ public sealed record XgDecisionId(
     string Filename, int Game, int MoveNumber, bool IsCube) : DecisionId;
 
 // Content identity — "which problem is this". Sealed class, no public
-// constructor and no `with` hatch: the only two doors are TryDerive
-// (producer-side) and Parse/TryParse (wire read-back), both guarded by the
-// same fact validation. Canonical string form is a pinned wire contract
-// with one spelling per value, so equality/hash/ordering are all ordinal
-// over it. Parse is strict — no canonicalizing, unlike DiceRoll. Grammar
-// lives in the type's XML remarks; the identity rulings live in
-// SPEC-stats-identity.md §1/§2. JSON round-trips as the canonical string
-// via bundled ProblemKeyJsonConverter, including as a dictionary key.
+// constructor and no `with` hatch: the only two doors are From
+// (producer-side, total: every record has a key) and Parse/TryParse (wire
+// read-back, the no-key rung's only door). Canonical string form is a
+// pinned wire contract with one spelling per value, so equality, hash and
+// ordering are all ordinal over it. Parse is strict — no canonicalizing,
+// unlike DiceRoll. Grammar lives in the type's XML remarks; the identity
+// rulings live in SPEC-stats-identity.md §1/§2. JSON round-trips as the
+// canonical string via bundled ProblemKeyJsonConverter, including as a
+// dictionary key.
 public sealed class ProblemKey :
     IEquatable<ProblemKey>, IComparable, IComparable<ProblemKey>,
     IParsable<ProblemKey>, ISpanParsable<ProblemKey>
@@ -2361,11 +2384,10 @@ public sealed class ProblemKey :
     public bool IsCubeDecision { get; }           // decision kind rides on the dice field
 
     // The single derivation site in the ecosystem, reading the session by its
-    // kind. false = no key, per the no-key rung: an empty board, the one a
-    // record can still reach (the session and the cube are well-formed by
-    // construction; their rules guard the parse door). Never throws on bad
-    // facts; throws ArgumentNullException on a null record (a caller bug).
-    public static bool TryDerive(BgDecisionData data, out ProblemKey? key);
+    // kind. Total: a record's rules imply the text's (its board has a checker
+    // of each side), so the key parses back and there is no failure case.
+    // Throws ArgumentNullException on a null record (a caller bug).
+    public static ProblemKey From(BgDecisionData record);
 
     public static ProblemKey Parse(string s, IFormatProvider? provider = null);
     public static ProblemKey Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null);
@@ -2616,10 +2638,10 @@ measure" is not a valid comparison on this hardware.
   null — from an initializer or a JSON `"Position":null` — throws
   `ArgumentNullException` naming the member (a `JsonException` carrying it
   when read as a `BgDecisionData`); a document that omits the member is a
-  `JsonException` on both paths, refused as absent before any setter runs. There
-  is no `ProblemKey` no-key rung for a null half any more: the record
-  cannot exist, so a test or reader must not expect degrade-to-no-key
-  there.
+  `JsonException` on both paths, refused as absent before any setter runs. No
+  record reaches `ProblemKey`'s no-key rung, a null half no more than any
+  other shape: `ProblemKey.From` has no failure case (see "ProblemKey"), so
+  a test or reader must not expect degrade-to-no-key from a record.
 - **The source-generated context passes an absent init-only member as
   `default`, not as its initializer — which is why no member has one.** The
   generated creator for every init-only type in the wire graph is one

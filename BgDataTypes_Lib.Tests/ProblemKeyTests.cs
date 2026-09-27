@@ -103,12 +103,6 @@ public class ProblemKeyTests
     private static BgDecisionData MoneyPlay(bool isJacoby, int[]? dice = null) =>
         PlayDecision(session: Money(isJacoby), dice: dice);
 
-    private static ProblemKey Derive(BgDecisionData data)
-    {
-        Assert.True(ProblemKey.TryDerive(data, out var key));
-        return key!;
-    }
-
     // -----------------------------------------------------------------------
     //  Equality + hash code
     // -----------------------------------------------------------------------
@@ -116,8 +110,8 @@ public class ProblemKeyTests
     [Fact]
     public void Equality_SameFacts_PlayKeysEqual()
     {
-        var a = Derive(PlayDecision());
-        var b = Derive(PlayDecision());
+        var a = ProblemKey.From(PlayDecision());
+        var b = ProblemKey.From(PlayDecision());
 
         Assert.Equal(a, b);
         Assert.True(a == b);
@@ -128,8 +122,8 @@ public class ProblemKeyTests
     [Fact]
     public void Equality_SameFacts_CubeKeysEqual()
     {
-        var a = Derive(CubeDecision());
-        var b = Derive(CubeDecision());
+        var a = ProblemKey.From(CubeDecision());
+        var b = ProblemKey.From(CubeDecision());
 
         Assert.Equal(a, b);
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
@@ -143,31 +137,31 @@ public class ProblemKeyTests
         mop[24] = 1;
         mop[23] = 1;
 
-        Assert.NotEqual(Derive(PlayDecision()), Derive(PlayDecision(mop: mop)));
+        Assert.NotEqual(ProblemKey.From(PlayDecision()), ProblemKey.From(PlayDecision(mop: mop)));
     }
 
     [Fact]
     public void Equality_AwayScoresPerturbed_NotEqual()
     {
         Assert.NotEqual(
-            Derive(PlayDecision(session: Match(7, 7))),
-            Derive(PlayDecision(session: Match(7, 5))));
+            ProblemKey.From(PlayDecision(session: Match(7, 7))),
+            ProblemKey.From(PlayDecision(session: Match(7, 5))));
     }
 
     [Fact]
     public void Equality_CrawfordToggle_NotEqual()
     {
         Assert.NotEqual(
-            Derive(PlayDecision(session: Match(1, 3))),
-            Derive(PlayDecision(session: Match(1, 3, isCrawford: true))));
+            ProblemKey.From(PlayDecision(session: Match(1, 3))),
+            ProblemKey.From(PlayDecision(session: Match(1, 3, isCrawford: true))));
     }
 
     [Fact]
     public void Equality_CubeSizePerturbed_NotEqual()
     {
         Assert.NotEqual(
-            Derive(CubeDecision(cubeSize: 2)),
-            Derive(CubeDecision(cubeSize: 4)));
+            ProblemKey.From(CubeDecision(cubeSize: 2)),
+            ProblemKey.From(CubeDecision(cubeSize: 4)));
     }
 
     [Fact]
@@ -176,25 +170,25 @@ public class ProblemKeyTests
         // Cube state participates in checker-play identity too (ruled) —
         // perturb the owner on a play key.
         Assert.NotEqual(
-            Derive(PlayDecision(cubeSize: 2, cubeOwner: CubeOwner.OnRoll)),
-            Derive(PlayDecision(cubeSize: 2, cubeOwner: CubeOwner.Opponent)));
+            ProblemKey.From(PlayDecision(cubeSize: 2, cubeOwner: CubeOwner.OnRoll)),
+            ProblemKey.From(PlayDecision(cubeSize: 2, cubeOwner: CubeOwner.Opponent)));
     }
 
     [Fact]
     public void Equality_DicePerturbed_NotEqual()
     {
         Assert.NotEqual(
-            Derive(PlayDecision(dice: [3, 1])),
-            Derive(PlayDecision(dice: [4, 1])));
+            ProblemKey.From(PlayDecision(dice: [3, 1])),
+            ProblemKey.From(PlayDecision(dice: [4, 1])));
     }
 
     [Fact]
     public void Equality_PlayAndCubeKeys_NeverEqual()
     {
         // Same position facts; the kind discriminant (dice presence) splits them.
-        var play = Derive(PlayDecision(
+        var play = ProblemKey.From(PlayDecision(
             session: Match(5, 2), cubeSize: 2, cubeOwner: CubeOwner.OnRoll));
-        var cube = Derive(CubeDecision());
+        var cube = ProblemKey.From(CubeDecision());
 
         Assert.NotEqual(play, cube);
     }
@@ -202,7 +196,7 @@ public class ProblemKeyTests
     [Fact]
     public void Equality_NullHandling()
     {
-        var key = Derive(PlayDecision());
+        var key = ProblemKey.From(PlayDecision());
 
         Assert.False(key.Equals(null));
         Assert.False(key == null);
@@ -218,19 +212,19 @@ public class ProblemKeyTests
     [Fact]
     public void CanonicalForm_PlayKey_Pinned()
     {
-        Assert.Equal(PinnedPlayKey, Derive(PlayDecision()).ToString());
+        Assert.Equal(PinnedPlayKey, ProblemKey.From(PlayDecision()).ToString());
     }
 
     [Fact]
     public void CanonicalForm_CubeKey_Pinned()
     {
-        Assert.Equal(PinnedCubeKey, Derive(CubeDecision()).ToString());
+        Assert.Equal(PinnedCubeKey, ProblemKey.From(CubeDecision()).ToString());
     }
 
     [Fact]
     public void CanonicalForm_CrawfordPlayKey_Pinned()
     {
-        var key = Derive(PlayDecision(
+        var key = ProblemKey.From(PlayDecision(
             session: Match(1, 3, isCrawford: true), dice: [5, 2]));
 
         Assert.Equal(PinnedCrawfordPlayKey, key.ToString());
@@ -239,8 +233,8 @@ public class ProblemKeyTests
     [Fact]
     public void CanonicalForm_MoneyPlayKey_Pinned()
     {
-        var jacoby = Derive(MoneyPlay(isJacoby: true));
-        var noJacoby = Derive(MoneyPlay(isJacoby: false));
+        var jacoby = ProblemKey.From(MoneyPlay(isJacoby: true));
+        var noJacoby = ProblemKey.From(MoneyPlay(isJacoby: false));
 
         Assert.Equal(PinnedMoneyPlayKeyJacoby, jacoby.ToString());
         Assert.Equal(PinnedMoneyPlayKeyNoJacoby, noJacoby.ToString());
@@ -251,7 +245,7 @@ public class ProblemKeyTests
     {
         // The suffix rides the score field, so it is orthogonal to the kind
         // discriminant: a money cube key carries it and still has no dice.
-        var key = Derive(CubeDecision(session: Money(true)));
+        var key = ProblemKey.From(CubeDecision(session: Money(true)));
 
         Assert.Equal(PinnedMoneyCubeKey, key.ToString());
         Assert.True(key.IsCubeDecision);
@@ -262,14 +256,14 @@ public class ProblemKeyTests
     {
         // Producers stamp dice in rolled order; the key carries them
         // canonically unordered — 1-3 and 3-1 are the same problem.
-        Assert.Equal(Derive(PlayDecision(dice: [1, 3])), Derive(PlayDecision(dice: [3, 1])));
+        Assert.Equal(ProblemKey.From(PlayDecision(dice: [1, 3])), ProblemKey.From(PlayDecision(dice: [3, 1])));
     }
 
     [Fact]
     public void CanonicalForm_KindDiscriminant()
     {
-        Assert.False(Derive(PlayDecision()).IsCubeDecision);
-        Assert.True(Derive(CubeDecision()).IsCubeDecision);
+        Assert.False(ProblemKey.From(PlayDecision()).IsCubeDecision);
+        Assert.True(ProblemKey.From(CubeDecision()).IsCubeDecision);
     }
 
     // -----------------------------------------------------------------------
@@ -279,7 +273,7 @@ public class ProblemKeyTests
     [Fact]
     public void RoundTrip_PlayKey()
     {
-        var derived = Derive(PlayDecision());
+        var derived = ProblemKey.From(PlayDecision());
         var parsed = ProblemKey.Parse(derived.ToString());
 
         Assert.Equal(derived, parsed);
@@ -290,7 +284,7 @@ public class ProblemKeyTests
     [Fact]
     public void RoundTrip_CubeKey()
     {
-        var derived = Derive(CubeDecision());
+        var derived = ProblemKey.From(CubeDecision());
         var parsed = ProblemKey.Parse(derived.ToString());
 
         Assert.Equal(derived, parsed);
@@ -316,7 +310,7 @@ public class ProblemKeyTests
         // equal key, same kind.
         foreach (bool jacoby in new[] { true, false })
         {
-            var derived = Derive(MoneyPlay(isJacoby: jacoby));
+            var derived = ProblemKey.From(MoneyPlay(isJacoby: jacoby));
             var parsed = ProblemKey.Parse(derived.ToString());
 
             Assert.Equal(derived, parsed);
@@ -360,7 +354,7 @@ public class ProblemKeyTests
     //
     //  Pinned contract: the parse door accepts only the exact canonical
     //  spelling (deliberate divergence from DiceRoll's lenient parse), and
-    //  applies the same fact validation as TryDerive.
+    //  holds the facts it reads to the no-key rung, which only text reaches.
     // -----------------------------------------------------------------------
 
     [Theory]
@@ -400,7 +394,8 @@ public class ProblemKeyTests
     }
 
     [Theory]
-    // Fact validation at the string door — same rungs as TryDerive.
+    // The no-key rung, the parse door's alone: a record keeps each rule by
+    // its construction, its board's more strictly (halheinrich/backgammon#273).
     [InlineData(EmptyBoardToken + "/7a7/1c/31")]            // empty board
     [InlineData("0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,3,0/7a7/1c/31")]    // 16 on-roll checkers
     [InlineData("0,-3,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0/7a7/1c/31")]    // 16 opponent checkers
@@ -423,7 +418,7 @@ public class ProblemKeyTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void TryDerive_IgnoresProvenanceXgidAndDescriptive()
+    public void From_IgnoresProvenanceXgidAndDescriptive()
     {
         // The game and move number are the Id's (halheinrich/backgammon#124),
         // so the Id is what differs in them now.
@@ -439,11 +434,11 @@ public class ProblemKeyTests
                 opponentName: "Dave",
                 isStandardStart: null));
 
-        Assert.Equal(Derive(a), Derive(b));
+        Assert.Equal(ProblemKey.From(a), ProblemKey.From(b));
     }
 
     [Fact]
-    public void TryDerive_CollapseCase_SameAwayDifferentMatchLength_EqualKeys()
+    public void From_CollapseCase_SameAwayDifferentMatchLength_EqualKeys()
     {
         // Spec §1 consequence, POSITIVE fixture: 3-away/2-away is the same
         // problem whether the match is to 7 or to 11 — match length is
@@ -455,11 +450,11 @@ public class ProblemKeyTests
         var longMatch = PlayDecision(
             session: TestRecords.MatchSession(length: 11, onRollNeeds: 3, opponentNeeds: 2));
 
-        Assert.Equal(Derive(shortMatch), Derive(longMatch));
+        Assert.Equal(ProblemKey.From(shortMatch), ProblemKey.From(longMatch));
     }
 
     [Fact]
-    public void TryDerive_CollapseCase_MirrorTurnDuplicates_EqualKeys()
+    public void From_CollapseCase_MirrorTurnDuplicates_EqualKeys()
     {
         // Spec §1 consequence, POSITIVE fixture: the same problem recorded
         // with the seats swapped presents identical on-roll-relative facts —
@@ -472,18 +467,20 @@ public class ProblemKeyTests
             id: new XgDecisionId("m.xg", Game: 5, MoveNumber: 11, IsCube: true),
             descriptive: TestRecords.Descriptive(onRollName: "Bob", opponentName: "Alice"));
 
-        Assert.Equal(Derive(seatsA), Derive(seatsB));
+        Assert.Equal(ProblemKey.From(seatsA), ProblemKey.From(seatsB));
     }
 
     [Fact]
-    public void TryDerive_NullData_Throws()
+    public void From_NullRecord_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => ProblemKey.TryDerive(null!, out _));
+        Assert.Throws<ArgumentNullException>(() => ProblemKey.From(null!));
     }
 
     // -----------------------------------------------------------------------
-    //  The no-key rung — TryDerive returns false, never throws, on
-    //  malformed / degenerate / inconsistent facts
+    //  The no-key rung's cases — rewritten from the TryDerive pins: no
+    //  record reaches the rung now (halheinrich/backgammon#273), so each case
+    //  is pinned where it is refused — the record cannot be built, and its
+    //  key's text does not parse
     // -----------------------------------------------------------------------
 
     [Fact]
@@ -526,13 +523,14 @@ public class ProblemKeyTests
         WirePaths.AssertRefused<BgDecisionData>(document.ToJsonString());
     }
 
-    // The empty-board rung below was a TryDerive pin until a decision position
-    // came to hold a checker of each side (halheinrich/backgammon#273, Hal's
-    // ruling of 2026-09-27): a record can no longer stand on the empty board,
-    // or on one with a side borne off, so TryDerive never meets either. The
-    // key's text keeps its own rule, and the two part here: the empty board's
-    // text still does not parse, while a side borne off still does, so every
-    // statistics document that read before the ruling still reads.
+    // The empty-board rung below was a TryDerive pin until a decision
+    // position came to hold a checker of each side
+    // (halheinrich/backgammon#273, Hal's ruling of 2026-09-27): a record can
+    // no longer stand on the empty board, or on one with a side borne off, so
+    // the derivation never meets either. The key's text keeps its own rule,
+    // and the two part here: the empty board's text still does not parse,
+    // while a side borne off still does, so every statistics document that
+    // read before the ruling still reads.
 
     [Fact]
     public void EmptyBoard_CannotBeBuilt_AndItsKeyDoesNotParse()
@@ -568,7 +566,7 @@ public class ProblemKeyTests
 
     // The four malformed-board rungs below were TryDerive pins until the
     // board became a BoardPosition: a record can no longer hold a malformed
-    // board, so TryDerive never meets one. Each is rewritten to pin the
+    // board, so the derivation never meets one. Each is rewritten to pin the
     // refusal at the two doors that remain — the board's own (a record
     // cannot be built with it) and the key's parse door (a key string
     // spelling it yields no key) — against the same key with the standard
@@ -637,9 +635,9 @@ public class ProblemKeyTests
 
     // The score rungs below were TryDerive pins until money and match became
     // the session's kinds (halheinrich/backgammon#273): a record can no longer
-    // hold such a score, so TryDerive never meets one. Each is rewritten, as
-    // the malformed boards were, to pin the refusal at the two doors that
-    // remain — the session's own and the key's parse door.
+    // hold such a score, so the derivation never meets one. Each is
+    // rewritten, as the malformed boards were, to pin the refusal at the two
+    // doors that remain — the session's own and the key's parse door.
 
     [Theory]
     [InlineData(-1, 7)]
@@ -705,15 +703,16 @@ public class ProblemKeyTests
     //  amended 2026-08-20, halheinrich/backgammon#120)
     //
     //  Three postures, pinned: money keys spell the fact and split on it;
-    //  match keys ignore it and stay byte-identical to v2; a money record
-    //  that does not carry it gets no key.
+    //  match keys ignore it and stay byte-identical to v2; and every money
+    //  record states it, so none is left without a key for want of it (the
+    //  rung that withheld one is gone, halheinrich/backgammon#273).
     // -----------------------------------------------------------------------
 
     [Fact]
     public void Jacoby_MoneyKeys_ToggleSplitsIdentity()
     {
-        var jacoby = Derive(MoneyPlay(isJacoby: true));
-        var noJacoby = Derive(MoneyPlay(isJacoby: false));
+        var jacoby = ProblemKey.From(MoneyPlay(isJacoby: true));
+        var noJacoby = ProblemKey.From(MoneyPlay(isJacoby: false));
 
         Assert.NotEqual(jacoby, noJacoby);
         Assert.NotEqual(jacoby.GetHashCode(), noJacoby.GetHashCode());
@@ -723,8 +722,8 @@ public class ProblemKeyTests
     public void Jacoby_MoneyCubeKeys_ToggleSplitsIdentity()
     {
         Assert.NotEqual(
-            Derive(CubeDecision(session: Money(true))),
-            Derive(CubeDecision(session: Money(false))));
+            ProblemKey.From(CubeDecision(session: Money(true))),
+            ProblemKey.From(CubeDecision(session: Money(false))));
     }
 
     [Fact]
@@ -753,13 +752,13 @@ public class ProblemKeyTests
         // Jacoby fact to vary.
         Assert.Equal(
             PinnedPlayKey,
-            Derive(PlayDecision()).ToString());
+            ProblemKey.From(PlayDecision()).ToString());
         Assert.Equal(
             PinnedCubeKey,
-            Derive(CubeDecision()).ToString());
+            ProblemKey.From(CubeDecision()).ToString());
         Assert.Equal(
             PinnedCrawfordPlayKey,
-            Derive(PlayDecision(session: Match(1, 3, isCrawford: true), dice: [5, 2])).ToString());
+            ProblemKey.From(PlayDecision(session: Match(1, 3, isCrawford: true), dice: [5, 2])).ToString());
     }
 
     [Fact]
@@ -795,7 +794,7 @@ public class ProblemKeyTests
             int crawfordJacoby = int.Parse(record.Xgid.Split(':')[7], CultureInfo.InvariantCulture);
 
             Assert.Equal(isJacoby, (crawfordJacoby & 1) == 1);
-            Assert.EndsWith(isJacoby ? "/0a0j/1c/31" : "/0a0nj/1c/31", Derive(record).ToString());
+            Assert.EndsWith(isJacoby ? "/0a0j/1c/31" : "/0a0nj/1c/31", ProblemKey.From(record).ToString());
         }
     }
 
@@ -834,7 +833,7 @@ public class ProblemKeyTests
     [Fact]
     public void Json_MoneyKeyRoundTripsWithSuffix()
     {
-        var key = Derive(MoneyPlay(isJacoby: true));
+        var key = ProblemKey.From(MoneyPlay(isJacoby: true));
 
         string json = JsonSerializer.Serialize(key);
         Assert.Equal($"\"{PinnedMoneyPlayKeyJacoby}\"", json);
@@ -848,20 +847,20 @@ public class ProblemKeyTests
     [Fact]
     public void CompareTo_MatchesOrdinalStringOrder()
     {
-        var play = Derive(PlayDecision());
-        var cube = Derive(CubeDecision());
+        var play = ProblemKey.From(PlayDecision());
+        var cube = ProblemKey.From(CubeDecision());
 
         Assert.Equal(
             Math.Sign(string.CompareOrdinal(play.ToString(), cube.ToString())),
             Math.Sign(play.CompareTo(cube)));
-        Assert.Equal(0, play.CompareTo(Derive(PlayDecision())));
+        Assert.Equal(0, play.CompareTo(ProblemKey.From(PlayDecision())));
         Assert.True(play.CompareTo(null) > 0);
     }
 
     [Fact]
     public void CompareTo_NonGeneric_WrongTypeThrows()
     {
-        IComparable key = Derive(PlayDecision());
+        IComparable key = ProblemKey.From(PlayDecision());
 
         Assert.Equal(1, key.CompareTo(null));
         Assert.Throws<ArgumentException>(() => key.CompareTo("a string"));
@@ -872,9 +871,9 @@ public class ProblemKeyTests
     {
         var keys = new List<ProblemKey>
         {
-            Derive(CubeDecision()),
-            Derive(PlayDecision()),
-            Derive(PlayDecision(dice: [6, 5])),
+            ProblemKey.From(CubeDecision()),
+            ProblemKey.From(PlayDecision()),
+            ProblemKey.From(PlayDecision(dice: [6, 5])),
         };
         var expected = keys.OrderBy(k => k.ToString(), StringComparer.Ordinal).ToList();
 
@@ -890,7 +889,7 @@ public class ProblemKeyTests
     [Fact]
     public void Json_RoundTripsAsCanonicalString()
     {
-        var key = Derive(PlayDecision());
+        var key = ProblemKey.From(PlayDecision());
 
         string json = JsonSerializer.Serialize(key);
         Assert.Equal($"\"{PinnedPlayKey}\"", json);
@@ -921,8 +920,8 @@ public class ProblemKeyTests
         // converter's property-name overloads must round-trip it.
         var map = new Dictionary<ProblemKey, int>
         {
-            [Derive(PlayDecision())] = 3,
-            [Derive(CubeDecision())] = 5,
+            [ProblemKey.From(PlayDecision())] = 3,
+            [ProblemKey.From(CubeDecision())] = 5,
         };
 
         string json = JsonSerializer.Serialize(map);
@@ -930,8 +929,8 @@ public class ProblemKeyTests
 
         Assert.NotNull(back);
         Assert.Equal(2, back.Count);
-        Assert.Equal(3, back[Derive(PlayDecision())]);
-        Assert.Equal(5, back[Derive(CubeDecision())]);
+        Assert.Equal(3, back[ProblemKey.From(PlayDecision())]);
+        Assert.Equal(5, back[ProblemKey.From(CubeDecision())]);
     }
 
     // -----------------------------------------------------------------------
@@ -954,20 +953,20 @@ public class ProblemKeyTests
             CultureInfo.CurrentCulture = culture;
             CultureInfo.CurrentUICulture = culture;
 
-            Assert.Equal(PinnedPlayKey, Derive(PlayDecision()).ToString());
-            Assert.Equal(PinnedCubeKey, Derive(CubeDecision()).ToString());
+            Assert.Equal(PinnedPlayKey, ProblemKey.From(PlayDecision()).ToString());
+            Assert.Equal(PinnedCubeKey, ProblemKey.From(CubeDecision()).ToString());
             Assert.Equal(
                 PinnedCrawfordPlayKey,
-                Derive(PlayDecision(
+                ProblemKey.From(PlayDecision(
                     session: Match(1, 3, isCrawford: true), dice: [5, 2]))
                     .ToString());
 
             Assert.Equal(
-                PinnedMoneyPlayKeyJacoby, Derive(MoneyPlay(isJacoby: true)).ToString());
+                PinnedMoneyPlayKeyJacoby, ProblemKey.From(MoneyPlay(isJacoby: true)).ToString());
             Assert.Equal(
-                PinnedMoneyPlayKeyNoJacoby, Derive(MoneyPlay(isJacoby: false)).ToString());
+                PinnedMoneyPlayKeyNoJacoby, ProblemKey.From(MoneyPlay(isJacoby: false)).ToString());
 
-            Assert.Equal(ProblemKey.Parse(PinnedPlayKey), Derive(PlayDecision()));
+            Assert.Equal(ProblemKey.Parse(PinnedPlayKey), ProblemKey.From(PlayDecision()));
             Assert.Equal(PinnedCubeKey, ProblemKey.Parse(PinnedCubeKey).ToString());
             Assert.Equal(
                 PinnedMoneyPlayKeyJacoby,

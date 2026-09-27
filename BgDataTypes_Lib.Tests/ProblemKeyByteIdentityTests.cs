@@ -112,10 +112,7 @@ public class ProblemKeyByteIdentityTests
     {
         var derived = new Dictionary<string, string>();
         foreach (var (id, record) in Sweep())
-        {
-            Assert.True(ProblemKey.TryDerive(record, out var key), $"{id}: no key");
-            derived.Add(id, key.ToString());
-        }
+            derived.Add(id, ProblemKey.From(record).ToString());
 
         Assert.Equal(AtCa83ab1.Count, derived.Count);
         foreach (var (id, text) in AtCa83ab1)

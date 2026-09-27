@@ -48,7 +48,7 @@ namespace BgDataTypes_Lib;
 /// record. <see cref="Mop"/> refuses a board breaking it, as the category's
 /// other rules refuse theirs; a <see cref="DecisionRow"/> read back holds
 /// its board to it too, since a row is a record's projection. Every record
-/// therefore has a <see cref="ProblemKey"/>.
+/// therefore has a <see cref="ProblemKey"/> (<see cref="ProblemKey.From"/>).
 /// </para>
 /// </remarks>
 public class PositionData
