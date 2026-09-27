@@ -45,10 +45,12 @@ namespace BgDataTypes_Lib;
 /// records the position a final bear-off leaves), and for any other working
 /// value. So both decision kinds inherit it, and a position with a side
 /// borne off may be read from a source file but never becomes a decision
-/// record. <see cref="Mop"/> refuses a board breaking it, as the category's
-/// other rules refuse theirs; a <see cref="DecisionRow"/> read back holds
-/// its board to it too, since a row is a record's projection. Every record
-/// therefore has a <see cref="ProblemKey"/> (<see cref="ProblemKey.From"/>).
+/// record. <see cref="IsDecisionPosition(BoardPosition)"/> states it, and
+/// answers it without throwing for a producer telling such a position apart.
+/// <see cref="Mop"/> refuses a board it rejects, as the category's other
+/// rules refuse theirs; a <see cref="DecisionRow"/> read back holds its board
+/// to it too, since a row is a record's projection. Every record therefore
+/// has a <see cref="ProblemKey"/> (<see cref="ProblemKey.From"/>).
 /// </para>
 /// </remarks>
 public class PositionData
@@ -94,7 +96,9 @@ public class PositionData
     /// </summary>
     /// <exception cref="ArgumentException">
     /// Thrown on init when either side has no checker on the board or the
-    /// bar — the empty board among them.
+    /// bar — the empty board among them. To ask without the refusal, as a
+    /// producer reading outside data does, see
+    /// <see cref="IsDecisionPosition(BoardPosition)"/>.
     /// </exception>
     public required BoardPosition Mop
     {
@@ -103,7 +107,7 @@ public class PositionData
         {
             try
             {
-                if (!BoardHolds(value))
+                if (!IsDecisionPosition(value))
                     throw new ArgumentException(BoardMessage, nameof(Mop));
             }
             catch (ArgumentException fault) when (_read)
@@ -119,10 +123,32 @@ public class PositionData
         "A decision position has a checker of each side on the board or the bar: a side with none has borne off all its checkers, so the game is over and no decision is made.";
 
     /// <summary>
-    /// Whether a decision can be made on <paramref name="board"/>: it holds a
-    /// checker of each side, on a point or on the bar (see the class remarks).
+    /// Whether a decision can be made on <paramref name="board"/>: whether it
+    /// holds a checker of each side, on a point or on the bar (see the class
+    /// remarks). The non-throwing form of <see cref="Mop"/>'s guard, as
+    /// <see cref="BoardPosition.TryCreate(ReadOnlySpan{int}, out BoardPosition)"/>
+    /// is of <see cref="BoardPosition"/>'s constructor: a producer reading
+    /// outside data asks it before building a record, and passes by a
+    /// position that is not a decision — a terminal one, where a side has
+    /// borne off all its checkers — without provoking the refusal.
     /// </summary>
-    internal static bool BoardHolds(BoardPosition board)
+    /// <remarks>
+    /// The rule's one statement: <see cref="Mop"/>'s guard and a
+    /// <see cref="DecisionRow"/>'s read-back ask this same predicate, so its
+    /// answer and theirs cannot disagree — <see langword="true"/> exactly
+    /// when <see cref="Mop"/> accepts the board. It answers for every
+    /// position, the empty board included, and never throws. The answer does
+    /// not depend on the board's frame: a board and its
+    /// <see cref="BoardPosition.Flipped"/> view answer alike, since the flip
+    /// only swaps which side is which.
+    /// </remarks>
+    /// <param name="board">Any position, in either player's frame.</param>
+    /// <returns>
+    /// <see langword="true"/> when each side has at least one checker on a
+    /// point or on the bar; <see langword="false"/> when either side has none
+    /// — the empty board among them.
+    /// </returns>
+    public static bool IsDecisionPosition(BoardPosition board)
     {
         Span<int> counts = stackalloc int[BoardPosition.SlotCount];
         board.CopyTo(counts);

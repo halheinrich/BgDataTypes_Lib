@@ -450,7 +450,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             _ when !StatedText.Holds(Xgid) => StatedText.Message(nameof(Xgid)),
             _ when !StatedText.Holds(Player) => StatedText.Message(nameof(Player)),
             _ when !StatedText.Holds(AnalysisDepth) => StatedText.Message(nameof(AnalysisDepth)),
-            _ when !PositionData.BoardHolds(Board) => PositionData.BoardMessage,
+            _ when !PositionData.IsDecisionPosition(Board) => PositionData.BoardMessage,
             _ => SessionColumnsFault(),
         };
         if (fault is not null)

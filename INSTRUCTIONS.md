@@ -411,20 +411,48 @@ checked again.
 one of the opponent's, each on a point or on the bar. A side with none has
 borne off all fifteen, so the game is over and no decision is made; the
 empty board is the case where neither has one. The rule is the category's,
-stated once on `PositionData` (its remarks, and the internal `BoardHolds`
-and `BoardMessage` its guard and the row's read-back share), so both
-decision kinds inherit it. It is refused as the category's other rules are:
-by code with an `ArgumentException` naming `Mop`, and by a document with a
-`JsonException` carrying it, read as the category or as a record of either
-kind. A row read back holds its `Board` to it too (see "DecisionRow").
-`BoardPosition` stays broad by the same ruling (see "BoardPosition"): XG
-and XGP data hold terminal positions — a transcription commonly records the
-position a final bear-off leaves — and such a position may be read from a
-source file but never becomes a decision record. So every record has a
-`ProblemKey`, and `ProblemKey.From` has no failure case (see
-"ProblemKey"). `PositionBoardRuleTests` pins each side, both, every
-construction path, and the edge: one checker left, on a point or on the
-bar.
+stated once on `PositionData` (its remarks, and the public
+`IsDecisionPosition` with the internal `BoardMessage`, which its guard and
+the row's read-back share), so both decision kinds inherit it. It is
+refused as the category's other rules are: by code with an
+`ArgumentException` naming `Mop`, and by a document with a `JsonException`
+carrying it, read as the category or as a record of either kind. A row read
+back holds its `Board` to it too (see "DecisionRow"). `BoardPosition` stays
+broad by the same ruling (see "BoardPosition"): XG and XGP data hold
+terminal positions — a transcription commonly records the position a final
+bear-off leaves — and such a position may be read from a source file but
+never becomes a decision record. So every record has a `ProblemKey`, and
+`ProblemKey.From` has no failure case (see "ProblemKey").
+
+**`PositionData.IsDecisionPosition(board)` is the guard's non-throwing
+form** (`halheinrich/backgammon#273`, Hal's ruling of 2026-09-27), as
+`BoardPosition.TryCreate` is the constructor's. A producer reading outside
+data asks it before building a record and passes by a position that is not
+a decision — ordinary filtering, not a fault — without restating the rule
+or catching the guard's `ArgumentException`, which this library throws for
+other faults too. It is the rule's one statement: the `Mop` guard and the
+row's read-back call it, so it answers `true` exactly when the category
+accepts the board. It never throws, the empty board included, and its
+answer does not depend on the board's frame (a board and its `Flipped()`
+view answer alike). Design points:
+
+- **It lives on `PositionData`, not `BoardPosition`.** The question is the
+  category's, and `BoardPosition` stays broad (see "BoardPosition"); a
+  member there would put the category's rule on the value. A static on the
+  category reads as the category's question, and needs no record to ask it:
+  a producer asks it with only the board in hand.
+- **It answers admissibility, not facts to combine.** A consumer asks it
+  directly; no per-side counts are published for a consumer to rebuild the
+  answer from, so the rule has no second statement to drift.
+- **The message stays internal.** A consumer that filters has no refusal to
+  report; the guard's and the read-back's refusals carry it.
+
+`PositionBoardRuleTests` pins each side, both, every construction path, and
+the edge: one checker left, on a point or on the bar, and a side whose one
+checker is on the bar while the other has none. It pins `IsDecisionPosition`
+against the same boards and ordinary positions: its answer directly, its
+agreement with the guard and with a row's read-back on both paths, that it
+never throws, and that the frame does not change it.
 
 ### Stored or derived
 
@@ -784,7 +812,9 @@ needs before touching it:
   invariant admits the empty board and a side borne off: a terminal position
   is a position, and a working value may be any. Whether a decision can be
   made on a position is a stricter question, and it is `PositionData`'s (see
-  "Data categories"), not this type's. Do not tighten this invariant to it.
+  "Data categories"), not this type's; so is its test,
+  `PositionData.IsDecisionPosition`. Do not tighten this invariant to it,
+  and do not add a member here that asks it.
 - **Representation.** The counts are stored inline as 26 `sbyte`s (an
   `[InlineArray]`), which the invariant makes lossless; the storage is
   private and every read widens to `int`. Equality is one 26-byte span
@@ -2166,7 +2196,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
 public class PositionData    { /* required init-only properties per the categories table; Mop is a BoardPosition with a checker of each side; Session a MoneySession or MatchSession */
                                [JsonIgnore] public int OnRollPipCount { get; }    /* Mop's, by BoardState's pip rule */
-                               [JsonIgnore] public int OpponentPipCount { get; } }
+                               [JsonIgnore] public int OpponentPipCount { get; }
+                               public static bool IsDecisionPosition(BoardPosition board); /* Mop's guard, never throwing; the rule's one statement */ }
 public class DescriptiveData { /* init-only properties per the categories table; OnRollName?, OpponentName?, Title?, Date?, Event?, IsStandardStart?, Comment? */ }
 public class PlayCandidate   { /* required init-only properties per Architecture table; every stored number finite; the depth facts and five stored probabilities nullable */
                                [JsonIgnore] public string Notation { get; }  /* Play.ToNotation(); never stored */

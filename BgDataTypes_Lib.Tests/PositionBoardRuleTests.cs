@@ -17,7 +17,9 @@ namespace BgDataTypes_Lib.Tests;
 /// with a <see cref="JsonException"/> carrying that exception, on both paths;
 /// and from a row of either kind read back, with a <see cref="JsonException"/>
 /// stating the rule. The bar counts as the board: a side whose one checker is
-/// on the bar has a checker.
+/// on the bar has a checker. <see cref="PositionData.IsDecisionPosition"/> is
+/// the rule's public, non-throwing statement: it answers each board as the
+/// guard and the row's read-back do, and never throws.
 /// </summary>
 public class PositionBoardRuleTests
 {
@@ -31,11 +33,16 @@ public class PositionBoardRuleTests
         ["no checker of the opponent"] = new(
             [0, 3, 3, 3, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
         ["no checker of either: the empty board"] = BoardPosition.Empty,
+        // The bar counts, but only for the side it holds: the other has none.
+        ["no checker of the opponent; the player on roll's one, on the bar"] = new(
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
+        ["no checker of the player on roll; the opponent's one, on the bar"] = new(
+            [-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     };
 
     /// <summary>
-    /// Boards a decision position accepts, at the rule's edge: a side with one
-    /// checker left, on a point or on the bar.
+    /// Boards a decision position accepts: at the rule's edge, a side with one
+    /// checker left, on a point or on the bar; and ordinary positions.
     /// </summary>
     private static readonly Dictionary<string, BoardPosition> AcceptedBoards = new()
     {
@@ -46,11 +53,20 @@ public class PositionBoardRuleTests
         ["the opponent's one checker, on the bar"] = new(
             [-1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
         ["the standard start"] = BoardPosition.Standard,
+        ["the Nackgammon start"] = BoardPosition.Nackgammon,
+        // Fifteen each, one of each side on the bar.
+        ["a middle game, a checker of each side on the bar"] = new(
+            [-1, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 4, 0, 0, 0, -3, 0, -4, 0, 0, 0, 0, 2, 1]),
     };
 
     public static TheoryData<string> Refused => [.. RefusedBoards.Keys];
 
     public static TheoryData<string> Accepted => [.. AcceptedBoards.Keys];
+
+    public static TheoryData<string> Every => [.. RefusedBoards.Keys, .. AcceptedBoards.Keys];
+
+    private static BoardPosition Board(string name) =>
+        RefusedBoards.TryGetValue(name, out var board) ? board : AcceptedBoards[name];
 
     private static JsonNode Json(BoardPosition board) => JsonSerializer.SerializeToNode(board, WirePaths.Context)!;
 
@@ -183,6 +199,103 @@ public class PositionBoardRuleTests
                 Assert.Equal(mop, WirePaths.RoundTrip(record.Position, options).Mop);
                 Assert.Equal(mop, WirePaths.RoundTrip(TestRecords.Row(record), options).Board);
             }
+        }
+    }
+
+    // ── The public test: the guard's non-throwing form ───────────
+
+    [Theory]
+    [MemberData(nameof(Refused))]
+    public void IsDecisionPosition_IsFalse_ForABoardWithoutACheckerOfEachSide(string board)
+    {
+        Assert.False(PositionData.IsDecisionPosition(RefusedBoards[board]));
+    }
+
+    [Theory]
+    [MemberData(nameof(Accepted))]
+    public void IsDecisionPosition_IsTrue_AtTheEdge_AndForOrdinaryPositions(string board)
+    {
+        Assert.True(PositionData.IsDecisionPosition(AcceptedBoards[board]));
+    }
+
+    [Theory]
+    [MemberData(nameof(Every))]
+    public void IsDecisionPosition_AgreesWithTheGuard_AndWithTheRowsReadBack(string board)
+    {
+        // The test is true exactly when the category accepts the board, and
+        // exactly when a row of either kind stating it reads back.
+        var mop = Board(board);
+        bool answer = PositionData.IsDecisionPosition(mop);
+
+        Assert.Equal(answer, GuardAccepts(mop));
+        foreach (var record in new BgDecisionData[] { TestRecords.CheckerPlay(), TestRecords.Cube() })
+        {
+            var document = WirePaths.Document(TestRecords.Row(record));
+            document["Board"] = Json(mop);
+            string json = document.ToJsonString();
+
+            foreach (var (path, options) in WirePaths.Both)
+                Assert.True(answer == RowReadsBack(json, options), $"a {record.Kind} row on the {path} path");
+        }
+    }
+
+    [Fact]
+    public void IsDecisionPosition_NeverThrows_TheEmptyBoardIncluded()
+    {
+        Assert.Null(Record.Exception(() => PositionData.IsDecisionPosition(default)));
+        Assert.False(PositionData.IsDecisionPosition(default));
+        Assert.False(PositionData.IsDecisionPosition(BoardPosition.Empty));
+
+        for (int seed = 0; seed < 50; seed++)
+        {
+            var start = BoardPosition.Bg960(seed);
+            Assert.Null(Record.Exception(() => PositionData.IsDecisionPosition(start)));
+            Assert.Null(Record.Exception(() => PositionData.IsDecisionPosition(start.Flipped())));
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Every))]
+    public void IsDecisionPosition_DoesNotDependOnTheFrame(string board)
+    {
+        // The flip swaps which side is which, so a board in either player's
+        // frame answers alike, as its docs state.
+        var mop = Board(board);
+
+        Assert.Equal(PositionData.IsDecisionPosition(mop), PositionData.IsDecisionPosition(mop.Flipped()));
+    }
+
+    /// <summary>
+    /// Whether the category accepts <paramref name="mop"/>: its guard's
+    /// refusal, and only that, answers no.
+    /// </summary>
+    private static bool GuardAccepts(BoardPosition mop)
+    {
+        try
+        {
+            _ = TestRecords.Position(mop: mop);
+            return true;
+        }
+        catch (ArgumentException refusal) when (refusal.ParamName == "Mop" && refusal.Message.Contains(PositionData.BoardMessage))
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether a row document reads back: a refusal stating the rule, and only
+    /// that, answers no.
+    /// </summary>
+    private static bool RowReadsBack(string json, JsonSerializerOptions options)
+    {
+        try
+        {
+            _ = JsonSerializer.Deserialize<DecisionRow>(json, options);
+            return true;
+        }
+        catch (JsonException refusal) when (refusal.Message == PositionData.BoardMessage)
+        {
+            return false;
         }
     }
 }
