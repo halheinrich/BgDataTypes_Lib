@@ -24,18 +24,20 @@ namespace BgDataTypes_Lib;
 /// <item><description>each bar holds only its own side's checkers — the
 /// opponent's bar (index 0) a count of 0 or less, the on-roll player's bar
 /// (index 25) a count of 0 or more;</description></item>
-/// <item><description>each side has at most 15 checkers on the board — the
-/// positive counts sum to at most 15, and so do the magnitudes of the
-/// negative counts.</description></item>
+/// <item><description>each side has at most <see cref="CheckersPerSide"/>
+/// checkers on the board, its bar included — the positive counts sum to at
+/// most that, and so do the magnitudes of the negative counts.</description></item>
 /// </list>
 /// <para>
-/// Fewer than 15 is well-formed, since borne-off checkers are not tracked, so
-/// the empty board is a position: every count 0, which is
-/// <see cref="Empty"/> and <see langword="default"/>. The invariant is
-/// enforced wherever a position is built from outside data — the
-/// constructor and <see cref="TryCreate(ReadOnlySpan{int}, out BoardPosition)"/>
-/// refuse counts that break it —
-/// so no instance can hold a malformed board.
+/// Fewer is well-formed: a side's other checkers are borne off, which a
+/// position does not store but derives (<see cref="OnRollBorneOffCount"/>,
+/// <see cref="OpponentBorneOffCount"/>). So the empty board is a position —
+/// every count 0, which is <see cref="Empty"/> and
+/// <see langword="default"/> — and so is a terminal one, where a side has
+/// borne off every checker. The invariant is enforced wherever a position
+/// is built from outside data — the constructor and
+/// <see cref="TryCreate(ReadOnlySpan{int}, out BoardPosition)"/> refuse
+/// counts that break it — so no instance can hold a malformed board.
 /// </para>
 /// <para>
 /// <b>Same position.</b> Two positions are equal exactly when all 26 counts
@@ -52,8 +54,8 @@ namespace BgDataTypes_Lib;
 /// searches by position. Generating the plays compares no positions — the
 /// generator avoids duplicates by construction. The counts are stored
 /// inline and narrowed, which the invariant makes lossless (no count
-/// exceeds 15 in magnitude); the storage is private and reads widen back to
-/// <see langword="int"/>.
+/// exceeds <see cref="CheckersPerSide"/> in magnitude); the storage is
+/// private and reads widen back to <see langword="int"/>.
 /// </para>
 /// <para>
 /// <b>The frame is the holder's to state.</b> A position does not record
@@ -75,8 +77,14 @@ public readonly struct BoardPosition :
     /// <summary>The number of slots: two bars and 24 points.</summary>
     internal const int SlotCount = 26;
 
-    /// <summary>The checkers each side owns; at most this many are on the board.</summary>
-    private const int CheckersPerSide = 15;
+    /// <summary>
+    /// The checkers each side has. A side has at most this many on the
+    /// board, its bar included, and has borne off the rest. The one statement
+    /// of the number: the invariant (see the type remarks) bounds each side
+    /// by it, and <see cref="OnRollBorneOffCount"/> and
+    /// <see cref="OpponentBorneOffCount"/> subtract from it.
+    /// </summary>
+    public const int CheckersPerSide = 15;
 
     private readonly Counts _counts;
 
@@ -372,6 +380,52 @@ public readonly struct BoardPosition :
     }
 
     /// <summary>
+    /// How many checkers the on-roll player has borne off:
+    /// <see cref="CheckersPerSide"/> less their checkers on the points and on
+    /// their bar (slot 25) — the positive counts. <b>Frame: this
+    /// position's.</b> The on-roll player is the player the frame belongs to
+    /// (see the type summary), so <c>p.Flipped().OpponentBorneOffCount</c>
+    /// is <c>p.OnRollBorneOffCount</c>.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the counts on each read and never stored, at no
+    /// allocation. It answers for every position and never throws: 0 when
+    /// all the side's checkers are on the board, and
+    /// <see cref="CheckersPerSide"/> when none is — a terminal position,
+    /// where the on-roll player has borne off every checker, and the empty
+    /// board.
+    /// </remarks>
+    public int OnRollBorneOffCount => CheckersPerSide - CheckersOnBoard().OnRoll;
+
+    /// <summary>
+    /// How many checkers the opponent has borne off:
+    /// <see cref="CheckersPerSide"/> less their checkers on the points and on
+    /// their bar (slot 0) — the negative counts, by magnitude. <b>Frame: this
+    /// position's</b>, as <see cref="OnRollBorneOffCount"/>'s, so
+    /// <c>p.Flipped().OnRollBorneOffCount</c> is
+    /// <c>p.OpponentBorneOffCount</c>.
+    /// </summary>
+    /// <remarks>
+    /// Derived as <see cref="OnRollBorneOffCount"/> is, on each read and
+    /// never stored, at no allocation. It answers for every position and
+    /// never throws: 0 when all the side's checkers are on the board, and
+    /// <see cref="CheckersPerSide"/> when none is — a terminal position,
+    /// where the opponent has borne off every checker, and the empty board.
+    /// </remarks>
+    public int OpponentBorneOffCount => CheckersPerSide - CheckersOnBoard().Opponent;
+
+    /// <summary>
+    /// Each side's checkers on this board, its bar included, by the one sum
+    /// the invariant bounds (<see cref="CheckersOnBoard(ReadOnlySpan{int})"/>).
+    /// </summary>
+    private (int OnRoll, int Opponent) CheckersOnBoard()
+    {
+        Span<int> counts = stackalloc int[SlotCount];
+        CopyTo(counts);
+        return CheckersOnBoard(counts);
+    }
+
+    /// <summary>
     /// This position seen from the other side — re-expressed in the other
     /// player's frame, as <see cref="BoardState.ApplyPlay"/> leaves a board
     /// at a turn boundary. Slot <c>i</c> takes the negated count of slot
@@ -468,17 +522,31 @@ public readonly struct BoardPosition :
         if (counts[SlotCount - 1] < 0)
             return $"The on-roll player's bar (slot {SlotCount - 1}) holds {-counts[SlotCount - 1]} of the opponent's checkers; it holds only the on-roll player's.";
 
+        var (onRoll, opponent) = CheckersOnBoard(counts);
+        if (onRoll > CheckersPerSide)
+            return $"The on-roll player has {onRoll} checkers on the board; a side has at most {CheckersPerSide}.";
+        if (opponent > CheckersPerSide)
+            return $"The opponent has {opponent} checkers on the board; a side has at most {CheckersPerSide}.";
+        return null;
+    }
+
+    /// <summary>
+    /// Each side's checkers on the 26 slots, its bar included: the on-roll
+    /// player's the sum of the positive counts, the opponent's the sum of the
+    /// negative counts' magnitudes. The one count of a side's checkers: the
+    /// invariant bounds it by <see cref="CheckersPerSide"/>, and the
+    /// borne-off counts subtract it from that. Callers bound each count's
+    /// magnitude first, so the sums cannot overflow.
+    /// </summary>
+    private static (int OnRoll, int Opponent) CheckersOnBoard(ReadOnlySpan<int> counts)
+    {
         int onRoll = 0, opponent = 0;
         foreach (int count in counts)
         {
             if (count > 0) onRoll += count;
             else opponent -= count;
         }
-        if (onRoll > CheckersPerSide)
-            return $"The on-roll player has {onRoll} checkers on the board; a side has at most {CheckersPerSide}.";
-        if (opponent > CheckersPerSide)
-            return $"The opponent has {opponent} checkers on the board; a side has at most {CheckersPerSide}.";
-        return null;
+        return (onRoll, opponent);
     }
 
     /// <summary>

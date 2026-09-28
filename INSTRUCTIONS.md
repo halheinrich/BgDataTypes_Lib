@@ -434,8 +434,10 @@ view answer alike). Design points:
   category reads as the category's question, and needs no record to ask it:
   a producer asks it with only the board in hand.
 - **It answers admissibility, not facts to combine.** A consumer asks it
-  directly; no per-side counts are published for a consumer to rebuild the
-  answer from, so the rule has no second statement to drift.
+  directly, never rebuilding the answer from the borne-off counts
+  `BoardPosition` publishes (a side with no checker on the board or the bar
+  has borne off all `CheckersPerSide`), so the rule has no second statement
+  to drift.
 - **The message stays internal.** A consumer that filters has no refusal to
   report; the guard's and the read-back's refusals carry it.
 
@@ -454,6 +456,7 @@ asked for it exhaustively). Derived, never stored:
 | Member | Derived from |
 |---|---|
 | `PositionData.OnRollPipCount`, `OpponentPipCount` | `Mop`, by `BoardState`'s one pip rule |
+| `BoardPosition.OnRollBorneOffCount`, `OpponentBorneOffCount` | the position's counts: `CheckersPerSide` less the side's checkers on the points and its bar (see "BoardPosition") |
 | `BgDecisionData.SourceFile`, `DecisionRow.SourceFile` | `Id.Filename` |
 | `PlayCandidate.DepthRank`, `CubeDecisionData.DepthRank` | `AnalysisMode` × `AnalysisLevel`, by the grid the producer used (internal `DepthTaxonomy`, moved here unchanged) |
 | `PlayCandidate.Depth`, `DepthAbbreviation`, and the cube analysis's | the typed depth facts — `AnalysisMode`, `AnalysisLevel`, `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — by the producer's grammar, moved here unchanged (`DepthTaxonomy`; see "The depth as typed facts") |
@@ -836,6 +839,31 @@ needs before touching it:
   board), which a test failure shows side by side. Deliberately no
   ordering, no text parsing, and no enumeration: it is a value, not a
   collection.
+- **Each side's borne-off count, derived** (halheinrich/backgammon#295).
+  `OnRollBorneOffCount` and `OpponentBorneOffCount` are `CheckersPerSide`
+  less the side's checkers on the points and its bar, derived from the
+  counts on each read and never stored. What each answers, and in which
+  frame, is on its doc comment; a position and its `Flipped()` view swap
+  the two. They answer for every position and never throw — the empty
+  board has every checker of both sides off, a terminal position every
+  checker of the side that has borne off — and allocate nothing.
+  `BorneOffCountTests` pins them.
+- **One number of checkers a side, public.** `CheckersPerSide` is the one
+  statement of the number: the invariant bounds each side by it and the
+  counts subtract from it, and both read a side's checkers through one
+  private sum, so a count cannot disagree with what the invariant admits.
+  It is public because the number is this library's fact: a consumer that
+  states a bound against it — how many checkers a side can have off, or on
+  one slot — reads it here rather than restating it.
+- **The counts' placement: here.** A side's checkers are the position's
+  fact, as the invariant is, and a terminal position has its counts though
+  no decision is made on it, so the counts are not `PositionData`'s. Nor
+  are they `BoardState`'s: a consumer holding a board reads them through
+  `ToPosition()`, which allocates nothing. They are two properties, as the
+  library pairs its other per-side facts (`PipCount` and
+  `OpponentPipCount`, `OnRollNeeds` and `OpponentNeeds`), rather than a
+  method taking a side: the library has no type naming the side on roll
+  and its opponent, and would need one for two members.
 
 ### BoardState
 
@@ -2302,6 +2330,7 @@ public struct Play                                // no equality: see BoardState
 public readonly struct BoardPosition :
     IEquatable<BoardPosition>, IEqualityOperators<BoardPosition, BoardPosition, bool>
 {
+    public const int CheckersPerSide = 15;                    // the one statement: the invariant's bound, the counts' total
     public BoardPosition(ReadOnlySpan<int> counts);           // malformed → ArgumentException
     public static bool TryCreate(ReadOnlySpan<int> counts, out BoardPosition position);
     public static BoardPosition Empty { get; }                // == default; well-formed
@@ -2310,6 +2339,8 @@ public readonly struct BoardPosition :
     public static BoardPosition Bg960(int? seed = null);      // random, symmetric, no blots
     public int this[int point] { get; }                       // slots 0–25
     public void CopyTo(Span<int> destination);                // at least 26 elements
+    public int OnRollBorneOffCount { get; }                   // CheckersPerSide less the side's on the board and its bar:
+    public int OpponentBorneOffCount { get; }                 //   derived, never throwing; Flipped() swaps the two
     public BoardPosition Flipped();                           // the other side's view; the one flip rule
     public bool Equals(BoardPosition other);                  // + ==, !=, Equals(object), GetHashCode
     public override string ToString();                        // "1:-2 6:5 …", or "empty"
