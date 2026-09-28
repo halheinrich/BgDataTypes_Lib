@@ -136,16 +136,9 @@ test-support project" under Architecture.
 **`BgDataTypes_Lib.Tests/`** — xUnit, one test class per type or per
 behaviour area of a type (`ProblemKeyTests`, `BoardStateTests`,
 `PipCountTests`, `RaceTests`, the `*SerializationTests` pair, …). Fixtures
-are constructed in code — pure data types need no corpus, so gating tests
-never reach into the umbrella `TestData/`. The one deliberate exception is
-local-only: `TooGoodCorpusExerciseTests` links `TestData/BgDecisionData/`
-into its output and checks the Too Good predicate is exercised by real
-converted data (SPEC-scoring §3's acceptance requirement,
-halheinrich/backgammon#86) and that no corpus position derives the retired
-Too Good / Take pair (the 2026-09-02 amendment,
-halheinrich/backgammon#187) — vacuous on an empty or absent corpus by
-design, per the AGENTS.md TestData rule, so it cannot gate and nothing on
-CI depends on it.
+are constructed in code — pure data types need no corpus, so no test reads
+the umbrella `TestData/` (the one that did is retired; see "Cube-decision
+scoring on CubeDecisionData").
 
 Every pin that says a path allocates nothing measures through
 `AllocationProbe`, in the test-support project, so this suite's pins and
@@ -317,7 +310,7 @@ Design points:
   `BgDecisionData`/`DecisionRow` shape in any member (BgQuiz's e2e fixtures
   are `.xgp` files, converted at run time), and none in the local
   `TestData` (its `BgDecisionData/` corpus is a different wrapper shape,
-  read leniently by `TooGoodCorpusExerciseTests`).
+  generated output that no test here reads).
 - **Construction states every member.** Producers and tests set every
   required member of the kind they build — no other kind's members exist to
   state. Tests build records through `TestRecords`
@@ -1283,6 +1276,20 @@ derived producer-side so consumers never re-derive:
   from the session. Independent of what the equities derive (the claim
   would still say Too Good if the producer's numbers did). `[JsonIgnore]`d
   like the rest of the record's derived view.
+
+**The evidence for the Too Good rule, each kind with its owner**
+(SPEC-scoring §3 as corrected 2026-09-27; Hal's ruling on
+halheinrich/backgammon#273). This library owns the rule and verifies it
+with synthetic tests, which gate: `CubeDecisionDataClaimDerivationTests`
+(every claim, the strict boundary, the pass requirement, the boundary cell,
+and `BestClaimPair_NeverDerivesTheRetiredTooGoodTakeCell` over a grid) and
+`CubeDecisionTooGoodOfferabilityTests`. Checking the rule's inputs against
+facts XG stores is ConvertXgToJson_Lib's, the member that reads XG: XG's
+stored cube errors against the derived ones, and XG's stored double/pass
+equity against `ActionEquity(CubeAction.Pass)`. `TestData/BgDecisionData`
+is generated output, not an oracle, and no test here depends on it:
+`TooGoodCorpusExerciseTests`, which read it and compared nothing with XG,
+is retired, with its link to the samples.
 
 The computed members exist on the cube decision only — asking them of a
 checker play does not compile, so the `IsCube` guard they used to share
@@ -2973,7 +2980,7 @@ measure" is not a valid comparison on this hardware.
 - **`CubeClaimPair.TooGoodTake` is representable but never derived.**
   Since SPEC-scoring §3's 2026-09-02 amendment (`halheinrich/backgammon#187`)
   Too Good requires the pass, so `BestClaimPair` cannot compose it (pinned
-  over a grid, and counted at zero over the local corpus). The cell stays
+  over a grid, `BestClaimPair_NeverDerivesTheRetiredTooGoodTakeCell`). The cell stays
   on the closed 3×2 because a data-types library does not hide cells;
   consumers do not offer it, and must not treat its presence in the type as
   a hint that it is reachable.

@@ -11,9 +11,11 @@ namespace BgDataTypes_Lib.Tests;
 /// <see cref="CubeDecisionData.BestDoublerClaim"/> beside its action-level
 /// siblings, with <see cref="CubeDecisionData.BestClaimPair"/> composing the
 /// full derived truth. Equities are synthesized inline per the TestData
-/// rule; the real-corpus exercise of the same predicate lives in
-/// <see cref="TooGoodCorpusExerciseTests"/>, and the offerability fact that
-/// sits beside the claim on the composite record is pinned in
+/// rule: these synthetic pins are this library's evidence for the rule, and
+/// they gate. Checking its inputs against what XG stores is
+/// ConvertXgToJson_Lib's (SPEC-scoring §3's three kinds of evidence, each
+/// with its owner, corrected 2026-09-27). The offerability fact that sits
+/// beside the claim on the composite record is pinned in
 /// <see cref="CubeDecisionTooGoodOfferabilityTests"/>.
 /// </summary>
 public class CubeDecisionDataClaimDerivationTests
