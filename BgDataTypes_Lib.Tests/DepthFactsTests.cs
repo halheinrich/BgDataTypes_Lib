@@ -139,7 +139,6 @@ public class DepthFactsTests
             LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
             WinPctAfterDoubleTake = 0, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
             LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
-            ProbOfOpponentErrorJustifyingDouble = 0,
         }).ParamName);
         Assert.Equal("AnalysisMode", Assert.Throws<ArgumentException>(() => new CubeDecisionData
         {
@@ -149,7 +148,6 @@ public class DepthFactsTests
             LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
             WinPctAfterDoubleTake = 0, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
             LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
-            ProbOfOpponentErrorJustifyingDouble = 0,
         }).ParamName);
         Assert.Equal("AnalysisLevel", Assert.Throws<ArgumentException>(() => new CubeDecisionData
         {
@@ -159,7 +157,6 @@ public class DepthFactsTests
             LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
             WinPctAfterDoubleTake = 0, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
             LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
-            ProbOfOpponentErrorJustifyingDouble = 0,
         }).ParamName);
     }
 

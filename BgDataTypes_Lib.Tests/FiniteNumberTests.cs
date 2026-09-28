@@ -31,7 +31,7 @@ public class FiniteNumberTests
             "LoseGammonPctAfterNoDouble", "LoseBgPctAfterNoDouble",
             "WinPctAfterDoubleTake", "GammonPctAfterDoubleTake", "BgPctAfterDoubleTake",
             "LoseGammonPctAfterDoubleTake", "LoseBgPctAfterDoubleTake",
-            "ProbOfOpponentErrorJustifyingDouble", "UnstatedDoublerActionError", "UnstatedTakerActionError",
+            "UnstatedDoublerActionError", "UnstatedTakerActionError",
         ],
         [typeof(CheckerPlayDecisionData)] = ["UnlistedPlayError"],
         [typeof(PositionData)] = [],

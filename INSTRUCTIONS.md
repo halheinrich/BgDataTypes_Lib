@@ -353,7 +353,7 @@ Every decision holds the two shared categories; each kind holds its own
 | `MoneySession` | a money session's `PositionData.Session` | `Terms` (a `MoneyTerms`: `IsJacoby`, `IsBeaver`, `CubeLimit`, a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
 | `DescriptiveData` | both kinds | `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it), and a match's length is the match session's |
 | `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `UserPlay?`, and for a ranking `RankedBy(ranking)` — the order, the best play, each candidate's error and whether it is scored, the player's error (see "The ranking") |
-| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `ProbOfOpponentErrorJustifyingDouble`, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?` and the scoring policy |
+| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?` and the scoring policy |
 
 **No stored copy of a derivable value** (the umbrella's verdict on the
 records leg of `halheinrich/backgammon#273`). Every member the others
@@ -391,8 +391,7 @@ analysis enums keep `Unknown`, a member the producer states.
 **Every stored number is finite** (the umbrella's fourth-round ruling on
 the records leg). Each stored floating-point value in the records — the
 candidate's equity and probabilities, the cube's equities and
-probabilities, `ProbOfOpponentErrorJustifyingDouble`, and the analyser's
-stored errors (`UnlistedPlayError`, `UnstatedDoublerActionError`,
+probabilities, and the analyser's stored errors (`UnlistedPlayError`, `UnstatedDoublerActionError`,
 `UnstatedTakerActionError`) — is a finite number, or `null` where a
 nullable one records none. A NaN or an infinity is refused by code with an
 `ArgumentOutOfRangeException` naming the member, and by a document with a
@@ -472,6 +471,7 @@ asked for it exhaustively). Derived, never stored:
 | `BgDecisionData.Xgid` | the board, the cube and its owner, the session (its kind's facts) and a checker play's roll, by the format stated on the internal `XgidEncoder` (see "The XGID, derived") |
 | earlier: `Game`, `MoveNumber` (the `Id`), the after-boards (the play rule), `Notation` (the play), `Dice` (the roll), `MatchScore` | — |
 | gone, not derived: `IsMoneyGame` (it read money off a match length of 0; money is the session's kind now) | — |
+| gone, not stored: `CubeDecisionData.ProbOfOpponentErrorJustifyingDouble` (XG stores no such value, so the record claimed as stored a figure no source states; Hal's ruling of 2026-09-27 on `halheinrich/backgammon#273`). A document still stating it is refused, as the category refuses any member it does not have. Deriving and showing XG's "Pass Justifying Dbl" figure is separate work, `halheinrich/backgammon#288` | — |
 
 Stored, as source data:
 
@@ -2113,7 +2113,7 @@ public sealed class CubeDecisionData           // unmapped members refused
 {
     // Required: AnalysisMode, AnalysisLevel, NoDoubleEquity, DoubleTakeEquity,
     // the cubeless equities, the ten stored probabilities (each half's total
-    // loss is derived), ProbOfOpponentErrorJustifyingDouble.
+    // loss is derived).
     public int? RolloutTrials { get; init; }             // the typed depth facts, each with its rule
     public BookEdition? BookEdition { get; init; }
     public int? UnrecognizedLevelCode { get; init; }

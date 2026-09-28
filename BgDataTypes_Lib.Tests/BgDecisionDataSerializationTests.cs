@@ -662,16 +662,13 @@ public class BgDecisionDataSerializationTests
             gammonPctAfterDoubleTake: 0.181,
             bgPctAfterDoubleTake: 0.011,
             loseGammonPctAfterDoubleTake: 0.093,
-            loseBgPctAfterDoubleTake: 0.004,
-            probOfOpponentErrorJustifyingDouble: 0.078);
+            loseBgPctAfterDoubleTake: 0.004);
 
         var json = JsonSerializer.Serialize(original, Options);
         var restored = JsonSerializer.Deserialize<CubeDecisionData>(json, Options)!;
 
         Assert.Equal(original.NoDoubleEquity, restored.NoDoubleEquity);
         Assert.Equal(original.DoubleTakeEquity, restored.DoubleTakeEquity);
-        Assert.Equal(original.ProbOfOpponentErrorJustifyingDouble,
-                     restored.ProbOfOpponentErrorJustifyingDouble);
         Assert.Equal(original.WinPctAfterNoDouble, restored.WinPctAfterNoDouble);
         Assert.Equal(original.LoseBgPctAfterDoubleTake, restored.LoseBgPctAfterDoubleTake);
     }

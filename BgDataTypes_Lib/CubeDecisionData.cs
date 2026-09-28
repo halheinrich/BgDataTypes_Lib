@@ -32,6 +32,13 @@ namespace BgDataTypes_Lib;
 /// document with a <see cref="System.Text.Json.JsonException"/> carrying it.
 /// The probabilities' range is not checked.
 /// </para>
+/// <para>
+/// The stored members are what the producing analyser stores, and nothing it
+/// does not (halheinrich/backgammon#273, Hal's ruling of 2026-09-27). XG's
+/// "Pass Justifying Dbl" figure is not among what XG stores, so no member
+/// here claims it; deriving and showing it is separate work
+/// (halheinrich/backgammon#288).
+/// </para>
 /// </summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class CubeDecisionData
@@ -87,7 +94,6 @@ public sealed class CubeDecisionData
     private readonly double _bgPctAfterDoubleTake;
     private readonly double _loseGammonPctAfterDoubleTake;
     private readonly double _loseBgPctAfterDoubleTake;
-    private readonly double _probOfOpponentErrorJustifyingDouble;
 
     /// <summary>How the cube analysis's numbers were produced — the mode axis
     /// of the two-axis depth taxonomy; see
@@ -329,18 +335,6 @@ public sealed class CubeDecisionData
     {
         get => _loseBgPctAfterDoubleTake;
         init => _loseBgPctAfterDoubleTake = Finite(value, nameof(LoseBgPctAfterDoubleTake));
-    }
-
-    /// <summary>
-    /// XG-producer-specific cube statistic, surfaced verbatim: XG's reported
-    /// probability that an opponent error would justify the double (shown in
-    /// its cube-analysis pane). Fraction in [0, 1]. This library assigns it
-    /// no further semantics.
-    /// </summary>
-    public required double ProbOfOpponentErrorJustifyingDouble
-    {
-        get => _probOfOpponentErrorJustifyingDouble;
-        init => _probOfOpponentErrorJustifyingDouble = Finite(value, nameof(ProbOfOpponentErrorJustifyingDouble));
     }
 
     // -----------------------------------------------------------------------

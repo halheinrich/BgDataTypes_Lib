@@ -180,7 +180,6 @@ public class DerivedValuesTests
             LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
             WinPctAfterDoubleTake = 0.7, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
             LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
-            ProbOfOpponentErrorJustifyingDouble = 0,
             UnstatedDoublerActionError = 0.05,
             UserDoublerAction = CubeAction.Double,
         });
@@ -203,7 +202,6 @@ public class DerivedValuesTests
             LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
             WinPctAfterDoubleTake = 0.7, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
             LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
-            ProbOfOpponentErrorJustifyingDouble = 0,
             UnstatedTakerActionError = 0.06,
             UserTakerAction = CubeAction.Take,
         });

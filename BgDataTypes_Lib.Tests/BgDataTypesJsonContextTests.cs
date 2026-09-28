@@ -118,7 +118,6 @@ public class BgDataTypesJsonContextTests
             bgPctAfterDoubleTake: 0.011,
             loseGammonPctAfterDoubleTake: 0.093,
             loseBgPctAfterDoubleTake: 0.004,
-            probOfOpponentErrorJustifyingDouble: 0.078,
             userDoublerAction: CubeAction.Double,
             userTakerAction: CubeAction.Take),
         descriptive: TestRecords.Descriptive(
