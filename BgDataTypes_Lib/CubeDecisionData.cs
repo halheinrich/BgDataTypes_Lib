@@ -13,16 +13,17 @@ namespace BgDataTypes_Lib;
 /// <see cref="BgDataTypesJsonContext"/>, and each nullable member's
 /// documentation says what <see langword="null"/> means. What the stored
 /// members determine — the depth label, abbreviation and rank, the loss
-/// probabilities, the error of each stated action, the best actions and
-/// claims — is derived and never stored.
+/// probabilities, each cube action's equity, the error of each stated action,
+/// the best actions and claims — is derived and never stored.
 ///
 /// <para>
 /// All equities are in normalised cube-equity units from the on-roll
 /// (doubler's) perspective, where winning a single game at the current stake
-/// is +1 — so an opponent's pass is worth exactly +1 (see
-/// <see cref="BestDoublerAction"/>). All probability fields are fractions in
-/// [0, 1] despite the <c>Pct</c> suffix, surfaced verbatim from the producing
-/// analyser (XG).
+/// is +1 — so an opponent's pass is worth exactly +1. Each cube action's
+/// equity, in that perspective, is <see cref="ActionEquity"/>, the one
+/// calculation the best actions, the claim and the errors derive from. All
+/// probability fields are fractions in [0, 1] despite the <c>Pct</c> suffix,
+/// surfaced verbatim from the producing analyser (XG).
 /// </para>
 /// <para>
 /// Every stored number — the equities, the probabilities and the analyser's
@@ -546,7 +547,7 @@ public sealed class CubeDecisionData
         "UnstatedTakerActionError is the error of a taker action the record does not state; when UserTakerAction states it, its error is derived from the equities and is not stated.";
 
     // -----------------------------------------------------------------------
-    //  Cube-decision scoring helpers
+    //  Cube-decision scoring
     // -----------------------------------------------------------------------
     //
     //  Single-source policy for judging a cube decision as two independent
@@ -557,16 +558,70 @@ public sealed class CubeDecisionData
     //    * The taker's take / pass decision —
     //      BestTakerAction, TakerActionError.
     //
-    //  Pure equity-loss between two cube actions, evaluated separately, with
-    //  no cross-decision overrides. They exist on the cube decision only, so
-    //  asking them of a checker play does not compile.
+    //  Both rest on one calculation, ActionEquity: each cube action's equity
+    //  from the doubler's side. The pass's normalised value and the rule for
+    //  doubling's equity (the taker's best response) are stated there and
+    //  nowhere else; the best actions, the claim and the errors read them
+    //  through it. Pure equity comparisons between the two actions of a half,
+    //  evaluated separately, with no cross-decision overrides. They exist on
+    //  the cube decision only, so asking them of a checker play does not
+    //  compile.
 
     /// <summary>
-    /// Equity the doubler earns when the opponent passes a double — always
-    /// 1.0 per cube-equity normalisation. A pass forfeits exactly one cube
-    /// by definition, independent of match score or cube value.
+    /// The pass's equity for the doubler — always +1 per cube-equity
+    /// normalisation. A pass concedes exactly one game at the current stake,
+    /// independent of match score or cube value. Read only by
+    /// <see cref="ActionEquity"/>, so the value is handed out as the pass's
+    /// equity and never on its own (Hal's ruling of 2026-09-27 on
+    /// halheinrich/backgammon#273).
     /// </summary>
     private const double PassEquity = 1.0;
+
+    /// <summary>
+    /// The equity of <paramref name="action"/> at this cube decision, from the
+    /// player on roll's — the doubler's — perspective, whichever half the
+    /// action belongs to: normalised cube-equity units, where winning a single
+    /// game at the current stake is +1, as every equity on this type is. Higher
+    /// is better for the doubler and worse for the taker; the taker's own
+    /// equity for an action is this value negated.
+    /// </summary>
+    /// <remarks>
+    /// <para>Each action's equity:</para>
+    /// <list type="bullet">
+    /// <item><description><see cref="CubeAction.NoDouble"/> — playing on:
+    /// <see cref="NoDoubleEquity"/>.</description></item>
+    /// <item><description><see cref="CubeAction.Double"/> — the equity of the
+    /// taker's best response (<see cref="BestTakerAction"/>): the opponent
+    /// answers a double with whichever of take and pass leaves the doubler
+    /// less, so doubling is worth the lesser of <see cref="DoubleTakeEquity"/>
+    /// and the cash.</description></item>
+    /// <item><description><see cref="CubeAction.Take"/> — the double taken:
+    /// <see cref="DoubleTakeEquity"/>.</description></item>
+    /// <item><description><see cref="CubeAction.Pass"/> — the double passed:
+    /// +1, the cash.</description></item>
+    /// </list>
+    /// <para>
+    /// The one calculation of the cube actions' equities
+    /// (halheinrich/backgammon#273, Hal's ruling of 2026-09-27): the best
+    /// actions, the claim and both halves' errors are derived from it, so a
+    /// consumer showing each action's equity beside its error reads the
+    /// numbers the scoring used, and restates neither the pass's value nor
+    /// the rule for doubling's. Derived on each call and never stored: it is
+    /// not on the wire, and the flat row carries none.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="action"/> is not a defined <see cref="CubeAction"/>.
+    /// </exception>
+    public double ActionEquity(CubeAction action) => action switch
+    {
+        CubeAction.NoDouble => NoDoubleEquity,
+        CubeAction.Double => ActionEquity(BestTakerAction),
+        CubeAction.Take => DoubleTakeEquity,
+        CubeAction.Pass => PassEquity,
+        _ => throw new ArgumentOutOfRangeException(nameof(action), action,
+            "ActionEquity requires a defined cube action."),
+    };
 
     /// <summary>
     /// The correct atomic doubler action — <see cref="CubeAction.Double"/>
@@ -574,13 +629,13 @@ public sealed class CubeDecisionData
     /// opponent response, <see cref="CubeAction.NoDouble"/> otherwise.
     /// </summary>
     /// <remarks>
-    /// The doubler's atomic decision: whether to offer the cube. Tie
-    /// (<c>min(DoubleTakeEquity, 1) == NoDoubleEquity</c>) favours
-    /// <see cref="CubeAction.NoDouble"/>.
+    /// The doubler's atomic decision: whether to offer the cube, the two
+    /// actions compared by <see cref="ActionEquity"/>. Tie (doubling worth
+    /// exactly what playing on is) favours <see cref="CubeAction.NoDouble"/>.
     /// </remarks>
     [JsonIgnore]
     public CubeAction BestDoublerAction =>
-        Math.Min(DoubleTakeEquity, PassEquity) > NoDoubleEquity
+        ActionEquity(CubeAction.Double) > ActionEquity(CubeAction.NoDouble)
             ? CubeAction.Double
             : CubeAction.NoDouble;
 
@@ -590,14 +645,14 @@ public sealed class CubeDecisionData
     /// <see cref="CubeAction.Pass"/> otherwise.
     /// </summary>
     /// <remarks>
-    /// Determined from the doubler's <see cref="DoubleTakeEquity"/>: the
-    /// taker's take equity is its negation, and pass equity is
-    /// <c>-1</c>. Tie (<c>DoubleTakeEquity == 1</c>) favours
-    /// <see cref="CubeAction.Pass"/>.
+    /// The two actions compared by <see cref="ActionEquity"/>, in the
+    /// doubler's perspective, so the taker's best is the one that leaves the
+    /// doubler less. Tie (<c>DoubleTakeEquity == 1</c>, the take worth exactly
+    /// the cash) favours <see cref="CubeAction.Pass"/>.
     /// </remarks>
     [JsonIgnore]
     public CubeAction BestTakerAction =>
-        DoubleTakeEquity < PassEquity
+        ActionEquity(CubeAction.Take) < ActionEquity(CubeAction.Pass)
             ? CubeAction.Take
             : CubeAction.Pass;
 
@@ -666,7 +721,8 @@ public sealed class CubeDecisionData
         {
             if (BestDoublerAction == CubeAction.Double)
                 return CubeClaim.Double;
-            return NoDoubleEquity > PassEquity && BestTakerAction == CubeAction.Pass
+            return ActionEquity(CubeAction.NoDouble) > ActionEquity(CubeAction.Pass)
+                   && BestTakerAction == CubeAction.Pass
                 ? CubeClaim.TooGood
                 : CubeClaim.NoDouble;
         }
@@ -708,9 +764,10 @@ public sealed class CubeDecisionData
     /// otherwise the positive equity gap.
     /// </summary>
     /// <remarks>
-    /// <c>Double</c>'s value is computed against optimal opponent response
-    /// (<c>min(DoubleTakeEquity, 1)</c>); <c>NoDouble</c>'s value is
-    /// <see cref="NoDoubleEquity"/>.
+    /// The gap <c>ActionEquity(BestDoublerAction) − ActionEquity(action)</c>:
+    /// both equities are <see cref="ActionEquity"/>'s, the one calculation, so
+    /// the error is the difference between the two equities it hands out —
+    /// doubling's against optimal opponent response.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="action"/> is not
@@ -718,15 +775,10 @@ public sealed class CubeDecisionData
     /// </exception>
     public double DoublerActionError(CubeAction action)
     {
-        double actionEquity = action switch
-        {
-            CubeAction.Double   => Math.Min(DoubleTakeEquity, PassEquity),
-            CubeAction.NoDouble => NoDoubleEquity,
-            _ => throw new ArgumentOutOfRangeException(nameof(action), action,
-                "DoublerActionError requires a doubler-half action (Double or NoDouble).")
-        };
-        double bestEquity = Math.Max(Math.Min(DoubleTakeEquity, PassEquity), NoDoubleEquity);
-        return Math.Max(0.0, bestEquity - actionEquity);
+        if (action is not (CubeAction.Double or CubeAction.NoDouble))
+            throw new ArgumentOutOfRangeException(nameof(action), action,
+                "DoublerActionError requires a doubler-half action (Double or NoDouble).");
+        return Gap(ActionEquity(BestDoublerAction), ActionEquity(action));
     }
 
     /// <summary>
@@ -737,8 +789,10 @@ public sealed class CubeDecisionData
     /// perspective).
     /// </summary>
     /// <remarks>
-    /// Taker equities are the doubler's negated: <c>Take</c> ⇒
-    /// <c>-DoubleTakeEquity</c>; <c>Pass</c> ⇒ <c>-1</c>.
+    /// The taker's equities are <see cref="ActionEquity"/>'s negated, so the
+    /// gap, taker's best less taker's chosen, is
+    /// <c>ActionEquity(action) − ActionEquity(BestTakerAction)</c>: both from
+    /// the one calculation, as the doubler's error is.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="action"/> is not
@@ -746,14 +800,17 @@ public sealed class CubeDecisionData
     /// </exception>
     public double TakerActionError(CubeAction action)
     {
-        double actionEquity = action switch
-        {
-            CubeAction.Take => -DoubleTakeEquity,
-            CubeAction.Pass => -PassEquity,
-            _ => throw new ArgumentOutOfRangeException(nameof(action), action,
-                "TakerActionError requires a taker-half action (Take or Pass).")
-        };
-        double bestEquity = Math.Max(-DoubleTakeEquity, -PassEquity);
-        return Math.Max(0.0, bestEquity - actionEquity);
+        if (action is not (CubeAction.Take or CubeAction.Pass))
+            throw new ArgumentOutOfRangeException(nameof(action), action,
+                "TakerActionError requires a taker-half action (Take or Pass).");
+        return Gap(ActionEquity(action), ActionEquity(BestTakerAction));
     }
+
+    /// <summary>
+    /// An error: the gap <paramref name="higher"/> − <paramref name="lower"/>
+    /// between two action equities. Never negative, and +0 at a tie whatever
+    /// the signs of the tied zeros: <c>-0</c> less <c>+0</c> would otherwise be
+    /// <c>-0</c>, which a document writes as <c>-0</c>.
+    /// </summary>
+    private static double Gap(double higher, double lower) => Math.Max(0.0, higher - lower);
 }

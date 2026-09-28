@@ -353,7 +353,7 @@ Every decision holds the two shared categories; each kind holds its own
 | `MoneySession` | a money session's `PositionData.Session` | `Terms` (a `MoneyTerms`: `IsJacoby`, `IsBeaver`, `CubeLimit`, a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
 | `DescriptiveData` | both kinds | `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it), and a match's length is the match session's |
 | `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `UserPlay?`, and for a ranking `RankedBy(ranking)` — the order, the best play, each candidate's error and whether it is scored, the player's error (see "The ranking") |
-| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?` and the scoring policy |
+| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?`, each cube action's `ActionEquity(action)` and the scoring policy |
 
 **No stored copy of a derivable value** (the umbrella's verdict on the
 records leg of `halheinrich/backgammon#273`). Every member the others
@@ -466,6 +466,7 @@ asked for it exhaustively). Derived, never stored:
 | `PlayCandidate.Depth`, `DepthAbbreviation`, and the cube analysis's | the typed depth facts — `AnalysisMode`, `AnalysisLevel`, `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — by the producer's grammar, moved here unchanged (`DepthTaxonomy`; see "The depth as typed facts") |
 | `RankedBy(ranking)`: the order, `Best`, each `RankedPlay.Error` and `IsScored` | the candidates' equities and, under depth first, their depth ranks (see "The ranking") |
 | `RankedBy(ranking).PlayerResult` | the played candidate: scored with its error, or not scored; otherwise unlisted with the stored `UnlistedPlayError`, or not recorded |
+| `CubeDecisionData.ActionEquity(action)` | `NoDoubleEquity`, `DoubleTakeEquity` and the pass's normalised value +1: each cube action's equity in the doubler's perspective, doubling's the taker's best response's (see "Cube-decision scoring on CubeDecisionData"); the best actions, the claim and both halves' errors read it |
 | `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus: 16,932 of 16,959 doubler errors within 1e-5, the rest within 1e-4; all 830 taker errors equal) |
 | `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures matched within 9.5e-7 (273,592 candidates) and 2.4e-7 (17,158 cube decisions, each half) |
 | `BgDecisionData.Xgid` | the board, the cube and its owner, the session (its kind's facts) and a checker play's roll, by the format stated on the internal `XgidEncoder` (see "The XGID, derived") |
@@ -1190,20 +1191,56 @@ the game record. Do not infer a claim from a played action.
 ### Cube-decision scoring on CubeDecisionData
 
 `CubeDecisionData` carries the cube-decision scoring policy as computed members
-that derive from `NoDoubleEquity` and `DoubleTakeEquity` (the pass-equity
-constant `1.0` is intrinsic to cube-equity normalisation). A cube decision is
-scored as **two independent atomic decisions**, each judged on its own with no
-cross-decision override:
+that derive from `NoDoubleEquity` and `DoubleTakeEquity`, through one
+calculation, each cube action's equity:
+
+- **`ActionEquity(action)`** (halheinrich/backgammon#273, Hal's ruling of
+  2026-09-27) — the equity of any of the four `CubeAction`s, in the player
+  on roll's (the doubler's) perspective whichever half the action belongs
+  to, in normalised cube-equity units (a single game at the current stake
+  is +1), like every equity on the type. `NoDouble` is `NoDoubleEquity`;
+  `Take` is `DoubleTakeEquity`; `Pass` is +1, the cash (a pass concedes one
+  game at the current stake, whatever the score or the cube); `Double` is
+  the equity of the taker's best response, `ActionEquity(BestTakerAction)` —
+  the lesser of the take's and the cash. Higher is better for the doubler
+  and worse for the taker, whose own equity is the negation. An undefined
+  action throws `ArgumentOutOfRangeException`.
+
+A cube decision is scored as **two independent atomic decisions**, each
+judged on its own with no cross-decision override, each comparing its two
+actions' `ActionEquity`:
 
 - **Doubler's double / no-double decision**: `BestDoublerAction` and
   `DoublerActionError(action)`. `BestDoublerAction` is `Double` iff
-  `min(DoubleTakeEquity, 1) > NoDoubleEquity`; the error is the equity gap
-  between the chosen action and that best.
+  `ActionEquity(Double) > ActionEquity(NoDouble)`; the error is
+  `ActionEquity(BestDoublerAction) − ActionEquity(action)`.
 
 - **Taker's take / pass decision**: `BestTakerAction` and
   `TakerActionError(action)`. `BestTakerAction` is `Take` iff
-  `DoubleTakeEquity < 1`; the error is the equity gap (taker
-  perspective) between the chosen action and that best.
+  `ActionEquity(Take) < ActionEquity(Pass)` (the take leaves the doubler
+  less than the cash); the error, in the taker's perspective, is
+  `ActionEquity(action) − ActionEquity(BestTakerAction)`.
+
+**One calculation, the pass value never on its own.** The pass's value and
+the rule for doubling's equity are stated once, in `ActionEquity`: the best
+actions, the claim's comparison with the cash and both errors read them
+through it, so a consumer showing each action's equity beside its error
+reads the numbers the scoring used. The value +1 is a private constant read
+by `ActionEquity` alone. It is not published on its own: a consumer asks
+for the pass's equity as an action's equity and never rebuilds the domain
+calculation from a normalization constant (Hal's ruling). The result is a
+method, as the two errors are, because it takes the action: one member
+covers the four actions in one perspective and one sign, where four
+properties would publish the pass's value as a member of its own. Derived
+on each call, never stored: nothing new on the wire, and the flat row gains
+no column. Each error is that gap through the private `Gap`: never
+negative, and +0 at a tie whatever the tied zeros' signs, since a stored
+`-0` less a `+0` would otherwise be `-0`, which a document writes as `-0`
+(the errors were +0 there before they read `ActionEquity`, and still are).
+`CubeDecisionDataActionEquityTests` pins each action and each tie in that
+perspective, that each error is the gap between two of its equities over
+a grid holding every tie, the `-0` tie, and that no public member names the
+pass.
 
 Above the action layer sits the claim derivation of SPEC-scoring §3
 (`halheinrich/backgammon#86`) — the truth side of the two-part cube answer,
@@ -1251,7 +1288,8 @@ The computed members exist on the cube decision only — asking them of a
 checker play does not compile, so the `IsCube` guard they used to share
 (and its `InvalidOperationException`) is gone. The two error methods throw
 `ArgumentOutOfRangeException` when the action argument is from the wrong
-half (e.g. `Take` or `Pass` passed to `DoublerActionError`).
+half (e.g. `Take` or `Pass` passed to `DoublerActionError`); `ActionEquity`
+takes any defined action.
 
 Tie-breaking follows the renderer's existing convention so a downstream
 consumer that collapses the inline cube derivation into calls to these
@@ -1260,8 +1298,8 @@ on `DoubleTakeEquity == 1`.
 
 The four computed properties (`BestDoublerAction`, `BestTakerAction`,
 `BestDoublerClaim`, `BestClaimPair`) carry `[JsonIgnore]`: they are a
-derivation, not wire. The error methods are intrinsically not serialised
-because they take parameters.
+derivation, not wire. `ActionEquity` and the error methods are
+intrinsically not serialised because they take parameters.
 
 An aggregate verdict layer was removed in the cube-surface rebuild and is
 slated to return later on a cleaner footing; the umbrella `INSTRUCTIONS.md`
@@ -2145,7 +2183,12 @@ public sealed class CubeDecisionData           // unmapped members refused
     [JsonIgnore] public double? UserDoubleError { get; }  // DoublerActionError(UserDoublerAction) ?? unstated
     [JsonIgnore] public double? UserTakeError { get; }    // TakerActionError(UserTakerAction) ?? unstated
 
-    // Cube-decision scoring (computed; a cube decision's only).
+    // Cube-decision scoring (computed; a cube decision's only). Each action's
+    // equity is the one calculation the rest reads.
+    public double ActionEquity(CubeAction action);                // the doubler's perspective, every action:
+                                                                  // NoDouble → NoDoubleEquity, Take → DoubleTakeEquity,
+                                                                  // Pass → +1 (the cash), Double → the taker's best
+                                                                  // response's; ArgumentOutOfRangeException if undefined
     [JsonIgnore] public CubeAction  BestDoublerAction { get; }   // Double or NoDouble
     [JsonIgnore] public CubeAction  BestTakerAction   { get; }   // Take or Pass
 
@@ -2156,9 +2199,9 @@ public sealed class CubeDecisionData           // unmapped members refused
     [JsonIgnore] public CubeClaimPair BestClaimPair    { get; }  // (BestDoublerClaim, BestTakerAction);
                                                                  // never TooGoodTake
 
-    public double DoublerActionError(CubeAction action);          // 0 if action == BestDoublerAction;
+    public double DoublerActionError(CubeAction action);          // ActionEquity(BestDoublerAction) − ActionEquity(action);
                                                                   // throws ArgumentOutOfRangeException on Take/Pass.
-    public double TakerActionError(CubeAction action);            // 0 if action == BestTakerAction;
+    public double TakerActionError(CubeAction action);            // ActionEquity(action) − ActionEquity(BestTakerAction);
                                                                   // throws ArgumentOutOfRangeException on Double/NoDouble.
 }
 
@@ -2860,17 +2903,25 @@ measure" is not a valid comparison on this hardware.
   best uses `RankedPlays.Best`; testing membership in its equivalence class
   uses `Error == 0.0`. There is no ranking-free best or loss to read, and
   none to state: a producer states equities and depths.
-- **The cube-scoring helpers are a cube decision's only.** All six (four
-  computed properties — the action pair and the claim pair — plus two
-  methods) live on `CubeDecisionData`, so asking them of a checker play
-  does not compile; the `IsCube` guard they needed is gone. Callers in
-  mixed-decision contexts match on the record (`Match` / `Switch`). The
-  four computed properties carry `[JsonIgnore]`; do not strip those
-  attributes.
+- **The cube-scoring helpers are a cube decision's only.** All seven (four
+  computed properties — the action pair and the claim pair — plus three
+  methods, `ActionEquity` and the two errors) live on `CubeDecisionData`,
+  so asking them of a checker play does not compile; the `IsCube` guard
+  they needed is gone. Callers in mixed-decision contexts match on the
+  record (`Match` / `Switch`). The four computed properties carry
+  `[JsonIgnore]`; do not strip those attributes.
 - **Cube-scoring atomic-action methods reject the wrong half.**
   `DoublerActionError(CubeAction)` accepts only `Double` / `NoDouble`;
   `TakerActionError(CubeAction)` accepts only `Take` / `Pass`. The
-  other half throws `ArgumentOutOfRangeException`.
+  other half throws `ArgumentOutOfRangeException`. `ActionEquity` takes
+  every defined action, since each has an equity.
+- **Never restate a cube action's equity; read `ActionEquity`.** Its value
+  for every action is the doubler's, the taker's actions included: a take
+  is `+DoubleTakeEquity` and a pass +1, not their negations, and the
+  taker's own equity is the negation. Spelling `Math.Min(DoubleTakeEquity,
+  1)` or a pass constant in a consumer creates a second source of the
+  calculation the errors derive from, and inside this library the constant
+  has one reader, `ActionEquity`.
 - **`UserDoublerAction` / `UserTakerAction`: half-guarded on init,
   cross-half consistency is NOT guarded.** Each rejects the other half's
   actions with `ArgumentOutOfRangeException` at `init`, but "a recorded
