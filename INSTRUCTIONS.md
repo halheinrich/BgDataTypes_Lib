@@ -506,14 +506,6 @@ columns; `Error`, `Equity`, `AnalysisDepth` and the boards are the record's
 values under the row's `Ranking`, carried as columns, since the row holds
 nothing they derive from.
 
-**The producer's copies.** `ConvertXgToJson_Lib` still produces each
-derived value alongside the record. Its leg drops them, and its corpus test
-checks XG's numbers against the derivations here — the user's error above
-all (XG's `MoveError` against the played candidate's error under a
-ranking, XG's cube errors against the scoring policy's). XG's own play
-error is not stored. Until then the converter does not build against this
-library.
-
 ### The depth as typed facts
 
 A candidate's and the cube analysis's depth is stored as typed facts, and
@@ -1284,12 +1276,12 @@ with synthetic tests, which gate: `CubeDecisionDataClaimDerivationTests`
 (every claim, the strict boundary, the pass requirement, the boundary cell,
 and `BestClaimPair_NeverDerivesTheRetiredTooGoodTakeCell` over a grid) and
 `CubeDecisionTooGoodOfferabilityTests`. Checking the rule's inputs against
-facts XG stores is ConvertXgToJson_Lib's, the member that reads XG: XG's
-stored cube errors against the derived ones, and XG's stored double/pass
-equity against `ActionEquity(CubeAction.Pass)`. `TestData/BgDecisionData`
-is generated output, not an oracle, and no test here depends on it:
-`TooGoodCorpusExerciseTests`, which read it and compared nothing with XG,
-is retired, with its link to the samples.
+facts XG stores is ConvertXgToJson_Lib's, the member that reads XG; the
+umbrella's SPEC-scoring §3 ("The truth-claim derivation") states the
+evidence and its owners. `TestData/BgDecisionData` is generated output, not
+an oracle, and no test here depends on it: `TooGoodCorpusExerciseTests`,
+which read it and compared nothing with XG, is retired, with its link to
+the samples.
 
 The computed members exist on the cube decision only — asking them of a
 checker play does not compile, so the `IsCube` guard they used to share
