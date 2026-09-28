@@ -63,7 +63,8 @@ public class PositionCubeRulesTests
         });
         Assert.Equal("Session", sessionSecond.ParamName);
 
-        // At the limit itself, and in a match, which has no limit, it builds.
+        // At the limit itself it builds, and in a match, where the record
+        // holds no limit to check the cube against.
         Assert.Equal(4, TestRecords.Position(cubeSize: 4, cubeOwner: CubeOwner.OnRoll, session: limitOfFour).CubeSize);
         Assert.Equal(4096, TestRecords.Position(cubeSize: 4096, cubeOwner: CubeOwner.Opponent).CubeSize);
     }

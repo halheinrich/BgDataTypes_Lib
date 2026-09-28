@@ -177,13 +177,16 @@ public class XgidDerivationTests
     [InlineData(7, 7, 7, false)]
     [InlineData(25, 3, 11, false)]
     [InlineData(5, 1, 4, true)]
-    public void EveryMatchsMaxCube_Is10_ForAMatchHasNoCubeLimit(int length, int onRollNeeds, int opponentNeeds, bool isCrawford)
+    public void AMatchsMaxCube_IsTheConstant10_ForTheRecordStatesNone(int length, int onRollNeeds, int opponentNeeds, bool isCrawford)
     {
-        // Rewritten from AMatchsMaxCube_IsXgsDefault_ForAMatchHasNoCubeLimit:
-        // decided at the umbrella's review of halheinrich/backgammon#273. A
-        // match's length bounds its cube, so no match member holds a limit
-        // for the field to spell, and it is 10 (2^10) whatever the match —
-        // what XG writes for every match in the corpus.
+        // Rewritten from EveryMatchsMaxCube_Is10_ForAMatchHasNoCubeLimit (Hal's
+        // ruling of 2026-09-27 on halheinrich/backgammon#273 withdrew the
+        // assumption that XG writes 10 for every match). No match member holds
+        // a Max Cube, so the field has nothing of the record's to spell and is
+        // the constant 10 (2^10), the value XG typically writes, whatever the
+        // match. That is the record's statement, not a match rule: XG has also
+        // written 3 for a 5-point match, and whether a match's Max Cube is a
+        // rule of its own is halheinrich/backgammon#289.
         var record = TestRecords.CheckerPlay(position: TestRecords.Position(session: TestRecords.MatchSession(
             length: length, onRollNeeds: onRollNeeds, opponentNeeds: opponentNeeds, isCrawford: isCrawford)));
 

@@ -327,7 +327,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <summary>Whether a money session's beaver rule was in force (<see cref="MoneyTerms.IsBeaver"/>); <see langword="null"/> for a match row.</summary>
     public bool? IsBeaver { get; init; }
 
-    /// <summary>A money session's cube limit (<see cref="MoneyTerms.CubeLimit"/>); <see langword="null"/> for a match row, which has none.</summary>
+    /// <summary>A money session's cube limit (<see cref="MoneyTerms.CubeLimit"/>); <see langword="null"/> for a match row: the record carries no cube limit for a match.</summary>
     public int? CubeLimit { get; init; }
 
     /// <summary>The points the player on roll had won in a money session before the game (<see cref="MoneySession.OnRollScore"/>); <see langword="null"/> for a match row.</summary>

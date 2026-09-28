@@ -1491,10 +1491,13 @@ Design points a maintainer needs before touching it:
   `CanBeTooGood`'s unknown-rule case.
 - **The facts only the XGID carried, placed by the same rule.** The beaver
   rule is money's (XG spells it in the XGID for money only), and so is the
-  cube limit: XG keeps it among the match header's money-session settings
-  (beside the stakes and the automatic-double limit), and a match has no
-  cube limit — its length bounds what the cube can win (decided at the
-  umbrella's review; see "The XGID, derived"). So a money session's terms
+  cube limit the record carries: XG keeps it among the match header's
+  money-session settings (beside the stakes and the automatic-double
+  limit). The record carries no Max Cube for a match, and no cube limit is
+  added to `MatchTerms` (Hal's ruling of 2026-09-27): XG match input states
+  one, with legitimately varying values, but whether it is a match-domain
+  rule of its own is not established (halheinrich/backgammon#289; see "The
+  XGID, derived"). So a money session's terms
   carry `IsBeaver` and `CubeLimit` (a positive power of two, as XG's
   default 1024), and the session its standing, `OnRollScore` and
   `OpponentScore` — the game header's scores from the player on roll's
@@ -1537,18 +1540,24 @@ the record's. The format, field by field, is stated once, on
 - **The format's spellings of money are the encoder's alone.** For money it
   writes a match length of 0 and the session's scores; for a match, its
   length less each away score. Field 8 is Crawford for a match, Jacoby plus
-  twice beaver for money. A money session's maxCube field is its limit's
-  exponent.
-- **A match has no cube limit, so its maxCube field is always 10**
-  (decided at the umbrella's review of halheinrich/backgammon#273,
-  2026-09-26). A match's length already bounds what its cube can win, so no
-  record and no `MatchTerms` holds a limit for the field to spell. XG
-  writes 10 for every match: all 69,824 distinct match XGIDs in the corpus
-  state it (the converter's copy wrote the match header's cube-limit
-  exponent instead). The converter's boundary guards the assumption: it
-  refuses a match header stating any other limit, so real data would expose
-  it. The encoder's `MatchMaxCubeField` states the decision where it is
-  applied.
+  twice beaver for money. The maxCube field is an exponent, the highest
+  cube value being `2^maxCube`; a money session's is its limit's exponent.
+- **A match's maxCube field is the constant 10, because the record states
+  none** (Hal's ruling of 2026-09-27 on halheinrich/backgammon#273, which
+  withdrew the assumption of the umbrella's 2026-09-26 review that XG writes
+  10 for every match). No record member and no `MatchTerms` member holds a
+  match's Max Cube, so the field has nothing of the record's to spell, and
+  10 is the value XG typically writes. Legitimate XG-authored files state
+  others — 3 for a 5-point match and 4 for a 9-point one among them — so the
+  XGID derived for such a match differs from XG's own in this one field.
+  What the constant does not claim: that a match has no cube limit, or that
+  its length bounds what its cube can win — whether a match's Max Cube is a
+  match-domain rule of its own is open (halheinrich/backgammon#289), and no
+  cube limit is added to `MatchTerms` meanwhile; nor any relation to the
+  length — the two values above happen to be the smallest exponent whose
+  cube value covers it, but XG does not follow that consistently, so
+  nothing encodes it. The encoder's `MatchMaxCubeField` states the constant
+  where it is applied.
 - **Culture-invariant**: numbers are written invariant, so a culture's minus
   sign (`sv-SE`'s U+2212) cannot change the opponent's `-1`. The converter's
   copy formatted with the ambient culture.
@@ -1560,7 +1569,9 @@ the record's. The format, field by field, is stated once, on
   derive it byte for byte, and 80,479 of the 80,497 distinct corpus XGIDs,
   decoded into records and re-derived, are identical; the other 18 are
   Crawford cube XGIDs, which a record refuses. No real state tripped any of
-  the new rules. `XgidDerivationTests` pins known strings — XG's own and the
+  the new rules. Every match header that corpus held stated a Max Cube of
+  10, so the measurement could not find another value and says nothing
+  about one (the bullet above). `XgidDerivationTests` pins known strings — XG's own and the
   two the builders once stored — as literals.
 
 ### After-boards (derived)

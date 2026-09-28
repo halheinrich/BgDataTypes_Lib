@@ -11,12 +11,15 @@ namespace BgDataTypes_Lib;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>No cube limit</b> (decided at the umbrella's review of
-/// halheinrich/backgammon#273, 2026-09-26): a match's length already bounds
-/// what its cube can win, so the limit is a money session's alone
-/// (<see cref="MoneyTerms.CubeLimit"/>). A producer refuses a match header
-/// stating one; the XGID's field for it is a constant for every match
-/// (the internal encoder states it, with the corpus evidence).
+/// <b>No Max Cube</b> (Hal's ruling of 2026-09-27 on
+/// halheinrich/backgammon#273: no cube limit is added to these terms). XG
+/// match input states a Max Cube, and legitimate files state varying values,
+/// but that does not establish a match-domain rule of its own — whether it is
+/// one is halheinrich/backgammon#289 — so the terms state the length alone
+/// and the record carries no Max Cube for a match. The cube limit the record
+/// does carry is a money session's (<see cref="MoneyTerms.CubeLimit"/>). The
+/// XGID derived for a match writes a constant in its Max Cube field (the
+/// internal encoder states which, and why).
 /// </para>
 /// <para>
 /// <b>Well-formed by construction.</b> The length is at least 1; its init

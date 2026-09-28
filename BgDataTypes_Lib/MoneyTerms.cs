@@ -61,8 +61,8 @@ public sealed class MoneyTerms : SessionTerms
     /// The highest value the cube may reach in this session — a positive power
     /// of two (XG's default is 1024, <c>2^10</c>), so a position's
     /// <see cref="PositionData.CubeSize"/> never exceeds it. A money session's
-    /// rule: a match has no cube limit, the match length bounding what the
-    /// cube can win (<see cref="MatchTerms"/>).
+    /// fact: the record carries no cube limit for a match (see
+    /// <see cref="MatchTerms"/>).
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is not a positive power of two.</exception>
     public required int CubeLimit

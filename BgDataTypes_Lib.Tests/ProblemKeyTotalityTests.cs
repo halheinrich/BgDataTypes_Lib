@@ -60,7 +60,7 @@ public class ProblemKeyTotalityTests
         yield return TestRecords.MoneySession(onRollScore: 7, opponentScore: 2);
     }
 
-    /// <summary>The cube at 1, doubled, high, at money's default limit, and past it (a match has none).</summary>
+    /// <summary>The cube at 1, doubled, high, at money's default limit, and past it (the record holds no limit for a match).</summary>
     private static readonly int[] CubeSizes = [1, 2, 64, 1024, 4096];
 
     /// <summary>Every roll, in both orders.</summary>

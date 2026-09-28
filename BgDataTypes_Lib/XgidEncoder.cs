@@ -46,10 +46,11 @@ namespace BgDataTypes_Lib;
 /// beaver rule.</description></item>
 /// <item><description><b>matchLength</b> — a match's length; 0 for money, the
 /// format's own spelling of money.</description></item>
-/// <item><description><b>maxCube</b> — the exponent of a money session's
-/// <see cref="MoneyTerms.CubeLimit"/>; for a match, which has no cube
-/// limit, always 10 (<see cref="MatchMaxCubeField"/>, which states the
-/// decision and its evidence).</description></item>
+/// <item><description><b>maxCube</b> — an exponent, the highest cube value
+/// being <c>2^maxCube</c>: for money, the exponent of the session's
+/// <see cref="MoneyTerms.CubeLimit"/>; for a match, the constant 10
+/// (<see cref="MatchMaxCubeField"/>, which states why), since the record
+/// states no Max Cube for a match.</description></item>
 /// </list>
 /// <para>
 /// The format's 0s for money (the match length, and the away scores it
@@ -65,20 +66,29 @@ internal static class XgidEncoder
     internal const string Prefix = "XGID=";
 
     /// <summary>
-    /// The maxCube field of every match's XGID: 10 (<c>2^10</c>), whatever
-    /// the match.
+    /// The maxCube field this encoder writes for a match: 10 (<c>2^10</c>),
+    /// the value XG typically writes there for a match.
     /// </summary>
     /// <remarks>
-    /// <b>Decided, not defaulted</b> (the umbrella's review of
-    /// halheinrich/backgammon#273, 2026-09-26): a match has no cube limit —
-    /// its length already bounds what its cube can win — so no record, and
-    /// no <see cref="MatchTerms"/>, holds one for this field to spell. XG
-    /// writes 10 there for every match: all 69,824 distinct match XGIDs in
-    /// the local corpus state it (measured 2026-09-26, where the converter's
-    /// copy wrote the match header's cube-limit exponent instead). The
-    /// assumption is guarded where it could break, at the converter's
-    /// boundary: a match header stating any other limit is refused there, so
-    /// real data that contradicts it is exposed rather than re-spelled.
+    /// <para>
+    /// <b>A constant because the record states none</b> (Hal's ruling of
+    /// 2026-09-27 on halheinrich/backgammon#273, which withdrew the earlier
+    /// assumption that XG writes 10 for every match). No record member, and no
+    /// <see cref="MatchTerms"/> member, holds a Max Cube for a match, so there
+    /// is nothing of the record's for this field to spell, and 10 is the value
+    /// XG typically writes. Legitimate XG-authored files state other values
+    /// too — 3 for a 5-point match and 4 for a 9-point one among them — so the
+    /// XGID derived for such a match differs from XG's own in this field.
+    /// </para>
+    /// <para>
+    /// What the constant does not claim: that a match has no cube limit, or
+    /// that its length bounds what its cube can win — whether a match's Max
+    /// Cube is a match-domain rule of its own is not established
+    /// (halheinrich/backgammon#289); nor any relation to the match's length.
+    /// The two values above happen to be the smallest exponent whose cube
+    /// value covers the length, but XG does not follow that consistently, so
+    /// nothing here encodes it.
+    /// </para>
     /// </remarks>
     internal const int MatchMaxCubeField = 10;
 

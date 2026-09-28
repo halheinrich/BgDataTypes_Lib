@@ -8,8 +8,8 @@ namespace BgDataTypes_Lib;
 /// (<see cref="MatchTerms"/>) — what each player still needs, the player on
 /// roll's first, and whether this is the Crawford game. One of the two kinds
 /// of <see cref="Session"/>; it carries a match's facts and nothing else — no
-/// Jacoby rule, which does not apply in a match, and no cube limit, which a
-/// match's length makes needless.
+/// Jacoby rule, which does not apply in a match, and no Max Cube, which the
+/// record does not carry for a match (see <see cref="MatchTerms"/>).
 /// </summary>
 /// <remarks>
 /// <para>
