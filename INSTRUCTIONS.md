@@ -52,7 +52,12 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `Session.Create`, the one operation building a session from its header's
   terms, the game's standing and the seat on roll, a `Seat`, and the
   internal `SessionRules`, the statement of the session's rules; see
-  "Money and match: the session kinds");
+  "Money and match: the session kinds"); the game's session — the abstract
+  `GameSession` and its two sealed kinds `MoneyGameSession` and
+  `MatchGameSession`, each composing its kind's terms and standing as the
+  header states them, with `GameSession.Create`, the one operation pairing
+  the terms with the game's standing, which takes no seat and through which
+  `Session.Create` pairs;
   `DecisionRules`, the internal statement of the rules
   that bind a decision's members, `FiniteNumber`, the internal statement
   of the rule every stored number keeps, `DocumentRefusal`, the internal one
@@ -1510,18 +1515,40 @@ Design points a maintainer needs before touching it:
   record is the player on roll's view, whatever seat that player sits in.
 - **Built by one operation: `Session.Create(terms, standing, onRoll)`.** A
   header states the terms and the game's standing seat by seat (player 1,
-  player 2); the operation turns the standing to the `Seat` on roll — the
-  seat on roll's score or away score becomes the player on roll's, the
-  other's the opponent's, a match's Crawford flag is the game's — and holds
-  the two to each other: terms and a standing of different kinds are
-  refused (`ArgumentException` naming `standing`), and so is a match
-  standing with an away score above the terms' length
+  player 2); the operation pairs the two through `GameSession.Create`
+  (below), which holds them to each other — terms and a standing of
+  different kinds are refused (`ArgumentException` naming `standing`), and
+  so is a match standing with an away score above the terms' length
   (`ArgumentOutOfRangeException` naming `standing`), since the standing
-  knows no length. It is the one orientation rule, and the one way code
-  outside the library builds a session: the kinds have no public
-  constructor and no public setter, so no producer orients the scores
-  itself. The library's own construction is the serializer's and the
-  row's read-back, which states the standing already on-roll-relative.
+  knows no length — and then turns the standing to the `Seat` on roll: the
+  seat on roll's score or away score becomes the player on roll's, the
+  other's the opponent's, a match's Crawford flag is the game's. A pair the
+  pairing refuses is refused before the seat is looked at. It is the one
+  orientation rule, and the one way code outside the library builds a
+  session: the kinds have no public constructor and no public setter, so
+  no producer orients the scores itself. The library's own construction is
+  the serializer's and the row's read-back, which states the standing
+  already on-roll-relative.
+- **A game's session: the pairing, with no seat** (Hal's ruling of
+  2026-09-29 on halheinrich/backgammon#273, from XgAnalytics's leg). A
+  caller at game scope has a header's terms and a game's standing but no
+  decision, so no player on roll; passing `Session.Create` a seat to have
+  the two validated would be a stand-in. It pairs them through
+  `GameSession.Create(terms, standing)` instead: a `MoneyGameSession` or a
+  `MatchGameSession`, each composing its kind's terms and standing as the
+  header states them — seat-anchored, claiming no player on roll — so the
+  caller tells money from a match, and reads a match's `Terms.Length`,
+  `Standing.Away1`, `Standing.Away2` and `Standing.IsCrawford`, through one
+  `Match`/`Switch` on the kind, with no kind check of its own and no branch
+  that cannot run. It is the one statement of the pairing rule — the kind
+  dispatch in `Create`, and the match kind's construction holding each away
+  score to the length — and `Session.Create` pairs through it, so the two
+  accept exactly the same pairs and refuse the rest alike
+  (`GameSessionTests` pins that over a grid crossing each edge of the rule,
+  at either seat). A closed pair, a value (equality over the terms and the
+  standing), built only through `Create`. Not a wire type: no document
+  embeds it, so its wire debut belongs to the first that does; its terms
+  and its standing are the wire types a producer serializes.
 - **On the wire the kind is stated once, in the terms.** A session is
   `{"Terms":{"Kind":…,…},…}` and its oriented standing — never a `"Kind"`
   of its own beside its terms' (`Session.Kind` is `[JsonIgnore]`d and
@@ -1805,7 +1832,11 @@ internal `SessionRules`. **A producer builds a record's session from the
 other two**, through `Session.Create(Terms, Standing, onRoll)` with the
 `Seat` on roll at the decision — the one orientation rule, and the only way
 code outside the library builds one (see "Money and match: the session
-kinds").
+kinds"). **A consumer at game scope pairs the two with no seat**, through
+`GameSession.Create(Terms, Standing)`: a game's session, money or a match,
+whose match kind reads the length, the away scores and the Crawford flag
+seat-anchored, as the header states them — the pairing rule stated once,
+and the one `Session.Create` pairs through.
 
 **The terms and the standing are wire types** (the umbrella's review of
 halheinrich/backgammon#273). A producer serializes its header types — the
@@ -2076,8 +2107,8 @@ public abstract class Session : IEquatable<Session>, IEqualityOperators<Session,
     [JsonIgnore] public SessionKind Kind { get; }  // its terms' kind; not on the session's wire
     // The one way code outside the library builds a session, and the one
     // orientation rule: the seat on roll's standing becomes the player on
-    // roll's. Refuses terms and a standing of different kinds, and an away
-    // score past the terms' length, each naming "standing".
+    // roll's. Pairs through GameSession.Create, refusing a pair exactly as
+    // that does, and only then an undefined seat.
     public static Session Create(SessionTerms terms, GameStanding standing, Seat onRoll);
     public abstract TResult Match<TResult>(Func<MoneySession, TResult> money, Func<MatchSession, TResult> match);
     public abstract void Switch(Action<MoneySession> money, Action<MatchSession> match);
@@ -2097,6 +2128,35 @@ public sealed class MatchSession : Session       // no public constructor or set
     [JsonInclude, JsonRequired] public int OnRollNeeds { get; internal init; }    // 1..Terms.Length
     [JsonInclude, JsonRequired] public int OpponentNeeds { get; internal init; }  // 1..Terms.Length
     [JsonInclude, JsonRequired] public bool IsCrawford { get; internal init; }    // exactly one player 1-away when set
+}
+
+// A game's session: a header's terms and a game's standing, paired with no
+// seat and claiming none — the standing stays seat-anchored. The one
+// statement of the pairing rule; Session.Create pairs through it. Not a wire
+// type: no document embeds one.
+public abstract class GameSession : IEquatable<GameSession>, IEqualityOperators<GameSession, GameSession, bool>
+{
+    public SessionKind Kind { get; }              // its terms' kind
+    // The one way code outside the library builds one. Refuses a null, terms
+    // and a standing of different kinds (ArgumentException) and an away score
+    // past the terms' length (ArgumentOutOfRangeException), each naming its
+    // parameter: "standing" for the two rules.
+    public static GameSession Create(SessionTerms terms, GameStanding standing);
+    public abstract TResult Match<TResult>(Func<MoneyGameSession, TResult> money, Func<MatchGameSession, TResult> match);
+    public abstract void Switch(Action<MoneyGameSession> money, Action<MatchGameSession> match);
+    public abstract bool Equals(GameSession? other);  // + Equals(object), GetHashCode, ==, !=: the terms and the standing
+}
+
+public sealed class MoneyGameSession : GameSession  // no public constructor or setter
+{
+    public MoneyTerms Terms { get; }              // as the header states them
+    public MoneyStanding Standing { get; }        // player 1's and player 2's scores
+}
+
+public sealed class MatchGameSession : GameSession  // no public constructor or setter
+{
+    public MatchTerms Terms { get; }              // the length
+    public MatchStanding Standing { get; }        // player 1's and player 2's away scores, each <= Terms.Length; Crawford
 }
 
 [JsonConverter(typeof(BgDecisionDataJsonConverter))]  // dispatches on "Kind"; names no member
@@ -2785,7 +2845,10 @@ measure" is not a valid comparison on this hardware.
   kinds leave no other way in. Pass the seat of the player on roll at the
   decision, not the seat that started the game. Code holding on-roll facts
   already (a builder, a test) passes them as seat 1's with `Seat.Player1`,
-  which turns nothing.
+  which turns nothing. A caller with no decision — a game's header alone —
+  has no seat on roll to pass: it pairs the terms and the standing through
+  `GameSession.Create`, never through `Session.Create` with a seat standing
+  in for one.
 - **`DecisionRow.MatchScore` is computed, not stored.** It is spelled from
   the row's `Session` — the session columns typed — on every access. Do not
   try to set it.

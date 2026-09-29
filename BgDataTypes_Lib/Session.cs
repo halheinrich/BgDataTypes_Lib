@@ -26,8 +26,11 @@ namespace BgDataTypes_Lib;
 /// player on roll's side and holds no seat. <see cref="Create"/> is the one
 /// place a standing is turned to the player on roll — code outside this
 /// library cannot build a session any other way, so no producer orients the
-/// scores itself. The three scopes share <see cref="SessionKind"/> and the
-/// rules of the internal <see cref="SessionRules"/>, stated once.
+/// scores itself. It pairs the terms and the standing through
+/// <see cref="GameSession.Create"/>, the game's session, which states the
+/// rule holding the two to each other once and needs no seat. The scopes
+/// share <see cref="SessionKind"/> and the rules of the internal
+/// <see cref="SessionRules"/>, stated once.
 /// </para>
 /// <para>
 /// <b>A closed pair.</b> The constructors are not reachable outside this
@@ -90,13 +93,16 @@ public abstract class Session : IEquatable<Session>, IEqualityOperators<Session,
     public SessionKind Kind { get; }
 
     /// <summary>
-    /// The session of a game, seen from the player on roll: the session's
-    /// <paramref name="terms"/>, and the game's seat-anchored
-    /// <paramref name="standing"/> turned to the <paramref name="onRoll"/>
-    /// seat — the seat on roll's score or away score becomes the player on
-    /// roll's, the other seat's the opponent's, and a match's Crawford flag is
-    /// the game's. The one orientation rule, and the one way code outside this
-    /// library builds a session.
+    /// The session of a game, seen from the player on roll: the game's session
+    /// — the session's <paramref name="terms"/> and the game's seat-anchored
+    /// <paramref name="standing"/>, paired by <see cref="GameSession.Create"/>
+    /// — turned to the <paramref name="onRoll"/> seat: the seat on roll's
+    /// score or away score becomes the player on roll's, the other seat's the
+    /// opponent's, and a match's Crawford flag is the game's. The one
+    /// orientation rule, and the one way code outside this library builds a
+    /// session. The pairing is the game session's, stated there once, so the
+    /// two accept exactly the same pairs; a pair it refuses is refused here as
+    /// it refuses it, before the seat is looked at.
     /// </summary>
     /// <param name="terms">The session's terms, as its header states them.</param>
     /// <param name="standing">The game's standing, player 1's and player 2's, as its header states it; of the terms' kind.</param>
@@ -104,40 +110,33 @@ public abstract class Session : IEquatable<Session>, IEqualityOperators<Session,
     /// <returns>A <see cref="MoneySession"/> for money terms, a <see cref="MatchSession"/> for a match's.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="terms"/> or <paramref name="standing"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="onRoll"/> is not a defined seat; or a match
-    /// <paramref name="standing"/> has an away score above the terms' length.
+    /// A match <paramref name="standing"/> has an away score above the terms'
+    /// length; or <paramref name="onRoll"/> is not a defined seat.
     /// </exception>
     /// <exception cref="ArgumentException"><paramref name="standing"/> is not of <paramref name="terms"/>' kind.</exception>
     public static Session Create(SessionTerms terms, GameStanding standing, Seat onRoll)
     {
-        ArgumentNullException.ThrowIfNull(terms);
-        ArgumentNullException.ThrowIfNull(standing);
+        var game = GameSession.Create(terms, standing);
         if (!Enum.IsDefined(onRoll))
             throw new ArgumentOutOfRangeException(nameof(onRoll), onRoll, SessionRules.SeatMessage);
 
-        switch (terms, standing)
-        {
-            case (MoneyTerms money, MoneyStanding scores):
+        return game.Match<Session>(
+            money: money =>
             {
-                var (onRollScore, opponentScore) = Oriented(scores.Score1, scores.Score2, onRoll);
-                return new MoneySession { Terms = money, OnRollScore = onRollScore, OpponentScore = opponentScore };
-            }
-            case (MatchTerms match, MatchStanding aways):
+                var (onRollScore, opponentScore) = Oriented(money.Standing.Score1, money.Standing.Score2, onRoll);
+                return new MoneySession { Terms = money.Terms, OnRollScore = onRollScore, OpponentScore = opponentScore };
+            },
+            match: match =>
             {
-                var (onRollNeeds, opponentNeeds) = Oriented(aways.Away1, aways.Away2, onRoll);
-                if (!SessionRules.NeedsHolds(onRollNeeds, match.Length) || !SessionRules.NeedsHolds(opponentNeeds, match.Length))
-                    throw new ArgumentOutOfRangeException(nameof(standing), standing, SessionRules.NeedsMessage);
+                var (onRollNeeds, opponentNeeds) = Oriented(match.Standing.Away1, match.Standing.Away2, onRoll);
                 return new MatchSession
                 {
-                    Terms = match,
+                    Terms = match.Terms,
                     OnRollNeeds = onRollNeeds,
                     OpponentNeeds = opponentNeeds,
-                    IsCrawford = aways.IsCrawford,
+                    IsCrawford = match.Standing.IsCrawford,
                 };
-            }
-            default:
-                throw new ArgumentException(SessionRules.StandingKindMessage, nameof(standing));
-        }
+            });
     }
 
     /// <summary>

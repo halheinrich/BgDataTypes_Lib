@@ -5,7 +5,8 @@ namespace BgDataTypes_Lib;
 /// backgammon — each stated once, here, with the one sentence every refusal
 /// of it carries — at every scope money versus match is stated: a header's
 /// <see cref="MoneyTerms"/>, <see cref="MatchTerms"/>,
-/// <see cref="MoneyStanding"/> and <see cref="MatchStanding"/>; a record's
+/// <see cref="MoneyStanding"/> and <see cref="MatchStanding"/>; a game's
+/// session, <see cref="GameSession.Create"/>, which pairs them; a record's
 /// <see cref="MoneySession"/>, <see cref="MatchSession"/> and
 /// <see cref="PositionData"/>; and <see cref="Session.Create"/>, which builds
 /// a session from its header. Each holds its members to them in its init
@@ -95,14 +96,17 @@ internal static class SessionRules
         (onRollNeeds == 1) != (opponentNeeds == 1);
 
     // -----------------------------------------------------------------------
-    //  A session from its header
+    //  A game's session, and a decision's, from the header
     //
-    //  A session is its terms and its game's standing, seen from the player
-    //  on roll. The two are of one kind — money terms with a money standing,
-    //  a match's terms with a match standing — and the seat on roll is one of
-    //  the two a header names. Session.Create applies both, and the match's
-    //  own rule binding each away score to the length, in the one place a
-    //  standing is oriented.
+    //  A game's session is its terms and its standing, as the header states
+    //  them; a decision's is the same seen from the player on roll. The terms
+    //  and the standing are of one kind — money terms with a money standing,
+    //  a match's terms with a match standing — and a match standing's away
+    //  scores are at most the terms' length, which the standing does not
+    //  know. GameSession.Create is the one pairing: it holds the kinds to
+    //  each other, and the match kind it builds holds the away scores to the
+    //  length. Session.Create pairs through it, then turns the standing to
+    //  the seat on roll, one of the two a header names.
     // -----------------------------------------------------------------------
 
     /// <summary>The rule binding a standing's kind to its terms', in the one sentence every refusal carries.</summary>
