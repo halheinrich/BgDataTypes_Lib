@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -52,10 +50,14 @@ namespace BgDataTypes_Lib;
 /// generator (BgMoveGen) takes the position each play reaches, for every
 /// successor it returns and every candidate, and keys its move-entry
 /// searches by position. Generating the plays compares no positions — the
-/// generator avoids duplicates by construction. The counts are stored
-/// inline and narrowed, which the invariant makes lossless (no count
-/// exceeds <see cref="CheckersPerSide"/> in magnitude); the storage is
-/// private and reads widen back to <see langword="int"/>.
+/// generator avoids duplicates by construction. The counts are stored in
+/// the value itself, a byte each, which the invariant makes lossless (no
+/// count exceeds <see cref="CheckersPerSide"/> in magnitude); the storage
+/// is private and reads widen back to <see langword="int"/>. It is plain
+/// integer fields, not an inline array: under Mono AOT, in the WebAssembly
+/// toolchain a consumer publishes with, the generic by-value paths a probe
+/// exercised over inline-array-backed structs trapped
+/// (halheinrich/backgammon#320).
 /// </para>
 /// <para>
 /// <b>The frame is the holder's to state.</b> A position does not record
@@ -101,7 +103,7 @@ public readonly struct BoardPosition :
     {
         if (FindFault(counts) is { } fault)
             throw new ArgumentException(fault, nameof(counts));
-        _counts = Narrow(counts);
+        _counts = new Counts(counts);
     }
 
     private BoardPosition(Counts counts) => _counts = counts;
@@ -136,7 +138,7 @@ public readonly struct BoardPosition :
         ReadOnlySpan<int> counts, out BoardPosition position, [NotNullWhen(false)] out string? fault)
     {
         fault = FindFault(counts);
-        position = fault is null ? new BoardPosition(Narrow(counts)) : default;
+        position = fault is null ? new BoardPosition(new Counts(counts)) : default;
         return fault is null;
     }
 
@@ -152,7 +154,7 @@ public readonly struct BoardPosition :
     {
         Debug.Assert(FindFault(counts) is null,
             "FromWellFormed: the counts do not form a well-formed position.");
-        return new BoardPosition(Narrow(counts));
+        return new BoardPosition(new Counts(counts));
     }
 
     // ── Starting positions ────────────────────────────────────────
@@ -374,9 +376,8 @@ public readonly struct BoardPosition :
                 $"The destination must hold at least {SlotCount} counts; it holds {destination.Length}.",
                 nameof(destination));
 
-        ReadOnlySpan<sbyte> counts = _counts;
         for (int i = 0; i < SlotCount; i++)
-            destination[i] = counts[i];
+            destination[i] = _counts[i];
     }
 
     /// <summary>
@@ -442,19 +443,17 @@ public readonly struct BoardPosition :
     /// </remarks>
     public BoardPosition Flipped()
     {
-        ReadOnlySpan<sbyte> counts = _counts;
-        var flipped = new Counts();
+        Span<int> flipped = stackalloc int[SlotCount];
         for (int i = 0; i < SlotCount; i++)
-            flipped[i] = (sbyte)-counts[SlotCount - 1 - i];
-        return new BoardPosition(flipped);
+            flipped[i] = -_counts[SlotCount - 1 - i];
+        return new BoardPosition(new Counts(flipped));
     }
 
     /// <summary>
     /// Whether <paramref name="other"/> is the same position: all 26 counts
     /// equal, both bars included.
     /// </summary>
-    public bool Equals(BoardPosition other) =>
-        ((ReadOnlySpan<sbyte>)_counts).SequenceEqual(other._counts);
+    public bool Equals(BoardPosition other) => _counts.Equals(other._counts);
 
     /// <inheritdoc/>
     public override bool Equals([NotNullWhen(true)] object? obj) =>
@@ -464,12 +463,7 @@ public readonly struct BoardPosition :
     /// A hash over all 26 counts, consistent with <see cref="Equals(BoardPosition)"/>.
     /// Never identity, and seeded per process — see the type remarks.
     /// </summary>
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-        hash.AddBytes(MemoryMarshal.AsBytes((ReadOnlySpan<sbyte>)_counts));
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => _counts.GetHashCode();
 
     /// <summary>Whether the two are the same position (<see cref="Equals(BoardPosition)"/>).</summary>
     public static bool operator ==(BoardPosition left, BoardPosition right) => left.Equals(right);
@@ -486,15 +480,15 @@ public readonly struct BoardPosition :
     /// </summary>
     public override string ToString()
     {
-        ReadOnlySpan<sbyte> counts = _counts;
         var text = new StringBuilder();
         for (int i = 0; i < SlotCount; i++)
         {
-            if (counts[i] == 0)
+            int count = _counts[i];
+            if (count == 0)
                 continue;
             if (text.Length > 0)
                 text.Append(' ');
-            text.Append(i).Append(':').Append(counts[i]);
+            text.Append(i).Append(':').Append(count);
         }
         return text.Length == 0 ? "empty" : text.ToString();
     }
@@ -550,21 +544,117 @@ public readonly struct BoardPosition :
     }
 
     /// <summary>
-    /// The counts in storage form. Lossless for any board the invariant
-    /// admits; callers establish it first.
+    /// The 26 counts, a byte each, packed into four plain
+    /// <see langword="ulong"/> words: slot <c>i</c> is byte <c>i % 8</c> of
+    /// word <c>i / 8</c>, counted from the low-order end, in two's
+    /// complement. The one statement of that layout is <see cref="Locate"/>:
+    /// the constructor is the only write and the indexer the only read of a
+    /// slot. The last word's six bytes past slot 25 are never written, so
+    /// they are always zero, and equality and the hash take the words whole.
     /// </summary>
-    private static Counts Narrow(ReadOnlySpan<int> counts)
+    /// <remarks>
+    /// <para>
+    /// <b>Not an inline array</b> (halheinrich/backgammon#320). The counts
+    /// were an <c>[InlineArray(26)]</c> of <see langword="sbyte"/>. A probe
+    /// published with the toolchain BgQuiz_Blazor pins (SDK 10.0.401,
+    /// runtime 10.0.12) showed a Mono AOT incompatibility on the generic
+    /// by-value paths it exercised over inline-array-backed structs: LINQ's
+    /// <c>First()</c>, handing the element back through an interface, over
+    /// dictionary keys, a list and an array, trapped with "function
+    /// signature mismatch" — for this type, and for inline-array structs
+    /// unrelated to it — while a plain struct of the same 26 bytes passed
+    /// them all. Desktop JIT and a non-AOT WebAssembly build passed every
+    /// path, so no test in this repository can observe the defect;
+    /// <c>BoardPositionTests.Storage_HoldsNoInlineArray</c> keeps the
+    /// storage away from it instead.
+    /// </para>
+    /// <para>
+    /// <b>Why words.</b> They keep the storage safe code that assumes
+    /// nothing about layout. The probe's two other passing controls each
+    /// give one of those up: a fixed-size buffer is unsafe code, and 26
+    /// fields read as one span assume the fields lie contiguously, which the
+    /// language does not promise. A few fields read through a switch is also
+    /// how <see cref="Play"/> holds its moves.
+    /// </para>
+    /// </remarks>
+    private readonly struct Counts : IEquatable<Counts>
     {
-        var narrowed = new Counts();
-        for (int i = 0; i < SlotCount; i++)
-            narrowed[i] = (sbyte)counts[i];
-        return narrowed;
-    }
+        /// <summary>The counts one word holds: a byte each.</summary>
+        private const int CountsPerWord = sizeof(ulong);
 
-    /// <summary>The 26 counts, stored inline.</summary>
-    [InlineArray(SlotCount)]
-    private struct Counts
-    {
-        private sbyte _element0;
+        /// <summary>The words the 26 counts fill: the four fields.</summary>
+        private const int WordCount = (SlotCount + CountsPerWord - 1) / CountsPerWord;
+
+        private readonly ulong _word0, _word1, _word2, _word3;
+
+        /// <summary>
+        /// Packs 26 counts. Lossless for any board the invariant admits —
+        /// every count then fits a byte — so callers establish it first.
+        /// </summary>
+        public Counts(ReadOnlySpan<int> counts)
+        {
+            Span<ulong> words = stackalloc ulong[WordCount];
+            words.Clear();   // the packing ORs into it, and stackalloc does not promise zeros
+            for (int slot = 0; slot < SlotCount; slot++)
+            {
+                var (word, shift) = Locate(slot);
+                words[word] |= (ulong)unchecked((byte)counts[slot]) << shift;
+            }
+            _word0 = words[0];
+            _word1 = words[1];
+            _word2 = words[2];
+            _word3 = words[3];
+        }
+
+        /// <summary>The count on <paramref name="slot"/> (0–25), widened.</summary>
+        public int this[int slot]
+        {
+            get
+            {
+                var (word, shift) = Locate(slot);
+                return unchecked((sbyte)(Word(word) >> shift));
+            }
+        }
+
+        /// <summary>Whether all 26 counts are equal: the words, whole.</summary>
+        public bool Equals(Counts other) =>
+            _word0 == other._word0 && _word1 == other._word1
+            && _word2 == other._word2 && _word3 == other._word3;
+
+        /// <inheritdoc/>
+        public override bool Equals([NotNullWhen(true)] object? obj) =>
+            obj is Counts other && Equals(other);
+
+        /// <summary>A hash over the words, consistent with <see cref="Equals(Counts)"/>.</summary>
+        public override int GetHashCode()
+        {
+            // Each word goes in as its two halves: a ulong's own hash folds
+            // them together, so boards differing only in two slots four
+            // apart would collide.
+            var hash = new HashCode();
+            for (int word = 0; word < WordCount; word++)
+            {
+                ulong bits = Word(word);
+                hash.Add(unchecked((uint)bits));
+                hash.Add((uint)(bits >> 32));
+            }
+            return hash.ToHashCode();
+        }
+
+        /// <summary>
+        /// Where <paramref name="slot"/>'s count is stored: its word, and the
+        /// bit its byte starts at.
+        /// </summary>
+        private static (int Word, int Shift) Locate(int slot) =>
+            (slot / CountsPerWord, 8 * (slot % CountsPerWord));
+
+        private ulong Word(int word) => word switch
+        {
+            0 => _word0,
+            1 => _word1,
+            2 => _word2,
+            3 => _word3,
+            _ => throw new UnreachableException(),
+        };
     }
 }

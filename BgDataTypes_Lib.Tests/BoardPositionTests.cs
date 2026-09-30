@@ -1,11 +1,13 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
 /// The position value: its invariant, its equality and hash contract, its
-/// read surface and text form, and that it allocates nothing to create,
-/// compare or hash.
+/// read surface and text form, that it allocates nothing to create,
+/// compare or hash, and that its storage is no inline array.
 /// </summary>
 public class BoardPositionTests
 {
@@ -367,4 +369,67 @@ public class BoardPositionTests
         if (a.Equals(b)) result += 2;
         return result + a[6] + b[25];
     }
+
+    // ── Storage ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// The pin against a return to inline-array storage
+    /// (halheinrich/backgammon#320): no type a position is laid out from,
+    /// the position's own included, is an <c>[InlineArray]</c>. A probe
+    /// published with BgQuiz_Blazor's toolchain (SDK 10.0.401, runtime
+    /// 10.0.12) showed Mono AOT trapping on the generic by-value paths it
+    /// exercised over inline-array-backed structs, this type among them
+    /// while its counts were one.
+    /// No JIT-run test can catch that defect itself: it lives in the code
+    /// Mono's AOT compiler emits for a WebAssembly publish, and this suite
+    /// runs on the JIT, where every one of those paths passes — as each did
+    /// on desktop JIT and in the non-AOT WebAssembly build. So this pin holds
+    /// the representation, and the AOT builds are the evidence for the
+    /// behaviour.
+    /// </summary>
+    [Fact]
+    public void Storage_HoldsNoInlineArray()
+    {
+        Assert.Empty(InlineArraysIn(typeof(BoardPosition)));
+    }
+
+    /// <summary>
+    /// The pin above is not vacuous: its walk finds an inline array held
+    /// two fields down, deeper than the position's former storage was.
+    /// </summary>
+    [Fact]
+    public void StorageWalk_FindsAnInlineArrayHeldInAFieldOfAField()
+    {
+        Assert.Equal([typeof(ControlBuffer)], InlineArraysIn(typeof(ControlOuter)));
+    }
+
+    private static List<Type> InlineArraysIn(Type type) =>
+        [.. StorageTypes(type).Where(t => t.IsDefined(typeof(InlineArrayAttribute), inherit: false))];
+
+    /// <summary>
+    /// <paramref name="type"/> and every value type its instance fields
+    /// hold, at any depth: every type a value of it is laid out from.
+    /// </summary>
+    private static IEnumerable<Type> StorageTypes(Type type)
+    {
+        yield return type;
+        if (type.IsPrimitive)
+            yield break;   // a primitive's one field is of its own type
+        foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            if (!field.FieldType.IsValueType)
+                continue;
+            foreach (var held in StorageTypes(field.FieldType))
+                yield return held;
+        }
+    }
+
+    // The walk's control: an inline array two fields down (each positional
+    // member's backing field).
+    private readonly record struct ControlOuter(ControlInner Inner);
+
+    private readonly record struct ControlInner(ControlBuffer Buffer);
+
+    [InlineArray(2)]
+    private struct ControlBuffer { private sbyte _element0; }
 }

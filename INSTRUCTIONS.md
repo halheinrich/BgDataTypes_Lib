@@ -809,10 +809,14 @@ needs before touching it:
   "Data categories"), not this type's; so is its test,
   `PositionData.IsDecisionPosition`. Do not tighten this invariant to it,
   and do not add a member here that asks it.
-- **Representation.** The counts are stored inline as 26 `sbyte`s (an
-  `[InlineArray]`), which the invariant makes lossless; the storage is
-  private and every read widens to `int`. Equality is one 26-byte span
-  comparison and the hash one `HashCode.AddBytes` pass, so creating,
+- **Representation.** The counts are stored in the value, a byte each,
+  which the invariant makes lossless: packed eight to a word into the four
+  `ulong` fields of a private `Counts` struct, where one private map
+  (`Counts.Locate`) places a slot, its constructor is the one write and its
+  indexer the one read, and every read widens to `int`. Equality compares
+  the four words, and the hash takes each word as its two 32-bit halves (a
+  `ulong`'s own hash folds them, which collides boards differing in two
+  slots four apart — `Hash_ReadsEverySlot` fails on it), so creating,
   comparing and hashing allocate nothing — pinned by test with
   `GC.GetAllocatedBytesForCurrentThread`, because a consumer does them once
   per play: BgMoveGen takes the position each play reaches, for every
@@ -820,6 +824,24 @@ needs before touching it:
   searches by position. Its play generation compares no positions; it
   avoids duplicates by construction (BgMoveGen's INSTRUCTIONS.md, "One same
   position").
+- **Never an inline array** (halheinrich/backgammon#320). The counts were
+  an `[InlineArray(26)]` of `sbyte` until 2026-09-29. A probe published
+  with BgQuiz_Blazor's pinned toolchain (SDK 10.0.401, runtime 10.0.12)
+  showed a Mono AOT incompatibility on the generic by-value paths it
+  exercised over inline-array-backed structs: `First()` over dictionary
+  keys, a list and an array trapped with "function signature mismatch",
+  for this type and for inline-array structs unrelated to it, while a plain
+  struct of the same 26 bytes passed them all in the same AOT build, and
+  desktop JIT and a non-AOT WebAssembly build passed every path. No test
+  here runs AOT, so none can observe the defect;
+  `BoardPositionTests.Storage_HoldsNoInlineArray` pins the representation
+  instead — no type the position is laid out from is an inline array — and
+  `StorageWalk_FindsAnInlineArrayHeldInAFieldOfAField` pins that its walk
+  can fail. Plain words keep the storage safe code that assumes nothing
+  about layout; the probe's two other passing layouts each give one of
+  those up (a fixed-size buffer is unsafe code, and 26 fields read as one
+  span assume a contiguity the language does not promise). The full account
+  is on the `Counts` struct's comment.
 - **Name and placement.** It names the position of the checkers, distinct
   from `PositionData` (the record category, which adds score and cube) and
   from `BoardState` (the mutable working board), and it collides with no
