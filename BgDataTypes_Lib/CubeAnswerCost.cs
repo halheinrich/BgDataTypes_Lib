@@ -15,8 +15,8 @@ namespace BgDataTypes_Lib;
 /// The parts are exact, computed from the stored equities as they are:
 /// nothing rounds a cost and nothing corrects the analyser's numbers. Whether
 /// a cost, or either part, counts as zero is judged by
-/// <see cref="EquityLoss.CountsAsZero"/>, and shown by
-/// <see cref="EquityLoss.Format"/>, so what is shown and what is judged cannot
+/// <see cref="EquityDisplay.CountsAsZero"/>, and shown by
+/// <see cref="EquityDisplay.FormatLoss"/>, so what is shown and what is judged cannot
 /// disagree.
 /// </para>
 /// <para>

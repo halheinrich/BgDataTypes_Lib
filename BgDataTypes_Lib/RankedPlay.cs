@@ -33,7 +33,7 @@ public sealed class RankedPlay
     /// <see langword="null"/> and never negative; it is 0 for the best play
     /// and any that ties it. It is exact: whether a play is correct is judged
     /// by the zero rule every equity loss shares — its error shows as
-    /// <c>0.0000</c> (<see cref="EquityLoss.CountsAsZero"/>;
+    /// <c>0.0000</c> (<see cref="EquityDisplay.CountsAsZero"/>;
     /// halheinrich/backgammon#202) — so a play a hair off the best is correct
     /// too.
     /// </summary>

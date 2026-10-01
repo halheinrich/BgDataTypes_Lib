@@ -87,7 +87,8 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `AnalysisMode` × `AnalysisLevel` (the two-axis depth taxonomy) with `BookEdition`, and the internal `DepthTaxonomy` (the depth's rank, label and abbreviation, derived from its typed facts), alongside
   the small value types `CubeAnswerCost` (what a cube answer costs at a
   decision, in its two parts), and `DiceRoll` (a canonical unordered roll),
-  and `EquityLoss`, the one display and zero rule of every cost and loss.
+  and `EquityDisplay`, the one display of every equity figure and the zero
+  rule of every cost and loss.
 - **Shared consumer contracts** — `IDecisionFilterData`, the filter-layer
   view implemented by a record's view and by `DecisionRow`, carrying the
   score context a filter needs as the decision's `Session` (a money
@@ -662,7 +663,7 @@ the taker's (as `UserDoubleError ?? UserTakeError` reads), never
 compile.
 
 Whether a play is correct is judged by the zero rule every equity loss
-shares: its error shows as `0.0000` (`EquityLoss.CountsAsZero`;
+shares: its error shows as `0.0000` (`EquityDisplay.CountsAsZero`;
 halheinrich/backgammon#202, SPEC-scoring §2a), so a play a hair off the
 best is correct too. The rule is this library's, and so is the not-scored
 classification; applying the rule to a verdict is the consumer's
@@ -677,7 +678,7 @@ classification; applying the rule to a verdict is the consumer's
 | `CubeAnswer` | enum: `NoDouble`, `DoubleTake`, `DoublePass`, `NoDoublePass` — the four cube answers of SPEC-scoring §3 (amended 2026-09-30, halheinrich/backgammon#326): a submitted answer and the truth (`CubeDecisionData.BestAnswer`) alike. The fourth is named by its meaning, "don't double, they'd pass", never by its labels: it reads Too good where gammons are possible and No double / Pass where they are not (`CubeDecision.ClaimOf`). Its projections are `CubeAnswerExtensions`' `DoublerAction()`, `TakerAction()` (No double's take implied) and `CommitsToResponse()` (false for No double alone), each total over the four and refusing anything else; their public inverse, `CubeAnswerExtensions.Of(doubler, taker)`, is the one way two actions become an answer — the truth's two best actions, or a consumer's two recorded ones. It replaced the action pair `CubeDecisionPair`, retired as a second statement of the same domain. Declaration order is the offered order, §3's column order; the zero value `NoDouble` is an answer, so "no answer" is `CubeAnswer?` null. Carries the strict converter; no document embeds it, so it is not a context root. See "Cube answers and their costs". |
 | `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the three-way claim a cube answer reads as at a decision (SPEC-scoring §1/§3, `halheinrich/backgammon#86`; a reading since halheinrich/backgammon#326), derived once, by `CubeDecision.ClaimOf`. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, not a board action. For the fourth answer the reading is which of its two labels applies. No action and no answer leads back to a claim on its own: the reading needs the decision. Carries the strict converter; no longer a context root (no document embeds it). |
 | `CubeAnswerCost` | `sealed class` — what a cube answer costs at a decision (`CubeDecision.CostOf`), in two parts: `DoublingPart`, `TakePart`, and `Total`, their sum. No public constructor: only the library computes one. Exact, never rounded; value equality over the two parts. See "Cube answers and their costs". |
-| `EquityLoss` | `static class` — the one display of an equity loss (`Format`: four decimals, invariant, a loss that rounds to zero unsigned) and the one zero rule (`CountsAsZero`: exactly when it shows as `0.0000`), halheinrich/backgammon#202. See "When a loss counts as zero". |
+| `EquityDisplay` | `static class` — the one display precision of every equity figure: a loss (`FormatLoss`: four decimals, invariant, a loss that rounds to zero unsigned) and an equity with its sign (`FormatEquity`: the same digits, `+` wherever no minus shows, so `+0.0000` at zero); and the one zero rule (`CountsAsZero`: exactly when a loss shows as `0.0000`), halheinrich/backgammon#202. It was `EquityLoss`, with `Format` for `FormatLoss`, until halheinrich/backgammon#326's step 3a. See "When a loss counts as zero". |
 | `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — "not recorded", which a producer states; the members carrying the pair are required on the wire (see "Absence on the wire"), so JSON lacking them is refused rather than read as `Unknown`, while the retired flat class's property beside them is still ignored on read. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). The rollout trial count, the book edition and an unrecognized level's raw code are typed facts beside the pair (see "The depth as typed facts"). |
 | `PlayerResultKind` | enum: `NotRecorded`, `NotScored`, `Scored`, `Unstated` — the case of a player's result (`PlayerResult.Kind`, `DecisionRow.Result`), serializes as its string token through the strict converter. `NotRecorded` is the zero value. Every member carries a `[Description]` label. See "The player's result". |
 | `PlayRanking` | enum: `Equity`, `DepthFirst` — the ranking of a checker play's candidates, the one definition of which play is best (SPEC-scoring §2a, `halheinrich/backgammon#282`); serializes as its string token through the strict converter. `Equity` is the default and the zero value. Every member carries a `[Description]` label ("Equity", "Depth first"). See "The ranking". |
@@ -691,7 +692,7 @@ classification; applying the rule to a verdict is the consumer's
 | `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
 | `PlayChain` | **internal** `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a route from a source to a landing point, which the notation writes as one `from/to`, joining consecutive moves and eliding the touch-down points between. It stops where its moves stop or at a hit point whose mark it carries, so it is not a checker's whole trajectory: an intermediate hit splits one trajectory into two chains (`13/10*/8` is written `13/10* 10/8`). Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | **internal** `readonly struct` (`halheinrich/backgammon#273`: consumers spell plays with `Play.ToNotation()` and compare them by position, so the chain form can change without breaking one), fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by the internal `Play.ToCanonical()` — no other constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite, as every stored number is), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's error against the best is a ranking's (`CheckerPlayDecisionData.RankedBy`): it needs the other candidates and a ranking. An error of exactly 0 is the test for "is this a best play" under that ranking, an equity tie with the best; `RankedPlays.Best` names its single best, the ranking's first. Whether a play is *correct* is the zero rule's, `EquityLoss.CountsAsZero`, which also admits a play a hair off the best. |
+| `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite, as every stored number is), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's error against the best is a ranking's (`CheckerPlayDecisionData.RankedBy`): it needs the other candidates and a ranking. An error of exactly 0 is the test for "is this a best play" under that ranking, an equity tie with the best; `RankedPlays.Best` names its single best, the ranking's first. Whether a play is *correct* is the zero rule's, `EquityDisplay.CountsAsZero`, which also admits a play a hair off the best. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 | `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `From` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. **Every record has a key**: `From` has no failure case, since a record's rules hold every fact it reads at least as strictly as the parse door holds text. Only text reaches the no-key rung: text whose facts would force a guess is **no key** rather than a wrong one (see "ProblemKey" below). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
@@ -1327,9 +1328,17 @@ The three computed properties (`BestDoublerAction`, `BestTakerAction`,
 `ActionEquity` and the error methods are intrinsically not serialised
 because they take parameters.
 
-An aggregate verdict layer was removed in the cube-surface rebuild and is
-slated to return later on a cleaner footing; the umbrella `INSTRUCTIONS.md`
-Deferred section and git history carry that design.
+**No verdict lives here.** The aggregate verdict layer (`CubeVerdict`,
+removed in the cube-surface rebuild at `94e27f9`, whose design git history
+keeps) is not slated to return: halheinrich/backgammon#326 replaced it. A
+cube answer is one of four (`CubeAnswer`), what it costs is
+`CubeDecision.CostOf`, and a verdict is derived from a cost by the consumers
+(BgGame_Lib's `Correctness`) through this library's zero rule,
+`EquityDisplay.CountsAsZero` (see "Cube answers and their costs" and "When
+a loss counts as zero"). The answers whose cost counts as zero,
+`CubeDecision.ZeroCostAnswers`, are not a verdict either: a quiz's error
+tolerance (halheinrich/backgammon#30) would widen the verdict, never that
+set.
 
 ### Cube answers and their costs
 
@@ -1351,6 +1360,7 @@ CubeDecisionData             BestAnswer — the truth, from the equities alone
 CubeDecision                 GammonsPossible — the position's fact
                              ClaimOf(answer) — what the answer reads as; the fourth's label choice
                              CostOf(answer) — the door: a CubeAnswerCost (DoublingPart, TakePart, Total)
+                             ZeroCostAnswers — the answers whose Total counts as zero, in the offered order
 ```
 
 Design points a maintainer needs before touching it:
@@ -1455,9 +1465,28 @@ Design points a maintainer needs before touching it:
   and never corrected: a no-double equity stored at +1.0000015 with
   gammons not possible gives Double / Pass a cost of 0.0000015, which the
   zero rule judges (see "When a loss counts as zero").
-- **Not wire.** `BestAnswer` and `GammonsPossible` are `[JsonIgnore]`d,
-  and `ClaimOf` and `CostOf` take a parameter, so a record's wire is
-  unchanged and the flat row gains no column.
+- **The answers that cost zero at the display precision.**
+  `CubeDecision.ZeroCostAnswers` is every answer whose `CostOf(answer).Total`
+  counts as zero (`EquityDisplay.CountsAsZero`), in the offered order: the
+  set SPEC-scoring §3's "The tie" has the review's Best line list
+  (halheinrich/backgammon#326, step 3a). It is the one derivation, so the
+  diagram's Best line and BgQuiz's "best is" wording name the same answers.
+  - *Its size is the costs', not an exact tie's.* It is never empty and
+    always holds `BestAnswer`, which costs exactly 0, but the truth does
+    not size it: off a tie it can hold two (where gammons are not possible
+    and the fourth answer is right, No double costs 0 too), and near a
+    boundary an answer whose cost is not 0 but shows as `0.0000` joins it,
+    below the cash or above it.
+  - *Its policy is fixed:* the zero rule and nothing else. It is not "the
+    correct answers": an error tolerance (halheinrich/backgammon#30) would
+    widen only the quiz's verdict, in BgGame_Lib, never this set.
+  - *No caller can change it.* Each read builds its own read-only list
+    (`IReadOnlyList<CubeAnswer>` over a fresh array, never an array or a
+    `List<T>`), and the decision keeps no collection, so nothing a caller
+    does to one result reaches another read.
+- **Not wire.** `BestAnswer`, `GammonsPossible` and `ZeroCostAnswers` are
+  `[JsonIgnore]`d, and `ClaimOf` and `CostOf` take a parameter, so a
+  record's wire is unchanged and the flat row gains no column.
 
 **The evidence, and its owner.** This library verifies the rules with
 synthetic pins, which gate, each building full decisions where the gammon
@@ -1470,42 +1499,73 @@ and that XG's gammon chances decide nothing), `CubeDecisionClaimOfTests`
 following each gate, the one derivation), and `CubeDecisionCostOfTests`
 (every cell of both tables with exact parts, the boundaries, the positions
 ruled on halheinrich/backgammon#326, and over a grid that the parts keep
-their shape and the truth always costs nothing). Checking the rules'
+their shape and the truth always costs nothing), and
+`CubeDecisionZeroCostAnswersTests` (every row of both tables, the tie in
+both gammon states, the named pairs away from the cash, the threshold
+either side below the cash and above it, and over a grid that the set is
+never empty, holds the truth, is exactly the zero rule on each whole cost
+and keeps the offered order; that no caller can change it; that it is not
+wire). Checking the rules'
 inputs against what XG stores remains ConvertXgToJson_Lib's
 (SPEC-scoring §3); no test here reads `TestData/`.
 
 ### When a loss counts as zero
 
-**`EquityLoss` owns how an equity loss is shown and when it counts as
-zero** (halheinrich/backgammon#202, folded into halheinrich/backgammon#326
-by Hal on 2026-10-01; SPEC-scoring §2a and §3). An equity loss is any cost
-or error in equity: a cube answer's cost or either part, a checker play's
-error under a ranking, a cube action's error, an error the analyser stored.
+**`EquityDisplay` owns how an equity figure is shown and when a loss
+counts as zero** (halheinrich/backgammon#202, folded into
+halheinrich/backgammon#326 by Hal on 2026-10-01; SPEC-scoring §2a and §3).
+An equity loss is any cost or error in equity: a cube answer's cost or
+either part, a checker play's error under a ranking, a cube action's error,
+an error the analyser stored. An equity is a position's or an action's
+value: a play's `Equity`, a cube action's `ActionEquity`.
 
-- **`Format(loss)`** — four decimals, culture-invariant: the one display
-  of every cost and loss. A loss that rounds to zero shows as `0.0000`
-  whatever its sign; a negative one beyond that, which only an error the
-  analyser stored can be, shows its sign, echoing the data. A NaN or an
-  infinity is refused.
-- **`CountsAsZero(loss)`** — exactly when `Format` shows `0.0000`: for a
-  loss that is not negative, below 0.00005. It reads `Format`'s own text
-  rather than a threshold of its own, so what is shown and what is judged
-  cannot disagree anywhere, and the precision is stated once, in a private
-  format string. The double nearest 0.00005 lies just above it and shows
-  as `0.0001`, so the boundary falls where "below 0.00005" says.
+- **`FormatLoss(loss)`** — four decimals, culture-invariant: the one
+  display of every cost and loss. A loss that rounds to zero shows as
+  `0.0000` whatever its sign; a negative one beyond that, which only an
+  error the analyser stored can be, shows its sign, echoing the data. A NaN
+  or an infinity is refused.
+- **`FormatEquity(equity)`** — the one display of an equity, with its sign:
+  the digits `FormatLoss` shows for the same number, and `+` ahead of any
+  figure that shows no minus, so `+0.6004`, `-0.3000`, and `+0.0000` for
+  an equity that rounds to zero from either side, never `-0.0000` or
+  `+-0.0000`. A NaN or an infinity is refused, naming `equity`. It adds the
+  sign rule only: the precision is the one `FormatLoss` reads, so a loss and
+  the equities beside it are shown alike (halheinrich/backgammon#326, step
+  3a, which moved the diagram's own sign rule here).
+- **`CountsAsZero(loss)`** — exactly when `FormatLoss` shows `0.0000`: for
+  a loss that is not negative, below 0.00005. It reads `FormatLoss`'s own
+  text rather than a threshold of its own, so what is shown and what is
+  judged cannot disagree anywhere, and the precision is stated once, in a
+  private format string both displays read. The double nearest 0.00005
+  lies just above it and shows as `0.0001`, so the boundary falls where
+  "below 0.00005" says.
 - **Verdicts only.** The rule changes no stored number: costs, errors and
   equities stay exact, and so does which region of §3's tables a decision
   falls in. A sum is judged as a sum: two parts that each count as zero can
   add up to a cost that does not, so a whole answer is judged on its total
   and each part on its own.
+- **The one set it decides here.** `CubeDecision.ZeroCostAnswers` applies
+  the rule to each answer's whole cost (see "Cube answers and their
+  costs"). Its policy is the rule itself, fixed: a quiz's error tolerance
+  (halheinrich/backgammon#30) would widen the quiz's verdict, never the set.
 - **Applying it is the consumers'.** BgGame_Lib's leg judges every verdict
   by it — checker plays, each part of a cube answer, each whole answer —
-  and every surface that shows a cost or a loss shows it through `Format`,
-  keeping no format string or threshold of its own.
+  and every surface shows a cost or a loss through `FormatLoss` and an
+  equity through `FormatEquity`, keeping no format string, sign rule or
+  threshold of its own.
+- **The name.** Until halheinrich/backgammon#326's step 3a this type was
+  `EquityLoss`, with `Format` for `FormatLoss`. It was renamed once it
+  showed equities too, a job the old name did not say; the old name also
+  collided with consumer members named for a play's loss (BgGame_Lib's
+  `SubmittedPlay.EquityLoss`), inside which the bare name binds to the
+  member, not the type.
 
-`EquityLossTests` pins the display, the threshold just below, at and just
-above 0.00005 through the shared formatting, and the two members'
-agreement over values on both sides of it.
+`EquityDisplayTests` pins the loss display, the threshold just below, at
+and just above 0.00005 through the shared formatting, and the two loss
+members' agreement over values on both sides of it; then the equity
+display's sign, its `+0.0000` for a negative zero and for values just
+either side of zero, its digits against `FormatLoss`'s for the same
+magnitude, and its refusals.
 
 ### The decision kinds
 
@@ -2380,6 +2440,11 @@ public sealed class CubeDecision : BgDecisionData
                                                            // (the fourth's label choice)
     public CubeAnswerCost CostOf(CubeAnswer answer);       // exactly per §3's two tables, in two parts;
                                                            // both refuse an undefined answer (ArgumentOutOfRangeException)
+    [JsonIgnore] public IReadOnlyList<CubeAnswer> ZeroCostAnswers { get; }
+                                                           // each answer whose CostOf(answer).Total counts as zero
+                                                           // (EquityDisplay.CountsAsZero), in the offered order; never
+                                                           // empty, always holds Decision.BestAnswer; a fixed policy no
+                                                           // quiz tolerance widens; read-only, a fresh list each read
 }
 
 public sealed class CheckerPlayDecisionData    // unmapped members refused
@@ -2661,13 +2726,16 @@ public sealed class CubeAnswerCost : IEquatable<CubeAnswerCost>, IEqualityOperat
 // converter; no longer a context root (no document embeds it).
 public enum CubeClaim { NoDouble, Double, TooGood }
 
-// The one display of an equity loss and the one zero rule
-// (halheinrich/backgammon#202); see "When a loss counts as zero".
-public static class EquityLoss
+// The one display precision of every equity figure, and the one zero rule
+// (halheinrich/backgammon#202); see "When a loss counts as zero". Was
+// EquityLoss (Format for FormatLoss) until halheinrich/backgammon#326's step 3a.
+public static class EquityDisplay
 {
-    public static string Format(double loss);         // four decimals, invariant; a loss rounding to zero shows
+    public static string FormatLoss(double loss);     // four decimals, invariant; a loss rounding to zero shows
                                                       // "0.0000" whatever its sign; NaN/∞ refused
-    public static bool CountsAsZero(double loss);     // exactly when Format shows "0.0000": not negative, below 0.00005
+    public static string FormatEquity(double equity); // FormatLoss's digits with its sign: "+" wherever no minus
+                                                      // shows, so "+0.6004", "-0.3000", "+0.0000"; NaN/∞ refused
+    public static bool CountsAsZero(double loss);     // exactly when FormatLoss shows "0.0000": not negative, below 0.00005
 }
 
 // The two-axis depth taxonomy: mode (how the numbers were produced) ×
@@ -3182,21 +3250,25 @@ measure" is not a valid comparison on this hardware.
   error, so there is nothing negative to sum by mistake. Identifying the
   best uses `RankedPlays.Best`; testing membership in its equivalence class
   uses `Error == 0.0`. Judging a play *correct* does not: that is the zero
-  rule, `EquityLoss.CountsAsZero`, which a play a hair off the best passes
+  rule, `EquityDisplay.CountsAsZero`, which a play a hair off the best passes
   too. There is no ranking-free best or loss to read, and
   none to state: a producer states equities and depths.
-- **Judge a loss zero, and show it, only through `EquityLoss`.** Every
-  verdict — a checker play, each part of a cube answer, each whole answer
-  — asks `CountsAsZero`, and every display of a cost or a loss calls
-  `Format`. An `== 0.0` test, a format string or a numeric threshold of a
+- **Judge a loss zero, and show any equity figure, only through
+  `EquityDisplay`.** Every verdict — a checker play, each part of a cube
+  answer, each whole answer — asks `CountsAsZero`; every display of a cost
+  or a loss calls `FormatLoss`, and of an equity `FormatEquity`. An
+  `== 0.0` test, a format string, a sign rule or a numeric threshold of a
   consumer's own is a second statement of halheinrich/backgammon#202's
   rule, and can disagree with what is shown. Judge a whole answer on its
   `Total`, never as the conjunction of its parts' verdicts: two parts that
-  each count as zero can add up to a cost that does not.
+  each count as zero can add up to a cost that does not. To name the
+  answers that cost nothing, read `CubeDecision.ZeroCostAnswers` rather
+  than filtering the four through `CostOf` again.
 - **The cube helpers are a cube decision's only.** `ActionEquity`, the
   two best actions, the two errors and `BestAnswer` live on
-  `CubeDecisionData`, and `GammonsPossible`, `ClaimOf` and `CostOf` on
-  `CubeDecision`, so asking any of them of a checker play does not compile;
+  `CubeDecisionData`, and `GammonsPossible`, `ClaimOf`, `CostOf` and
+  `ZeroCostAnswers` on `CubeDecision`, so asking any of them of a checker
+  play does not compile;
   the `IsCube` guard they needed is gone. Callers in mixed-decision contexts
   match on the record (`Match` / `Switch`). The computed properties carry
   `[JsonIgnore]`; do not strip those attributes.
@@ -3294,7 +3366,8 @@ measure" is not a valid comparison on this hardware.
 ## Subproject-internal next steps
 
 Cross-cutting work (consumer migrations, downstream refactors) is tracked in
-the umbrella `INSTRUCTIONS.md` "Next up" / "Deferred" sections, not here.
+the umbrella `INSTRUCTIONS.md` "Next up" section and on the umbrella's
+issues (halheinrich/backgammon, labelled `BgDataTypes_Lib`), not here.
 
 None open. (The `DecisionRow` factory split closed with the records leg of
 halheinrich/backgammon#273: a row is the projection `DecisionRow.From` of a

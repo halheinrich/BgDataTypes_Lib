@@ -302,7 +302,7 @@ public class CubeDecisionCostOfTests
     {
         var cube = CubeAt.GammonsPossible(1.1711, 0.6004);
 
-        Assert.Equal("0.7992", EquityLoss.Format(cube.CostOf(CubeAnswer.NoDoublePass).Total));
+        Assert.Equal("0.7992", EquityDisplay.FormatLoss(cube.CostOf(CubeAnswer.NoDoublePass).Total));
         Assert.Equal(2 * (1 - 0.6004), cube.CostOf(CubeAnswer.NoDoublePass).Total, TableTolerance);
         Assert.Equal(0.0, cube.CostOf(CubeAnswer.NoDouble).Total);
     }
@@ -316,8 +316,8 @@ public class CubeDecisionCostOfTests
 
         Assert.Equal(2 * (1 - 0.9829), cube.CostOf(CubeAnswer.NoDoublePass).Total, TableTolerance);
         Assert.Equal(0.9829 - 0.6222, cube.CostOf(CubeAnswer.NoDouble).Total);
-        Assert.Equal("0.0342", EquityLoss.Format(cube.CostOf(CubeAnswer.NoDoublePass).Total));
-        Assert.Equal("0.3607", EquityLoss.Format(cube.CostOf(CubeAnswer.NoDouble).Total));
+        Assert.Equal("0.0342", EquityDisplay.FormatLoss(cube.CostOf(CubeAnswer.NoDoublePass).Total));
+        Assert.Equal("0.3607", EquityDisplay.FormatLoss(cube.CostOf(CubeAnswer.NoDouble).Total));
     }
 
     // The Shimodaira tie (N +1.0000, T +2.0267), gammons not possible — the
@@ -332,7 +332,7 @@ public class CubeDecisionCostOfTests
         Assert.False(cube.GammonsPossible);
         Assert.Equal(0.0, cube.CostOf(CubeAnswer.NoDouble).Total);
         Assert.Equal(2.0267 - 1, cube.CostOf(CubeAnswer.DoubleTake).Total);
-        Assert.Equal("1.0267", EquityLoss.Format(cube.CostOf(CubeAnswer.DoubleTake).Total));
+        Assert.Equal("1.0267", EquityDisplay.FormatLoss(cube.CostOf(CubeAnswer.DoubleTake).Total));
         Assert.Equal(0.0, cube.CostOf(CubeAnswer.DoublePass).Total);
         Assert.Equal(0.0, cube.CostOf(CubeAnswer.NoDoublePass).Total);
     }
@@ -354,8 +354,8 @@ public class CubeDecisionCostOfTests
         Assert.Equal(0.0, cube.CostOf(CubeAnswer.NoDoublePass).Total);
         Assert.Equal(n - 1, doublePass.Total);
         Assert.True(doublePass.Total > 0.0);
-        Assert.True(EquityLoss.CountsAsZero(doublePass.Total));
-        Assert.Equal("0.0000", EquityLoss.Format(doublePass.Total));
+        Assert.True(EquityDisplay.CountsAsZero(doublePass.Total));
+        Assert.Equal("0.0000", EquityDisplay.FormatLoss(doublePass.Total));
 
         Assert.Equal(n - 0.6, CubeAt.GammonsPossible(n, t).CostOf(CubeAnswer.NoDouble).Total);
     }

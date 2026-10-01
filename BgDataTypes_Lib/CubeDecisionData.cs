@@ -694,8 +694,10 @@ public sealed class CubeDecisionData
     /// The single representative that classification and display read, and
     /// never the test of a correct answer: an answer is correct when its cost
     /// counts as zero (<see cref="CubeDecision.CostOf"/>,
-    /// <see cref="EquityLoss.CountsAsZero"/>), so at an equity tie more than
-    /// one answer is correct.
+    /// <see cref="EquityDisplay.CountsAsZero"/>), so at an equity tie more than
+    /// one answer is correct. The answers whose cost counts as zero are the
+    /// record's <see cref="CubeDecision.ZeroCostAnswers"/>, which always hold
+    /// this one but are not sized by it.
     /// </para>
     /// </remarks>
     [JsonIgnore]

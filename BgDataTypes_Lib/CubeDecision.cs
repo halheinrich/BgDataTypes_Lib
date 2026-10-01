@@ -15,9 +15,10 @@ namespace BgDataTypes_Lib;
 /// <remarks>
 /// What needs the position and the session beside the analysis is the
 /// record's: whether gammons are possible (<see cref="GammonsPossible"/>),
-/// and so what each cube answer reads as (<see cref="ClaimOf"/>) and what it
-/// costs (<see cref="CostOf"/>), per SPEC-scoring §3 as amended on
-/// halheinrich/backgammon#326.
+/// and so what each cube answer reads as (<see cref="ClaimOf"/>), what it
+/// costs (<see cref="CostOf"/>), and which answers cost zero at the display
+/// precision (<see cref="ZeroCostAnswers"/>), per SPEC-scoring §3 as amended
+/// on halheinrich/backgammon#326.
 /// </remarks>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class CubeDecision : BgDecisionData
@@ -186,15 +187,61 @@ public sealed class CubeDecision : BgDecisionData
     /// <para>
     /// Exact: computed from the stored equities as they are, never rounded and
     /// never corrected. Whether a cost or a part counts as zero, so is
-    /// correct, is <see cref="EquityLoss.CountsAsZero"/>'s to judge; at an
-    /// equity tie more than one answer costs nothing. The cost is not the
-    /// analysis's action error: see <see cref="CubeDecisionData.ActionEquity"/>.
+    /// correct, is <see cref="EquityDisplay.CountsAsZero"/>'s to judge; at an
+    /// equity tie more than one answer costs nothing, and the answers whose
+    /// whole cost counts as zero are <see cref="ZeroCostAnswers"/>. The cost
+    /// is not the analysis's action error: see
+    /// <see cref="CubeDecisionData.ActionEquity"/>.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="answer"/> is not one of the four answers.
     /// </exception>
     public CubeAnswerCost CostOf(CubeAnswer answer) => Decision.CostOf(answer, GammonsPossible);
+
+    /// <summary>
+    /// The answers that cost zero at the display precision: each answer whose
+    /// whole cost (<see cref="CostOf"/>'s <see cref="CubeAnswerCost.Total"/>)
+    /// counts as zero under <see cref="EquityDisplay.CountsAsZero"/>, in the
+    /// order the four are offered (<see cref="CubeAnswer"/>'s declaration
+    /// order). The one statement of the set the review's Best line lists
+    /// (SPEC-scoring §3, "The tie", as amended 2026-10-01 on
+    /// halheinrich/backgammon#326), so every consumer naming the best answers
+    /// names the same ones.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Its size comes from the costs, not from an exact equity tie.</b> It
+    /// is never empty and always holds the truth,
+    /// <see cref="CubeDecisionData.BestAnswer"/>, whose cost is exactly 0; the
+    /// truth does not decide its size. At the tie of
+    /// halheinrich/backgammon#293 it holds every answer the tie leaves free
+    /// (SPEC-scoring §3, "The tie"), and off a tie it can still hold more
+    /// than one: where gammons are not possible and the fourth answer is
+    /// right, No double costs 0 too. Near a boundary
+    /// an answer whose cost is not 0 but shows as <c>0.0000</c> joins it,
+    /// below the cash or above it.
+    /// </para>
+    /// <para>
+    /// <b>Its policy is fixed:</b> the zero rule itself, and nothing else.
+    /// These are not "the correct answers" of any quiz setting: an error
+    /// tolerance (halheinrich/backgammon#30) would widen only the quiz's
+    /// verdict, which BgGame_Lib owns, and never this set. Whether a cost is
+    /// exactly 0 is not asked here either; the costs stay exact
+    /// (<see cref="CostOf"/>).
+    /// </para>
+    /// <para>
+    /// Derived on each read, never stored, so it is not on the wire. Each read
+    /// returns a list of its own, which no caller can change and which shares
+    /// no storage with the decision or any other read: nothing a caller does
+    /// to one result changes what another read reports.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public IReadOnlyList<CubeAnswer> ZeroCostAnswers =>
+        Array.AsReadOnly(Array.FindAll(
+            Enum.GetValues<CubeAnswer>(),
+            answer => EquityDisplay.CountsAsZero(CostOf(answer).Total)));
 
     /// <inheritdoc/>
     public override TResult Match<TResult>(

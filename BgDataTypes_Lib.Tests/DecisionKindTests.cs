@@ -277,7 +277,7 @@ public class DecisionKindTests
         var cube = PublicMembers(typeof(CubeDecision)).Except(shared).ToHashSet();
 
         Assert.Equal(new[] { "AfterBoardOf", "AfterBoardOfBest", "AfterPlayerBoard", "Decision", "Dice" }, play.Order().ToArray());
-        Assert.Equal(new[] { "ClaimOf", "CostOf", "Decision", "GammonsPossible" }, cube.Order().ToArray());
+        Assert.Equal(new[] { "ClaimOf", "CostOf", "Decision", "GammonsPossible", "ZeroCostAnswers" }, cube.Order().ToArray());
         Assert.NotEqual(
             typeof(CheckerPlayDecision).GetProperty("Decision")!.PropertyType,
             typeof(CubeDecision).GetProperty("Decision")!.PropertyType);
@@ -306,7 +306,7 @@ public class DecisionKindTests
         foreach (var member in new[]
                  {
                      "Dice", "AfterBestBoard", "AfterPlayerBoard", "Plays", "UserPlayIndex",
-                     "GammonsPossible", "ClaimOf", "CostOf", "NoDoubleEquity", "BestAnswer", "IsCube", "Outcome",
+                     "GammonsPossible", "ClaimOf", "CostOf", "ZeroCostAnswers", "NoDoubleEquity", "BestAnswer", "IsCube", "Outcome",
                  })
             Assert.DoesNotContain(member, shared);
     }
