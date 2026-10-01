@@ -6,7 +6,7 @@ namespace BgDataTypes_Lib.Tests;
 public class CubeDecisionDataUserCubeActionTests
 {
     // The played-cube-action halves are guarded to their own action domains,
-    // mirroring CubeDecisionPair's half-guards: UserDoublerAction admits
+    // the halves CubeAnswerExtensions.Of accepts: UserDoublerAction admits
     // NoDouble / Double (or null), UserTakerAction admits Take / Pass (or
     // null). Cross-half consistency between the two is a producer contract
     // and deliberately not guarded — see the section comment in CubeDecisionData.

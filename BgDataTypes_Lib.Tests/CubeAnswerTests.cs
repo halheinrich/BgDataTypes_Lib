@@ -117,16 +117,59 @@ public class CubeAnswerTests
         Assert.Equal("answer", Assert.Throws<ArgumentOutOfRangeException>(() => Undefined.CommitsToResponse()).ParamName);
     }
 
+    // ---------------------------------------------------------------------
+    //  The inverse, Of: the public way two actions become an answer
+    //  (halheinrich/backgammon#326, retiring CubeDecisionPair)
+    // ---------------------------------------------------------------------
+
+    // Its contract, pair by pair, stated independently of the projections.
+    [Theory]
+    [InlineData(CubeAction.NoDouble, CubeAction.Take, CubeAnswer.NoDouble)]
+    [InlineData(CubeAction.Double, CubeAction.Take, CubeAnswer.DoubleTake)]
+    [InlineData(CubeAction.Double, CubeAction.Pass, CubeAnswer.DoublePass)]
+    [InlineData(CubeAction.NoDouble, CubeAction.Pass, CubeAnswer.NoDoublePass)]
+    public void TheInverse_MapsEachPairOfActionsToItsAnswer(CubeAction doubler, CubeAction taker, CubeAnswer expected)
+    {
+        Assert.Equal(expected, CubeAnswerExtensions.Of(doubler, taker));
+    }
+
+    // A refusal names the action outside its half and carries its value; the
+    // doubler is checked first.
     [Theory]
     [InlineData(CubeAction.Take, CubeAction.Take, "doubler")]
     [InlineData(CubeAction.Pass, CubeAction.Pass, "doubler")]
+    [InlineData(CubeAction.Take, (CubeAction)9, "doubler")]
+    [InlineData((CubeAction)9, CubeAction.Take, "doubler")]
     [InlineData(CubeAction.NoDouble, CubeAction.NoDouble, "taker")]
     [InlineData(CubeAction.Double, CubeAction.Double, "taker")]
     [InlineData(CubeAction.Double, (CubeAction)9, "taker")]
-    [InlineData((CubeAction)9, CubeAction.Take, "doubler")]
     public void TheInverse_RefusesAnActionOutsideItsHalf(CubeAction doubler, CubeAction taker, string parameter)
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => CubeAnswerExtensions.Of(doubler, taker));
         Assert.Equal(parameter, ex.ParamName);
+        Assert.Equal(parameter == "doubler" ? doubler : taker, ex.ActualValue);
+    }
+
+    // A consumer holding two recorded actions forms the answer here, so the
+    // inverse is public; the action pair it replaced is gone.
+    [Fact]
+    public void TheInverse_IsPublic_AndTheActionPairIsRetired()
+    {
+        var of = typeof(CubeAnswerExtensions).GetMethod(nameof(CubeAnswerExtensions.Of));
+
+        Assert.NotNull(of);
+        Assert.True(of.IsPublic && of.IsStatic);
+        Assert.Null(typeof(CubeAnswer).Assembly.GetType("BgDataTypes_Lib.CubeDecisionPair"));
+    }
+
+    // A recorded no double with a pass reads Too good only where gammons are
+    // possible: its label is the decision's, never the actions'.
+    [Fact]
+    public void TwoRecordedActions_ReadTheirLabelFromTheDecision()
+    {
+        var answer = CubeAnswerExtensions.Of(CubeAction.NoDouble, CubeAction.Pass);
+
+        Assert.Equal(CubeClaim.TooGood, CubeAt.GammonsPossible(0.512, 0.634).ClaimOf(answer));
+        Assert.Equal(CubeClaim.NoDouble, CubeAt.GammonsNotPossible(0.512, 0.634).ClaimOf(answer));
     }
 }

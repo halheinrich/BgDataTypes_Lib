@@ -352,7 +352,7 @@ public sealed class CubeDecisionData
     //  source data — a zero error does not identify the action when the two
     //  cube equities tie — and the error of a stated action is derived from
     //  it (UserDoubleError / UserTakeError). Each half is guarded to its own
-    //  action domain, mirroring CubeDecisionPair's half-guards, and to the
+    //  action domain, the halves CubeAnswerExtensions.Of accepts, and to the
     //  absence of an unstated-action error for the same half. Cross-half
     //  consistency (a recorded taker response implies the doubler doubled)
     //  is a producer contract, not guarded here — init-only halves are set

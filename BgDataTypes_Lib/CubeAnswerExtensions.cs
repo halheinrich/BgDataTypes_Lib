@@ -3,8 +3,9 @@ namespace BgDataTypes_Lib;
 /// <summary>
 /// A cube answer's projections, single-sourced (SPEC-scoring §3, amended
 /// 2026-09-30 on halheinrich/backgammon#326): its doubling action, its
-/// response, and whether it commits to that response. Each is total over the
-/// four answers and refuses any other value with an
+/// response, and whether it commits to that response, with their inverse,
+/// <see cref="Of"/>. Each projection is total over the four answers, and every
+/// member refuses a value outside its domain with an
 /// <see cref="ArgumentOutOfRangeException"/>. They hold whatever the decision:
 /// what an answer reads as and what it costs are the decision's
 /// (<see cref="CubeDecision.ClaimOf"/>, <see cref="CubeDecision.CostOf"/>).
@@ -67,22 +68,42 @@ public static class CubeAnswerExtensions
     /// <summary>
     /// The answer whose two projections are <paramref name="doubler"/> and
     /// <paramref name="taker"/>: the projections' inverse, since each pair of
-    /// a doubler-half and a taker-half action is exactly one answer. It is how
-    /// the truth is read off the best actions
-    /// (<see cref="CubeDecisionData.BestAnswer"/>).
+    /// a doubler-half and a taker-half action is exactly one answer —
+    /// (<see cref="CubeAction.NoDouble"/>, <see cref="CubeAction.Take"/>) is
+    /// <see cref="CubeAnswer.NoDouble"/>, (<see cref="CubeAction.Double"/>,
+    /// <see cref="CubeAction.Take"/>) <see cref="CubeAnswer.DoubleTake"/>,
+    /// (<see cref="CubeAction.Double"/>, <see cref="CubeAction.Pass"/>)
+    /// <see cref="CubeAnswer.DoublePass"/>, and
+    /// (<see cref="CubeAction.NoDouble"/>, <see cref="CubeAction.Pass"/>)
+    /// <see cref="CubeAnswer.NoDoublePass"/>.
     /// </summary>
+    /// <remarks>
+    /// The one way two actions become an answer: the truth is read off the
+    /// two best actions this way (<see cref="CubeDecisionData.BestAnswer"/>),
+    /// and a consumer holding two recorded actions forms the answer this way
+    /// too, then reads its label through <see cref="CubeDecision.ClaimOf"/> —
+    /// so a recorded no double with a pass reads Too good only where gammons
+    /// are possible. It replaces the action pair, <c>CubeDecisionPair</c>,
+    /// retired as a second statement of the same four-valued domain
+    /// (halheinrich/backgammon#326). Which recorded halves are trustworthy is
+    /// the caller's to decide before it asks.
+    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown when either action is not of its own half.
+    /// Thrown when <paramref name="doubler"/> is not
+    /// <see cref="CubeAction.NoDouble"/> or <see cref="CubeAction.Double"/>,
+    /// or <paramref name="taker"/> is not <see cref="CubeAction.Take"/> or
+    /// <see cref="CubeAction.Pass"/>; the doubler is checked first.
     /// </exception>
-    internal static CubeAnswer Of(CubeAction doubler, CubeAction taker) => (doubler, taker) switch
+    public static CubeAnswer Of(CubeAction doubler, CubeAction taker) => (doubler, taker) switch
     {
         (CubeAction.NoDouble, CubeAction.Take) => CubeAnswer.NoDouble,
         (CubeAction.Double, CubeAction.Take) => CubeAnswer.DoubleTake,
         (CubeAction.Double, CubeAction.Pass) => CubeAnswer.DoublePass,
         (CubeAction.NoDouble, CubeAction.Pass) => CubeAnswer.NoDoublePass,
+        (CubeAction.NoDouble or CubeAction.Double, _) => throw new ArgumentOutOfRangeException(
+            nameof(taker), taker, "A cube answer's taker action is Take or Pass."),
         _ => throw new ArgumentOutOfRangeException(
-            doubler is CubeAction.NoDouble or CubeAction.Double ? nameof(taker) : nameof(doubler),
-            "A cube answer pairs a doubler-half action (NoDouble or Double) with a taker-half action (Take or Pass)."),
+            nameof(doubler), doubler, "A cube answer's doubler action is NoDouble or Double."),
     };
 
     private static ArgumentOutOfRangeException Undefined(CubeAnswer answer) =>

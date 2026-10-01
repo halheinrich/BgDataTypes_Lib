@@ -31,8 +31,8 @@ namespace BgDataTypes_Lib;
 /// <c>default(DiceRoll)</c> is <strong>not meaningful</strong>: the
 /// <see langword="default"/> of a <see langword="struct"/> bypasses
 /// construction and so escapes face validation, yielding faces of 0. This is
-/// the standard value-type caveat shared with <see cref="Play"/> and
-/// <see cref="CubeDecisionPair"/>; construct instances explicitly rather
+/// the standard value-type caveat shared with <see cref="Play"/>; construct
+/// instances explicitly rather
 /// than relying on <see langword="default"/>. "No roll" is modelled as
 /// <c>DiceRoll?</c> null (see <see cref="IDecisionFilterData.Dice"/>), never
 /// as <see langword="default"/>.
