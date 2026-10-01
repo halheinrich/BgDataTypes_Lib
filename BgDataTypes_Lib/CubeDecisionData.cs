@@ -4,26 +4,32 @@ namespace BgDataTypes_Lib;
 
 /// <summary>
 /// The decision category of a <see cref="CubeDecision"/>: the cube analysis,
-/// the user's cube errors and played actions, and the cube-scoring policy
-/// derived from the analysis. It carries a cube decision's fields and nothing
-/// else — a checker play's are on <see cref="CheckerPlayDecisionData"/>, and
-/// no member of either kind stands for "not applicable"
-/// (halheinrich/backgammon#273). Every stored member but the nullable ones is
-/// <c>required</c>, per the wire rule stated on
+/// the user's cube errors and played actions, the analysis's facts about each
+/// cube action, and the truth among the four cube answers. It carries a cube
+/// decision's fields and nothing else — a checker play's are on
+/// <see cref="CheckerPlayDecisionData"/>, and no member of either kind stands
+/// for "not applicable" (halheinrich/backgammon#273). Every stored member but
+/// the nullable ones is <c>required</c>, per the wire rule stated on
 /// <see cref="BgDataTypesJsonContext"/>, and each nullable member's
 /// documentation says what <see langword="null"/> means. What the stored
 /// members determine — the depth label, abbreviation and rank, the loss
 /// probabilities, each cube action's equity, the error of each stated action,
-/// the best actions and claims — is derived and never stored.
+/// the best actions and the best answer — is derived and never stored.
 ///
 /// <para>
 /// All equities are in normalised cube-equity units from the on-roll
 /// (doubler's) perspective, where winning a single game at the current stake
 /// is +1 — so an opponent's pass is worth exactly +1. Each cube action's
 /// equity, in that perspective, is <see cref="ActionEquity"/>, the one
-/// calculation the best actions, the claim and the errors derive from. All
-/// probability fields are fractions in [0, 1] despite the <c>Pct</c> suffix,
-/// surfaced verbatim from the producing analyser (XG).
+/// calculation the best actions, the errors, the truth and each answer's cost
+/// derive from. All probability fields are fractions in [0, 1] despite the
+/// <c>Pct</c> suffix, surfaced verbatim from the producing analyser (XG).
+/// </para>
+/// <para>
+/// What a cube answer costs is computed here, beside the equities, but asked
+/// of the record, <see cref="CubeDecision.CostOf"/>: an answer's cost reads
+/// whether gammons are possible, a fact of the position and the session that
+/// only the record sees.
 /// </para>
 /// <para>
 /// Every stored number — the equities, the probabilities and the analyser's
@@ -221,7 +227,7 @@ public sealed class CubeDecisionData
     /// <summary>
     /// Cubeful equity of not doubling (doubler's perspective, normalised
     /// cube-equity units — see the class summary). One of the two inputs the
-    /// cube-scoring helpers derive from.
+    /// cube actions' equities, the truth and the answers' costs derive from.
     /// </summary>
     public required double NoDoubleEquity
     {
@@ -232,8 +238,8 @@ public sealed class CubeDecisionData
     /// <summary>
     /// Cubeful equity of double/take (doubler's perspective, normalised
     /// cube-equity units). The taker's equity is its negation; a value above
-    /// 1 means the opponent should pass. The other input of the cube-scoring
-    /// helpers.
+    /// 1 means the opponent should pass. The other input of the cube actions'
+    /// equities, the truth and the answers' costs.
     /// </summary>
     public required double DoubleTakeEquity
     {
@@ -430,8 +436,8 @@ public sealed class CubeDecisionData
     //  The user's errors
     //
     //  No stored copy of a derivable value: the error of an action the record
-    //  states is the scoring policy's (DoublerActionError / TakerActionError
-    //  of that action), derived, never stored. The one error stored is the
+    //  states is the analysis's (DoublerActionError / TakerActionError of
+    //  that action), derived, never stored. The one error stored is the
     //  one nothing here determines — the analyser's error for a half whose
     //  played action the record does not state. A document still stating
     //  UserDoubleError or UserTakeError (or DepthRank) reads with it ignored
@@ -547,25 +553,28 @@ public sealed class CubeDecisionData
         "UnstatedTakerActionError is the error of a taker action the record does not state; when UserTakerAction states it, its error is derived from the equities and is not stated.";
 
     // -----------------------------------------------------------------------
-    //  Cube-decision scoring
+    //  The analysis's cube actions, and the four answers
     // -----------------------------------------------------------------------
     //
-    //  Single-source policy for judging a cube decision as two independent
-    //  atomic decisions, each scored on its own:
+    //  The analysis's facts about the cube actions, each half judged on its
+    //  own:
     //
     //    * The doubler's double / no-double decision —
     //      BestDoublerAction, DoublerActionError.
     //    * The taker's take / pass decision —
     //      BestTakerAction, TakerActionError.
     //
-    //  Both rest on one calculation, ActionEquity: each cube action's equity
+    //  Above them, the four cube answers of SPEC-scoring §3 (amended
+    //  2026-09-30 and 2026-10-01, halheinrich/backgammon#326): the truth,
+    //  BestAnswer, and each answer's cost, CostOf, which the record asks with
+    //  the gammon fact it alone sees (CubeDecision.CostOf).
+    //
+    //  All rest on one calculation, ActionEquity: each cube action's equity
     //  from the doubler's side. The pass's normalised value and the rule for
     //  doubling's equity (the taker's best response) are stated there and
-    //  nowhere else; the best actions, the claim and the errors read them
-    //  through it. Pure equity comparisons between the two actions of a half,
-    //  evaluated separately, with no cross-decision overrides. They exist on
-    //  the cube decision only, so asking them of a checker play does not
-    //  compile.
+    //  nowhere else; the best actions, the errors, the truth and the costs
+    //  read them through it. They exist on the cube decision only, so asking
+    //  them of a checker play does not compile.
 
     /// <summary>
     /// The pass's equity for the doubler — always +1 per cube-equity
@@ -603,11 +612,16 @@ public sealed class CubeDecisionData
     /// <para>
     /// The one calculation of the cube actions' equities
     /// (halheinrich/backgammon#273, Hal's ruling of 2026-09-27): the best
-    /// actions, the claim and both halves' errors are derived from it, so a
-    /// consumer showing each action's equity beside its error reads the
-    /// numbers the scoring used, and restates neither the pass's value nor
-    /// the rule for doubling's. Derived on each call and never stored: it is
-    /// not on the wire, and the flat row carries none.
+    /// actions, both halves' errors, the truth and each answer's cost are
+    /// derived from it, so a consumer showing each action's equity beside its
+    /// error shows the analysis's own numbers, consistent with each other, and
+    /// restates neither the pass's value nor the rule for doubling's. The
+    /// action errors are facts of the analysis: what each action loses
+    /// against the best of its half. They are not what a cube answer costs,
+    /// which is SPEC-scoring §3's (<see cref="CubeDecision.CostOf"/>): a cost
+    /// adds a response the answer commits to, and charges two misreadings
+    /// that lose no equity. Derived on each call and never stored: it is not
+    /// on the wire, and the flat row carries none.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
@@ -657,105 +671,35 @@ public sealed class CubeDecisionData
             : CubeAction.Pass;
 
     /// <summary>
-    /// The correct doubler <em>claim</em> — <see cref="BestDoublerAction"/>
-    /// widened to the three-valued claim layer of SPEC-scoring §3
-    /// (halheinrich/backgammon#86; amended 2026-09-02 by
-    /// halheinrich/backgammon#187): <see cref="CubeClaim.Double"/> when
-    /// doubling is best; otherwise <see cref="CubeClaim.TooGood"/> when
-    /// playing on is worth more than the cashed point
-    /// (<see cref="NoDoubleEquity"/> strictly above the pass equity 1)
-    /// <em>and</em> the opponent would pass a double
-    /// (<see cref="BestTakerAction"/> is <see cref="CubeAction.Pass"/>),
-    /// else <see cref="CubeClaim.NoDouble"/>.
+    /// The truth among the four cube answers (SPEC-scoring §3, amended
+    /// 2026-09-30 on halheinrich/backgammon#326): the answer whose doubling
+    /// action is <see cref="BestDoublerAction"/> and whose response is
+    /// <see cref="BestTakerAction"/>. So <see cref="CubeAnswer.DoubleTake"/>
+    /// or <see cref="CubeAnswer.DoublePass"/> when doubling is best, by the
+    /// taker's best response; otherwise <see cref="CubeAnswer.NoDoublePass"/>
+    /// when they'd pass, and <see cref="CubeAnswer.NoDouble"/> when they'd
+    /// take.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The one derivation site of the truth claim in the ecosystem, beside
-    /// its action-level siblings — consumers never re-derive (SPEC-scoring
-    /// §3's encapsulation rule). Implements the ratified predicate verbatim:
-    /// Too Good ⟺ best doubler action is NoDouble <b>and</b>
-    /// <c>NoDoubleEquity &gt; 1</c> <b>and</b> best taker action is Pass —
-    /// the 2026-09-02 amendment's third term: Too Good requires the pass.
+    /// The one derivation of the truth, from the equities alone: whatever the
+    /// position, the session or the cube, which decide only what the answer
+    /// reads as (<see cref="CubeDecision.ClaimOf"/>) and what each answer
+    /// costs. The two halves' tie-breaks stand: not doubling where doubling
+    /// and not doubling are worth the same, and the pass where take and pass
+    /// are. So at the tie of halheinrich/backgammon#293, a no-double equity
+    /// of exactly 1 with a pass, the truth is the fourth answer.
     /// </para>
     /// <para>
-    /// The rationale, cell by cell of the no-double half:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>
-    /// <b>Too good / Pass</b> — playing on beats the cash <em>and</em> they
-    /// would pass: the roller declines a point the opponent would concede
-    /// because the game is worth more played out. The only Too Good cell.
-    /// </description></item>
-    /// <item><description>
-    /// <b>No double / Take, with a no-double equity above 1</b> — playing on
-    /// beats being taken, the opponent takes, and no pass is involved: the
-    /// roller refrains because a double would be taken and playing on beats
-    /// that, not because any cash was declined. A No double <em>by
-    /// ruling</em>: XG labels such a position "Too good to double/Take"
-    /// (<c>TooGoodAndTake.xgp</c> — no double +1.1711, double/take +0.6004,
-    /// the position that decided the amendment), and the quiz cannot teach
-    /// a distinction its players do not make.
-    /// </description></item>
-    /// <item><description>
-    /// <b>No double / Take, with a no-double equity at or below 1</b> — not
-    /// good enough to double; the ordinary cell.
-    /// </description></item>
-    /// </list>
-    /// <para>
-    /// The equity comparison is strict, so at <c>NoDoubleEquity == 1</c>
-    /// exactly (playing on worth exactly the cash) the claim stays
-    /// <see cref="CubeClaim.NoDouble"/> — the same tie-favours-NoDouble
-    /// posture as <see cref="BestDoublerAction"/>; at that boundary with a
-    /// pass, <see cref="BestClaimPair"/> composes the incoherent cell as
-    /// before. The derivation reads equities only: no match-score, money, or
-    /// Jacoby context enters (Too Good occurs in money too, via Jacoby
-    /// redoubles). Whether the verdict <em>can</em> occur at a position is a
-    /// separate fact of the rules context, derived beside this one on the
-    /// record — <see cref="CubeDecision.CanBeTooGood"/>.
+    /// The single representative that classification and display read, and
+    /// never the test of a correct answer: an answer is correct when its cost
+    /// counts as zero (<see cref="CubeDecision.CostOf"/>,
+    /// <see cref="EquityLoss.CountsAsZero"/>), so at an equity tie more than
+    /// one answer is correct.
     /// </para>
     /// </remarks>
     [JsonIgnore]
-    public CubeClaim BestDoublerClaim
-    {
-        get
-        {
-            if (BestDoublerAction == CubeAction.Double)
-                return CubeClaim.Double;
-            return ActionEquity(CubeAction.NoDouble) > ActionEquity(CubeAction.Pass)
-                   && BestTakerAction == CubeAction.Pass
-                ? CubeClaim.TooGood
-                : CubeClaim.NoDouble;
-        }
-    }
-
-    /// <summary>
-    /// The derived truth of the whole cube decision as a two-part claim
-    /// answer — (<see cref="BestDoublerClaim"/>,
-    /// <see cref="BestTakerAction"/>) — the pair a submitted
-    /// <see cref="CubeClaimPair"/> is scored against, half by half
-    /// (SPEC-scoring §3; halheinrich/backgammon#86). This is the producer
-    /// verdict the answer-type classification consumes; consumers never walk
-    /// the equities themselves.
-    /// </summary>
-    /// <remarks>
-    /// Off the tie boundaries this lands in one of the four reachable verdict
-    /// cells of SPEC-scoring §3 — <see cref="CubeClaimPair.NoDoubleTake"/>,
-    /// <see cref="CubeClaimPair.DoubleTake"/>,
-    /// <see cref="CubeClaimPair.DoublePass"/>,
-    /// <see cref="CubeClaimPair.TooGoodPass"/>; since the 2026-09-02
-    /// amendment (halheinrich/backgammon#187) Too Good requires the pass, so
-    /// <see cref="CubeClaimPair.TooGoodTake"/> is never derived. At
-    /// <c>NoDoubleEquity == 1</c> exactly with
-    /// <c>DoubleTakeEquity &gt;= 1</c>, both halves tie and their ruled
-    /// tie-breaks (NoDouble; Pass) compose to
-    /// <see cref="CubeClaimPair.NoDoublePass"/> — the incoherent cell as
-    /// derived truth, on a measure-zero boundary where every answer's equity
-    /// is identical. Pinned by test as the spec-literal reading; flagged to
-    /// the umbrella as a candidate spec sharpening rather than silently
-    /// rounded away here.
-    /// </remarks>
-    [JsonIgnore]
-    public CubeClaimPair BestClaimPair => new(BestDoublerClaim, BestTakerAction);
+    public CubeAnswer BestAnswer => CubeAnswerExtensions.Of(BestDoublerAction, BestTakerAction);
 
     /// <summary>
     /// Equity loss the doubler incurs by choosing <paramref name="action"/>
@@ -804,6 +748,70 @@ public sealed class CubeDecisionData
             throw new ArgumentOutOfRangeException(nameof(action), action,
                 "TakerActionError requires a taker-half action (Take or Pass).");
         return Gap(ActionEquity(action), ActionEquity(BestTakerAction));
+    }
+
+    /// <summary>
+    /// About the no-double equity of a borderline double/no-double decision:
+    /// what No double costs, less this, where gammons are possible and Too
+    /// good is right. Hal's convention (SPEC-scoring §3, 2026-09-30,
+    /// halheinrich/backgammon#326): No double there has "no action loss, but
+    /// there is a serious evaluation error", charged as how far the position
+    /// lies beyond the strength No double diagnoses. Hal set 0.6; the local
+    /// corpus measured the borderline at about 0.6 overall and about 0.65 in
+    /// money (https://github.com/halheinrich/backgammon/issues/326#issuecomment-5921827183).
+    /// Read only by <see cref="CostOf"/>, so the convention is stated once.
+    /// </summary>
+    private const double BorderlineDoubleEquity = 0.6;
+
+    /// <summary>
+    /// Whether, by the equities, the fourth answer is right and playing on is
+    /// worth more than the cash: they'd pass a double, and the no-double
+    /// equity is above the pass's (T ≥ 1, N &gt; 1), strictly, so not at the
+    /// tie. Where gammons are possible this is SPEC-scoring §3's "Too good is
+    /// right".
+    /// </summary>
+    private bool PlayingOnBeatsTheCash =>
+        BestTakerAction == CubeAction.Pass
+        && ActionEquity(CubeAction.NoDouble) > ActionEquity(CubeAction.Pass);
+
+    /// <summary>
+    /// What <paramref name="answer"/> costs, in its two parts, given whether
+    /// gammons are possible — the record's fact, which is how a consumer asks
+    /// it (<see cref="CubeDecision.CostOf"/>, where each part is stated).
+    /// Exact: computed from the stored equities as they are, never rounded.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="answer"/> is not one of the four answers.
+    /// </exception>
+    internal CubeAnswerCost CostOf(CubeAnswer answer, bool gammonsPossible)
+    {
+        // What not doubling loses: max(0, min(T, 1) − N).
+        double noDoubleError = DoublerActionError(CubeAction.NoDouble);
+        return answer switch
+        {
+            // Its implied take is never charged; where gammons are possible
+            // and Too good is right, the convention N − 0.6.
+            CubeAnswer.NoDouble => new(
+                gammonsPossible && PlayingOnBeatsTheCash
+                    ? ActionEquity(CubeAction.NoDouble) - BorderlineDoubleEquity
+                    : noDoubleError,
+                0.0),
+            CubeAnswer.DoubleTake => new(
+                DoublerActionError(CubeAction.Double), TakerActionError(CubeAction.Take)),
+            CubeAnswer.DoublePass => new(
+                DoublerActionError(CubeAction.Double), TakerActionError(CubeAction.Pass)),
+            // It reads Too good exactly where gammons are possible
+            // (CubeDecision.ClaimOf). Too good when they'd take: thinking it
+            // worth more than the cash is at least 1 − T off, the doubling
+            // part, and calling the take a pass exactly 1 − T, the take part.
+            CubeAnswer.NoDoublePass => new(
+                gammonsPossible && BestTakerAction == CubeAction.Take
+                    ? Gap(ActionEquity(CubeAction.Pass), ActionEquity(CubeAction.Take))
+                    : noDoubleError,
+                TakerActionError(CubeAction.Pass)),
+            _ => throw new ArgumentOutOfRangeException(nameof(answer), answer,
+                "A cube answer is one of the four CubeAnswer members."),
+        };
     }
 
     /// <summary>

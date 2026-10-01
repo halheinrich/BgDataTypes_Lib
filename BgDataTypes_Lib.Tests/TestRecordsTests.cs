@@ -92,13 +92,15 @@ public class TestRecordsTests
     {
         var cube = TestRecords.Cube();
 
-        Assert.Equal(CubeClaimPair.DoubleTake, cube.Decision.BestClaimPair);
+        Assert.Equal(CubeAnswer.DoubleTake, cube.Decision.BestAnswer);
         Assert.True(new BoardState(cube.Position.Mop).IsRace);
         Assert.Equal(54, cube.Position.OnRollPipCount);
         Assert.Equal(65, cube.Position.OpponentPipCount);
         Assert.Equal(CubeOwner.Centered, cube.Position.CubeOwner);
         Assert.Equal(new XgDecisionId("match.xg", 1, 2, IsCube: true), cube.Id);
-        Assert.True(cube.CanBeTooGood);
+        // Nothing borne off, the cube below the 7 points needed: a consumer's
+        // test building on the default has gammons possible.
+        Assert.True(cube.GammonsPossible);
     }
 
     [Fact]

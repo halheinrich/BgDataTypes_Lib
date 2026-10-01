@@ -31,7 +31,11 @@ public sealed class RankedPlay
     /// score it: a play the ranking does not score has no error
     /// (SPEC-scoring §2a). A scored candidate's error is never
     /// <see langword="null"/> and never negative; it is 0 for the best play
-    /// and any that ties it, so a play is correct when its error is exactly 0.
+    /// and any that ties it. It is exact: whether a play is correct is judged
+    /// by the zero rule every equity loss shares — its error shows as
+    /// <c>0.0000</c> (<see cref="EquityLoss.CountsAsZero"/>;
+    /// halheinrich/backgammon#202) — so a play a hair off the best is correct
+    /// too.
     /// </summary>
     public double? Error { get; }
 

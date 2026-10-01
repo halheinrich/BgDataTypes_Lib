@@ -3,52 +3,43 @@ using System.Text.Json.Serialization;
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// The doubler half of a cube answer, three-valued — a claim about the
-/// position, not a board action (SPEC-scoring §1, ratified 2026-08-26;
-/// halheinrich/backgammon#86). <see cref="NoDouble"/> claims the position is
-/// not good enough to double yet; <see cref="Double"/> claims it is a double;
-/// <see cref="TooGood"/> claims playing on is worth more than doubling and
-/// cashing. The board action behind <see cref="NoDouble"/> and
-/// <see cref="TooGood"/> is identical — <see cref="CubeAction.NoDouble"/> —
-/// which is why the claim exists as its own layer: the distinction exists to
-/// be scored (SPEC-scoring §3). <see cref="CubeClaimExtensions.ToCubeAction"/>
-/// is the single spelling of that collapse.
+/// The three-way claim a cube answer makes about the position — No double,
+/// Double or Too good (SPEC-scoring §1 and §3; halheinrich/backgammon#86). A
+/// claim is not part of the answer: it is what the answer reads as at a
+/// decision (amended 2026-09-30 on halheinrich/backgammon#326), derived once,
+/// by <see cref="CubeDecision.ClaimOf"/>, from the answer and whether gammons
+/// are possible there.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Deliberately not a widening of <see cref="CubeAction"/>: "too good" is a
-/// rationale, not a playable action, and no third doubler board action exists
-/// (SPEC-scoring §3, "Too Good is claim-layer only"). The truth claim of an
-/// analysed cube decision is derived producer-side from the equities —
-/// <see cref="CubeDecisionData.BestDoublerClaim"/> is the one derivation site;
-/// there is no action-to-claim conversion because the claim is
-/// underdetermined by the action alone.
+/// Too good is not a board action: an answer reading it does not double, as
+/// No double does not (<see cref="CubeAnswerExtensions.DoublerAction"/>), so
+/// there is no third doubler action and no <see cref="CubeAction"/> member for
+/// it. The claim exists to say why. Only the fourth answer,
+/// <see cref="CubeAnswer.NoDoublePass"/>, can read it, and only where gammons
+/// are possible: there it reads Too good, and elsewhere No double, with its
+/// pass. For that answer the reading is which of its two labels applies, Too
+/// good or No double / Pass; the wording is the label home's.
 /// </para>
 /// <para>
-/// Declaration order is the claim axis as ruled — {No Double, Double,
-/// Too Good} — and is what a UI offering the claims renders. Too Good
-/// occurs in money too, including under Jacoby via redoubles (SPEC-scoring
-/// §3, "Uniform availability"), with one ruled exception: a money position
-/// under Jacoby with the cube centred cannot be too good, so Too Good is
-/// not offered there (the 2026-09-02 amendment, halheinrich/backgammon#187).
-/// That offerability fact is derived once, producer-side, as
-/// <see cref="CubeDecision.CanBeTooGood"/>; consumers read it and never
-/// re-derive it.
+/// No action or answer leads back to a claim on its own: the reading needs
+/// the decision. A played action is never read as a claim — the rationale is
+/// the analysis's, not the game record's. Like every enum here it carries the
+/// strict string-token converter; no document embeds it.
 /// </para>
 /// </remarks>
 [JsonConverter(typeof(StrictJsonStringEnumConverter<CubeClaim>))]
 public enum CubeClaim
 {
-    /// <summary>The position is not good enough to double yet — the correct
-    /// action is to play on, and doubling would lose equity.</summary>
+    /// <summary>Don't double: the reading of No double, and of the fourth
+    /// answer where gammons are not possible.</summary>
     NoDouble,
 
-    /// <summary>The position is a double — offering the cube has higher
-    /// equity than playing on against optimal opponent response.</summary>
+    /// <summary>Double: the reading of Double / Take and Double / Pass.</summary>
     Double,
 
-    /// <summary>The position is too good to double — the correct action is
-    /// still not to double, but because playing on (typically for a gammon)
-    /// is worth more than the cashed point a double would collect.</summary>
+    /// <summary>Too good to double: playing on, typically for a gammon, is
+    /// worth more than the cash a double would collect. The reading of the
+    /// fourth answer where gammons are possible.</summary>
     TooGood
 }

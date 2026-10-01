@@ -23,9 +23,9 @@ not gain any. The shared-data layer is the foundation other subprojects
 rest on; introducing a subproject dependency here would either create a
 circular reference or force the dependency on every consumer transitively.
 `System.Text.Json` is the only runtime dependency; the serialized types
-that need converters (`CubeOwner`, `CubeAction`, `CubeClaim`, `AnalysisMode`,
+that need converters (`CubeOwner`, `CubeAction`, `AnalysisMode`,
 `AnalysisLevel`, `Play`, `DecisionId`, `ProblemKey`, `DiceRoll`, `BoardPosition`)
-each bundle their own `[JsonConverter]` attribute, and the optional
+each bundle their own `[JsonConverter]` attribute, as every enum does, and the optional
 after-boards name theirs at the property, so consumers do not have to
 register converters on their `JsonSerializerOptions`.
 
@@ -80,13 +80,15 @@ and `Directory.Packages.props` (Central Package Management — no inline
   the one mutable type in the library and the owner of play identity.
   Value types here inherit hot-path zero-alloc constraints from move
   generation.
-- **Enums and the depth taxonomy** — `CubeOwner`, `CubeAction`, `CubeClaim`
-  (the three-valued doubler claim of SPEC-scoring §3, with
-  `CubeClaimExtensions` for the claim→action collapse), and
+- **Enums and the depth taxonomy** — `CubeOwner`, `CubeAction`,
+  `CubeAnswer` (the four cube answers of SPEC-scoring §3, with
+  `CubeAnswerExtensions` for its projections), `CubeClaim` (the three-way
+  claim an answer reads as at a decision), and
   `AnalysisMode` × `AnalysisLevel` (the two-axis depth taxonomy) with `BookEdition`, and the internal `DepthTaxonomy` (the depth's rank, label and abbreviation, derived from its typed facts), alongside
-  the small validated value types `CubeDecisionPair` (a `CubeAction` pair
-  with per-half guards), `CubeClaimPair` (its claim-layer counterpart — the
-  two-part cube answer), and `DiceRoll` (a canonical unordered roll).
+  the small value types `CubeDecisionPair` (a `CubeAction` pair
+  with per-half guards), `CubeAnswerCost` (what a cube answer costs at a
+  decision, in its two parts), and `DiceRoll` (a canonical unordered roll),
+  and `EquityLoss`, the one display and zero rule of every cost and loss.
 - **Shared consumer contracts** — `IDecisionFilterData`, the filter-layer
   view implemented by a record's view and by `DecisionRow`, carrying the
   score context a filter needs as the decision's `Session` (a money
@@ -142,8 +144,9 @@ test-support project" under Architecture.
 behaviour area of a type (`ProblemKeyTests`, `BoardStateTests`,
 `PipCountTests`, `RaceTests`, the `*SerializationTests` pair, …). Fixtures
 are constructed in code — pure data types need no corpus, so no test reads
-the umbrella `TestData/` (the one that did is retired; see "Cube-decision
-scoring on CubeDecisionData").
+the umbrella `TestData/` (the one that did, `TooGoodCorpusExerciseTests`, was
+retired on halheinrich/backgammon#273; the evidence for the cube rules and
+its owners are under "Cube answers and their costs").
 
 Every pin that says a path allocates nothing measures through
 `AllocationProbe`, in the test-support project, so this suite's pins and
@@ -165,7 +168,8 @@ their move-generation origins. `BoardState` is a `class` but mutable —
 the one deliberate exception (see "Mutability exception" below).
 Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
 attributes: `StrictJsonStringEnumConverter<TEnum>` on `CubeOwner`,
-`CubeAction`, `CubeClaim`, `AnalysisMode`, and `AnalysisLevel`,
+`CubeAction`, `AnalysisMode`, and `AnalysisLevel`, and on every other enum
+(`CubeAnswer` and `CubeClaim` too, though no document embeds either),
 `PlayJsonConverter` on `Play`,
 `DecisionIdJsonConverter` on `DecisionId`, `ProblemKeyJsonConverter` on
 `ProblemKey`, `DiceRollJsonConverter` on `DiceRoll`, and
@@ -187,11 +191,17 @@ bundled converter honored. Its `[JsonSerializable]` roots are the wire
 units — the document roots (`BgDecisionData`, `DecisionRow`), the two
 header types a producer's serialized header embeds (`SessionTerms`,
 `GameStanding`), and the converter-bearing token types (`Play`, `Move`,
-`DecisionId`, `ProblemKey`, `DiceRoll`, `BoardPosition`, every enum —
-`CubeClaim` declared ahead of its first
-embedding document so the claim vocabulary is born source-genned and
-downstream contexts chain rather than re-cover it); composite parts ride
-the generator's graph walk. Converters stop that walk, so what lies
+`DecisionId`, `ProblemKey`, `DiceRoll`, `BoardPosition`, every enum a
+document or a producer's header holds); composite parts ride
+the generator's graph walk. `CubeAnswer` and `CubeClaim` are not roots: no
+document in the umbrella embeds either, so neither is wire surface.
+`CubeClaim` was registered ahead of a first embedding document that never
+came, and halheinrich/backgammon#326 retired that registration after a
+search of every member's contexts found nothing that depended on it but
+this repo's own pins. Each still bundles the strict converter, so the
+first document that holds one reaches it through the graph walk with its
+token already strict; `Context_HoldsNeitherTheCubeAnswerNorTheClaim` fails
+at that moment, which is when to declare it. Converters stop that walk, so what lies
 past them is declared explicitly and resolved through the active options
 at runtime: `Move` (past `Play`'s converter), the two decision kinds
 `CheckerPlayDecision` and `CubeDecision` (past
@@ -351,7 +361,7 @@ Every decision holds the two shared categories; each kind holds its own
 | `MoneySession` | a money session's `PositionData.Session` | `Terms` (a `MoneyTerms`: `IsJacoby`, `IsBeaver`, `CubeLimit`, a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
 | `DescriptiveData` | both kinds | `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it), and a match's length is the match session's |
 | `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `UserPlay?`, and for a ranking `RankedBy(ranking)` — the order, the best play, each candidate's error and whether it is scored, the player's error (see "The ranking") |
-| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?`, each cube action's `ActionEquity(action)` and the scoring policy |
+| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?`, each cube action's `ActionEquity(action)`, the best actions and their errors, and the truth among the four cube answers, `BestAnswer` (what an answer reads as and costs is the record's: see "Cube answers and their costs") |
 
 **No stored copy of a derivable value** (the umbrella's verdict on the
 records leg of `halheinrich/backgammon#273`). Every member the others
@@ -467,7 +477,10 @@ asked for it exhaustively). Derived, never stored:
 | `PlayCandidate.Depth`, `DepthAbbreviation`, and the cube analysis's | the typed depth facts — `AnalysisMode`, `AnalysisLevel`, `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — by the producer's grammar, moved here unchanged (`DepthTaxonomy`; see "The depth as typed facts") |
 | `RankedBy(ranking)`: the order, `Best`, each `RankedPlay.Error` and `IsScored` | the candidates' equities and, under depth first, their depth ranks (see "The ranking") |
 | `RankedBy(ranking).PlayerResult` | the played candidate: scored with its error, or not scored; otherwise unlisted with the stored `UnlistedPlayError`, or not recorded |
-| `CubeDecisionData.ActionEquity(action)` | `NoDoubleEquity`, `DoubleTakeEquity` and the pass's normalised value +1: each cube action's equity in the doubler's perspective, doubling's the taker's best response's (see "Cube-decision scoring on CubeDecisionData"); the best actions, the claim and both halves' errors read it |
+| `CubeDecisionData.ActionEquity(action)` | `NoDoubleEquity`, `DoubleTakeEquity` and the pass's normalised value +1: each cube action's equity in the doubler's perspective, doubling's the taker's best response's (see "The analysis's cube actions on CubeDecisionData"); the best actions, both halves' errors, the truth and each answer's cost read it |
+| `CubeDecisionData.BestAnswer` | the two halves' best actions: the cube answer whose projections they are (see "Cube answers and their costs") |
+| `CubeDecision.GammonsPossible` | the position's board, cube and owner and its session's kind, rules and needs (see "Cube answers and their costs") |
+| `CubeDecision.ClaimOf(answer)`, `CostOf(answer)` | the answer, `GammonsPossible`, and for the cost the equities through `ActionEquity` |
 | `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus: 16,932 of 16,959 doubler errors within 1e-5, the rest within 1e-4; all 830 taker errors equal) |
 | `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures matched within 9.5e-7 (273,592 candidates) and 2.4e-7 (17,158 cube decisions, each half) |
 | `BgDecisionData.Xgid` | the board, the cube and its owner, the session (its kind's facts) and a checker play's roll, by the format stated on the internal `XgidEncoder` (see "The XGID, derived") |
@@ -649,8 +662,12 @@ the taker's (as `UserDoubleError ?? UserTakeError` reads), never
 `IDecisionFilterData.FilterError` are gone, so a stale use fails to
 compile.
 
-Whether a play is correct (its error exactly 0) stays with consumers; the
-not-scored classification is this library's.
+Whether a play is correct is judged by the zero rule every equity loss
+shares: its error shows as `0.0000` (`EquityLoss.CountsAsZero`;
+halheinrich/backgammon#202, SPEC-scoring §2a), so a play a hair off the
+best is correct too. The rule is this library's, and so is the not-scored
+classification; applying the rule to a verdict is the consumer's
+(BgGame_Lib). The error itself stays exact.
 
 ### Shared types
 
@@ -658,13 +675,15 @@ not-scored classification is this library's.
 |---|---|
 | `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
 | `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
-| `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the doubler half of a cube answer at the claim layer (SPEC-scoring §1/§3, `halheinrich/backgammon#86`), serializes as string. A claim about the position, not a board action: `NoDouble` and `TooGood` share the identical board action (`CubeAction.NoDouble`), and `CubeClaimExtensions.ToCubeAction` is the single spelling of that collapse. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, ruled claim-layer only. Declaration order is the ruled claim axis {No Double, Double, Too Good}, what a UI offering the claims renders. No reverse action→claim mapping exists: the claim is underdetermined by the action alone; the only equities→claim door is `CubeDecisionData.BestDoublerClaim`. |
+| `CubeAnswer` | enum: `NoDouble`, `DoubleTake`, `DoublePass`, `NoDoublePass` — the four cube answers of SPEC-scoring §3 (amended 2026-09-30, halheinrich/backgammon#326): a submitted answer and the truth (`CubeDecisionData.BestAnswer`) alike. The fourth is named by its meaning, "don't double, they'd pass", never by its labels: it reads Too good where gammons are possible and No double / Pass where they are not (`CubeDecision.ClaimOf`). Its projections are `CubeAnswerExtensions`' `DoublerAction()`, `TakerAction()` (No double's take implied) and `CommitsToResponse()` (false for No double alone), each total over the four and refusing anything else. Declaration order is the offered order, §3's column order; the zero value `NoDouble` is an answer, so "no answer" is `CubeAnswer?` null. Carries the strict converter; no document embeds it, so it is not a context root. See "Cube answers and their costs". |
+| `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the three-way claim a cube answer reads as at a decision (SPEC-scoring §1/§3, `halheinrich/backgammon#86`; a reading since halheinrich/backgammon#326), derived once, by `CubeDecision.ClaimOf`. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, not a board action. For the fourth answer the reading is which of its two labels applies. No action and no answer leads back to a claim on its own: the reading needs the decision. Carries the strict converter; no longer a context root (no document embeds it). |
+| `CubeAnswerCost` | `sealed class` — what a cube answer costs at a decision (`CubeDecision.CostOf`), in two parts: `DoublingPart`, `TakePart`, and `Total`, their sum. No public constructor: only the library computes one. Exact, never rounded; value equality over the two parts. See "Cube answers and their costs". |
+| `EquityLoss` | `static class` — the one display of an equity loss (`Format`: four decimals, invariant, a loss that rounds to zero unsigned) and the one zero rule (`CountsAsZero`: exactly when it shows as `0.0000`), halheinrich/backgammon#202. See "When a loss counts as zero". |
 | `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — "not recorded", which a producer states; the members carrying the pair are required on the wire (see "Absence on the wire"), so JSON lacking them is refused rather than read as `Unknown`, while the retired flat class's property beside them is still ignored on read. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). The rollout trial count, the book edition and an unrecognized level's raw code are typed facts beside the pair (see "The depth as typed facts"). |
 | `PlayerResultKind` | enum: `NotRecorded`, `NotScored`, `Scored`, `Unstated` — the case of a player's result (`PlayerResult.Kind`, `DecisionRow.Result`), serializes as its string token through the strict converter. `NotRecorded` is the zero value. Every member carries a `[Description]` label. See "The player's result". |
 | `PlayRanking` | enum: `Equity`, `DepthFirst` — the ranking of a checker play's candidates, the one definition of which play is best (SPEC-scoring §2a, `halheinrich/backgammon#282`); serializes as its string token through the strict converter. `Equity` is the default and the zero value. Every member carries a `[Description]` label ("Equity", "Depth first"). See "The ranking". |
 | `AnalysisLevel` | enum: `Unknown`, `Ply1`, `Ply2`, `Ply3Red`, `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`, `Ply6`, `Ply7`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — "not recorded", a value the producer states, never an absent member (see `AnalysisMode`). **Declaration order is contractual** (ruled 2026-08-28 on the authority of XG's own analysis-level menu, amended the same day): every member after `Unknown` ascends in rigor, and the ply and Roller families *interleave* rather than forming two blocks — `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`. Reordering, or inserting out of rigor order, is a breaking change; live consumers read the order (the diagram's level floor, the filter-panel and quiz level dropdowns). `Unknown` sits *outside* the rigor scale — not "least rigorous" but "not recorded": never excluded by a floor, never offered as a threshold; head-of-list is the zero-value requirement, not a rank. `DepthRank` (a candidate's and the cube analysis's) remains the ordering surface across the mode × level *pair*. Every member carries a `[Description]` display label. `Ply3Red` is XG's "3-ply Red" — its own member between `Ply2` and `Ply3` as of the same ruling, superseding the earlier collapse into `Ply3` as a label variant. |
 | `CubeDecisionPair` | `readonly record struct (CubeAction Doubler, CubeAction Taker)` — a complete cube decision as two atomic actions. Validated on construction via the positional-record idiom: `Doubler` ∈ {`NoDouble`, `Double`}, `Taker` ∈ {`Take`, `Pass`}; a cross-half value throws `ArgumentOutOfRangeException`. The verdict aggregate (pair → correct/wrong) is intentionally absent and returns later with `CubeVerdict`. `default` is non-meaningful — see Pitfalls. |
-| `CubeClaimPair` | `readonly record struct (CubeClaim Claim, CubeAction Taker)` — the two-part cube answer of SPEC-scoring §3 (`halheinrich/backgammon#86`): the claim-layer counterpart of `CubeDecisionPair`, pairing the three-valued claim with the taker response if doubled. Same construction-guard idiom (`Claim` any defined member, `Taker` ∈ {`Take`, `Pass`}). A closed 3×2 of six named canonical instances: five verdict cells (`NoDoubleTake`, `DoubleTake`, `DoublePass`, `TooGoodTake`, `TooGoodPass`) plus `NoDoublePass`, the incoherent cell — representable *by ruling* (a selectable user answer; cross-disabling the axes was rejected), named by `IsIncoherent` for review surfaces. One type serves both scored roles — a user's submitted answer and the derived truth (`CubeDecisionData.BestClaimPair`). Scoring semantics stay with the consuming legs. No parse/format story: display strings are consumer copy per SPEC-scoring §3, and no wire token is ruled — its wire debut (and wire shape) belongs to the first document that embeds it. `default` is non-meaningful — see Pitfalls. |
 | `DecisionKind` | enum: `CheckerPlay`, `Cube` — the kind of a decision as a value (`BgDecisionData.Kind`, `DecisionRow.Kind`, `IDecisionFilterData.Kind`), serializes as its string token through the strict converter. The record's kind is its type; match on the record (`Match` / `Switch`) for exhaustiveness. |
 | `SessionKind` | enum: `Money`, `Match` — the kind of a session as a value (`Session.Kind`, `DecisionRow.SessionKind`), serializes as its string token through the strict converter. The session's kind is its type, and its terms'; match on the session (`Match` / `Switch`) for exhaustiveness. See "Money and match: the session kinds". |
 | `Seat` | enum: `Player1`, `Player2` — a header's seat (XG's bottom and top player), the side `GameStanding` states its facts by. `Session.Create` takes the seat on roll to turn a standing into a record's; no record holds a seat. Serializes as its string token through the strict converter. |
@@ -674,7 +693,7 @@ not-scored classification is this library's.
 | `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
 | `PlayChain` | **internal** `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a route from a source to a landing point, which the notation writes as one `from/to`, joining consecutive moves and eliding the touch-down points between. It stops where its moves stop or at a hit point whose mark it carries, so it is not a checker's whole trajectory: an intermediate hit splits one trajectory into two chains (`13/10*/8` is written `13/10* 10/8`). Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
 | `CanonicalPlay` | **internal** `readonly struct` (`halheinrich/backgammon#273`: consumers spell plays with `Play.ToNotation()` and compare them by position, so the chain form can change without breaking one), fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by the internal `Play.ToCanonical()` — no other constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite, as every stored number is), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's error against the best is a ranking's (`CheckerPlayDecisionData.RankedBy`): it needs the other candidates and a ranking. An error of exactly 0 is the test for "is this a best play" under that ranking; `RankedPlays.Best` names its single best, the ranking's first. |
+| `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite, as every stored number is), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's error against the best is a ranking's (`CheckerPlayDecisionData.RankedBy`): it needs the other candidates and a ranking. An error of exactly 0 is the test for "is this a best play" under that ranking, an equity tie with the best; `RankedPlays.Best` names its single best, the ranking's first. Whether a play is *correct* is the zero rule's, `EquityLoss.CountsAsZero`, which also admits a play a hair off the best. |
 | `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
 | `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `From` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. **Every record has a key**: `From` has no failure case, since a record's rules hold every fact it reads at least as strictly as the parse door holds text. Only text reaches the no-key rung: text whose facts would force a guess is **no key** rather than a wrong one (see "ProblemKey" below). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
 
@@ -1191,7 +1210,7 @@ without a consumer-side key converter.
 
 ### Played cube actions on CubeDecisionData
 
-Distinct from the scoring helpers below, `CubeDecisionData` carries the record
+Distinct from the analysis's action facts and the answers below, `CubeDecisionData` carries the record
 of what was *actually played* in a cube decision
 (`halheinrich/backgammon#123` documents; the fields shipped with the played-
 action record work):
@@ -1223,16 +1242,16 @@ These are **actions, never claims**: a stamped game fact cannot carry the
 "too good" rationale, because a player can choose not to double in a
 position where he is not too good — the rationale is a property of the
 analysis, not of the played move (the `halheinrich/backgammon#86` intake's
-"analysis vs. stamped action" distinction). The claim layer (`CubeClaim`,
-`CubeClaimPair`, above) therefore neither supersedes nor touches this
-pair: claims live in quiz answers and derived truth, played actions in
-the game record. Do not infer a claim from a played action.
+"analysis vs. stamped action" distinction). The cube answer (`CubeAnswer`)
+and the claim it reads as (`CubeClaim`) therefore neither supersede nor
+touch this pair: answers live in the quiz and the derived truth, played
+actions in the game record. Do not infer a claim from a played action.
 
-### Cube-decision scoring on CubeDecisionData
+### The analysis's cube actions on CubeDecisionData
 
-`CubeDecisionData` carries the cube-decision scoring policy as computed members
-that derive from `NoDoubleEquity` and `DoubleTakeEquity`, through one
-calculation, each cube action's equity:
+`CubeDecisionData` derives the analysis's facts about each cube action
+from `NoDoubleEquity` and `DoubleTakeEquity`, through one calculation, each
+cube action's equity:
 
 - **`ActionEquity(action)`** (halheinrich/backgammon#273, Hal's ruling of
   2026-09-27) — the equity of any of the four `CubeAction`s, in the player
@@ -1246,9 +1265,8 @@ calculation, each cube action's equity:
   and worse for the taker, whose own equity is the negation. An undefined
   action throws `ArgumentOutOfRangeException`.
 
-A cube decision is scored as **two independent atomic decisions**, each
-judged on its own with no cross-decision override, each comparing its two
-actions' `ActionEquity`:
+Each half of the decision is judged on its own, with no cross-decision
+override, comparing its two actions' `ActionEquity`:
 
 - **Doubler's double / no-double decision**: `BestDoublerAction` and
   `DoublerActionError(action)`. `BestDoublerAction` is `Double` iff
@@ -1261,11 +1279,23 @@ actions' `ActionEquity`:
   less than the cash); the error, in the taker's perspective, is
   `ActionEquity(action) − ActionEquity(BestTakerAction)`.
 
+**These are facts of the analysis, not what an answer costs.** Each action
+error is what that action loses against the best of its half, and other
+members read them: the diagram's equity and loss table, a stated action's
+`UserDoubleError` and `UserTakeError`, the filter view's player result.
+What a cube answer costs is SPEC-scoring §3's, `CubeDecision.CostOf` (see
+"Cube answers and their costs"): it adds the response an answer commits
+to, and charges two misreadings that lose no equity. So a consumer showing
+each action's equity beside its error shows the analysis's own numbers,
+consistent with each other, and the quiz's answer costs are §3's, not
+these. (Until halheinrich/backgammon#326 this section said the action
+errors were "the numbers the scoring used"; the scoring now uses the §3
+costs.)
+
 **One calculation, the pass value never on its own.** The pass's value and
 the rule for doubling's equity are stated once, in `ActionEquity`: the best
-actions, the claim's comparison with the cash and both errors read them
-through it, so a consumer showing each action's equity beside its error
-reads the numbers the scoring used. The value +1 is a private constant read
+actions, both errors, the truth and each answer's cost read them through
+it. The value +1 is a private constant read
 by `ActionEquity` alone. It is not published on its own: a consumer asks
 for the pass's equity as an action's equity and never rebuilds the domain
 calculation from a normalization constant (Hal's ruling). The result is a
@@ -1282,62 +1312,6 @@ perspective, that each error is the gap between two of its equities over
 a grid holding every tie, the `-0` tie, and that no public member names the
 pass.
 
-Above the action layer sits the claim derivation of SPEC-scoring §3
-(`halheinrich/backgammon#86`) — the truth side of the two-part cube answer,
-derived producer-side so consumers never re-derive:
-
-- **`BestDoublerClaim`** widens `BestDoublerAction` to the three-valued
-  claim: `Double` when doubling is best; otherwise `TooGood` iff
-  `NoDoubleEquity > 1` **and** `BestTakerAction == Pass` (the ratified
-  predicate as amended 2026-09-02 by `halheinrich/backgammon#187`: Too
-  Good requires the pass; the equity comparison is strict — exactly 1 is
-  not too good), else `NoDouble`. Cell by cell of the no-double half: Too
-  good / Pass — playing on beats the cash and they would pass; No double /
-  Take with a no-double equity above 1 — playing on beats being taken, the
-  opponent takes, no pass is involved, a No double *by ruling* (XG's "Too
-  good to double/Take", `TooGoodAndTake.xgp`, no double +1.1711,
-  double/take +0.6004, is the position that decided it); No double / Take
-  at or below 1 — the ordinary cell. Reads equities only: no match-score,
-  money, or Jacoby context enters (Too Good occurs in money via Jacoby
-  redoubles). Whether the verdict *can* occur at a position is the separate
-  offerability fact below.
-
-- **`BestClaimPair`** composes the full derived truth,
-  `(BestDoublerClaim, BestTakerAction)` — the `CubeClaimPair` a submitted
-  answer is scored against half by half, and the producer verdict the
-  answer-type classification consumes. Off the tie boundaries it lands in
-  one of the four reachable verdict cells — `NoDoubleTake`, `DoubleTake`,
-  `DoublePass`, `TooGoodPass`; `TooGoodTake` is never derived since the
-  amendment — and the sixth-cell boundary ruling stands; see Pitfalls.
-
-- **`CubeDecision.CanBeTooGood`** — the offerability fact of the same
-  amendment, on the cube record because only the record sees the session
-  and the cube owner together: `false` iff the session is a
-  `MoneySession` under the Jacoby rule (its terms' `IsJacoby`) and
-  `Position.CubeOwner == Centered` (gammons do not count under Jacoby until
-  the cube turns, so the no-double equity never exceeds the cash); `true`
-  otherwise — a match has no Jacoby rule, and a money session always states
-  its rule, so no unknown rule is left to withhold the verdict on. The one
-  derivation site: a consumer offering cube answers reads it to decide
-  whether the Too Good pair is in the option set and never re-derives it
-  from the session. Independent of what the equities derive (the claim
-  would still say Too Good if the producer's numbers did). `[JsonIgnore]`d
-  like the rest of the record's derived view.
-
-**The evidence for the Too Good rule, each kind with its owner**
-(SPEC-scoring §3 as corrected 2026-09-27; Hal's ruling on
-halheinrich/backgammon#273). This library owns the rule and verifies it
-with synthetic tests, which gate: `CubeDecisionDataClaimDerivationTests`
-(every claim, the strict boundary, the pass requirement, the boundary cell,
-and `BestClaimPair_NeverDerivesTheRetiredTooGoodTakeCell` over a grid) and
-`CubeDecisionTooGoodOfferabilityTests`. Checking the rule's inputs against
-facts XG stores is ConvertXgToJson_Lib's, the member that reads XG; the
-umbrella's SPEC-scoring §3 ("The truth-claim derivation") states the
-evidence and its owners. `TestData/BgDecisionData` is generated output, not
-an oracle, and no test here depends on it: `TooGoodCorpusExerciseTests`,
-which read it and compared nothing with XG, is retired, with its link to
-the samples.
-
 The computed members exist on the cube decision only — asking them of a
 checker play does not compile, so the `IsCube` guard they used to share
 (and its `InvalidOperationException`) is gone. The two error methods throw
@@ -1348,16 +1322,182 @@ takes any defined action.
 Tie-breaking follows the renderer's existing convention so a downstream
 consumer that collapses the inline cube derivation into calls to these
 helpers preserves behaviour: `NoDouble` on the doubler-equity tie, `Pass`
-on `DoubleTakeEquity == 1`.
+on `DoubleTakeEquity == 1`. The truth among the answers keeps both.
 
-The four computed properties (`BestDoublerAction`, `BestTakerAction`,
-`BestDoublerClaim`, `BestClaimPair`) carry `[JsonIgnore]`: they are a
-derivation, not wire. `ActionEquity` and the error methods are
-intrinsically not serialised because they take parameters.
+The three computed properties (`BestDoublerAction`, `BestTakerAction`,
+`BestAnswer`) carry `[JsonIgnore]`: they are a derivation, not wire.
+`ActionEquity` and the error methods are intrinsically not serialised
+because they take parameters.
 
 An aggregate verdict layer was removed in the cube-surface rebuild and is
 slated to return later on a cleaner footing; the umbrella `INSTRUCTIONS.md`
 Deferred section and git history carry that design.
+
+### Cube answers and their costs
+
+**A cube answer is one of four** (SPEC-scoring §3, amended 2026-09-30 and
+twice on 2026-10-01; Hal's rulings on halheinrich/backgammon#326): a
+`CubeAnswer`, `NoDouble`, `DoubleTake`, `DoublePass`, or the fourth,
+`NoDoublePass` — "don't double, they'd pass". Hal: "Either you double or
+you don't; either you take or you pass. That makes four not six." The
+six-value claim × response pair it replaced, `CubeClaimPair`, is retired
+with its incoherent and retired cells, so no other combination is
+representable; no compatibility type was kept. SPEC-scoring §3 is the
+source of truth for every rule below; its tables are not restated here.
+
+```
+CubeAnswer (enum)            NoDouble, DoubleTake, DoublePass, NoDoublePass
+  CubeAnswerExtensions       DoublerAction(), TakerAction(), CommitsToResponse(); internal Of(doubler, taker)
+CubeDecisionData             BestAnswer — the truth, from the equities alone
+                             internal CostOf(answer, gammonsPossible) — the calculation, beside the equities
+CubeDecision                 GammonsPossible — the position's fact
+                             ClaimOf(answer) — what the answer reads as; the fourth's label choice
+                             CostOf(answer) — the door: a CubeAnswerCost (DoublingPart, TakePart, Total)
+```
+
+Design points a maintainer needs before touching it:
+
+- **An enum, like the library's other closed value sets.** `CubeAction`
+  and `CubeClaim` are enums whose every door refuses an undefined value
+  with `ArgumentOutOfRangeException`; `CubeAnswer` is the same, so every
+  operation taking one refuses anything but the four. The zero value,
+  `NoDouble`, is an answer, so "no answer" is `CubeAnswer?` `null`.
+  Declaration order is the offered order, §3's column order: all four
+  answers are always offered. It carries the strict string-token converter
+  like every enum, though no document embeds it (see "Source generation &
+  trimming").
+- **The fourth is named by its meaning, never by a label.** It reads Too
+  good where gammons are possible and No double / Pass where they are not;
+  either way it is the answer "don't double, they'd pass", whose two
+  projections its name spells.
+- **Its projections are total, and never stored beside it.**
+  `CubeAnswerExtensions.DoublerAction()` is `NoDouble` for No double and
+  the fourth, `Double` for the two doubling answers; `TakerAction()` is
+  `Take` for No double (implied) and Double / Take, `Pass` for the other
+  two. `CommitsToResponse()` is `false` for No double alone: no cube is
+  offered, so the take it implies is never charged, while the fourth
+  commits to its pass under either label. It is the one statement of
+  which answers a take/pass tally counts (SPEC-scoring §3's Take row and
+  lifetime take half). The internal `Of(doubler, taker)` is the
+  projections' inverse — each pair of a doubler-half and a taker-half
+  action is exactly one answer — and is how the truth is read off the best
+  actions. These replace the claim → action collapse,
+  `CubeClaimExtensions.ToCubeAction`, retired with the pair: an answer's
+  doubling action is its own projection, and nothing maps a claim to an
+  action or back.
+- **The truth is the same type, from the equities alone.**
+  `CubeDecisionData.BestAnswer` is the answer whose projections are
+  `BestDoublerAction` and `BestTakerAction`: Double / Take or Double /
+  Pass when doubling is best, by the taker's best response; otherwise the
+  fourth answer when they'd pass and No double when they'd take. The two
+  halves' tie-breaks stand, so at the tie of halheinrich/backgammon#293 (a
+  no-double equity of exactly 1, with a pass) the truth is the fourth
+  answer. It is the single representative that classification and display
+  read, and never the test of a correct answer: at an equity tie several
+  answers cost nothing, and each is correct. Whether gammons are possible
+  decides what the truth reads as and what each answer costs, never which
+  answer it is.
+- **Whether gammons are possible is the record's.**
+  `CubeDecision.GammonsPossible` is `false` exactly when the opponent has a
+  checker borne off (`BoardPosition.OpponentBorneOffCount`), when a match's
+  cube is at least the points the player on roll needs (`CubeSize` at
+  least `MatchSession.OnRollNeeds`), or when money under the Jacoby rule
+  has the cube centred. Hal: "If the opponent has checkers borne off,
+  gammons are not possible. Also, gammons are only possible when the size
+  of the cube is less than the points we need win the match." It is a fact
+  of the position, the session, the score and the cube, which only the
+  record sees together; the analyser's gammon chances are not part of it.
+  It replaced `CanBeTooGood`, the Too good offerability fact: all four
+  answers are always offered now.
+- **What an answer reads as: the claim, and the fourth answer's label.**
+  `CubeDecision.ClaimOf(answer)` is the three-way claim of SPEC-scoring §1
+  as a reading of the answer at the decision: No double reads `NoDouble`,
+  the two doubling answers `Double`, and the fourth `TooGood` where gammons
+  are possible and `NoDouble` where they are not. For the fourth answer the
+  reading is which of its two labels applies, Too good or No double /
+  Pass. The labels' wording, full and short, is the label home's, in
+  BackgammonDiagram_Lib, which renders the reading and re-checks no rule.
+  It is the one derivation of a claim: `BestDoublerClaim` and
+  `BestClaimPair` are gone, and the truth's claim is
+  `ClaimOf(Decision.BestAnswer)` — Too good at the halheinrich/backgammon#293
+  tie where gammons are possible, though playing on is worth only the cash.
+- **What an answer costs.** `CubeDecision.CostOf(answer)` gives a
+  `CubeAnswerCost`, exactly per SPEC-scoring §3's two tables: where
+  gammons are possible (the fourth reading Too good) and where they are
+  not (it reading No double / Pass). Its two parts add up to its `Total`
+  by construction: the doubling part and the take part, as §3's 2026-10-01
+  amendment defines them, stated once in code on `CostOf`'s documentation.
+  The two conventions — No double where Too good is right costs N − 0.6,
+  and Too good when they'd take costs 2(1 − T) — apply only where gammons
+  are possible. 0.6 is one named private constant,
+  `CubeDecisionData.BorderlineDoubleEquity`, whose documentation cites
+  Hal's convention and the corpus measurement on halheinrich/backgammon#326 (about 0.6 overall,
+  about 0.65 in money). A doubling answer's parts are the analysis's own
+  action errors; the conventions live only in the two no-double answers'
+  doubling parts.
+- **Computed beside the equities, asked of the record.** The calculation
+  is the internal `CubeDecisionData.CostOf(answer, gammonsPossible)`,
+  where the equities, the pass's value and the convention's constant
+  live; the public door is `CubeDecision.CostOf(answer)`, which supplies
+  the record's own gammon fact, so no caller ever passes one. A
+  `CubeAnswerCost` has no public constructor, so every cost is a
+  decision's.
+- **Exact.** Costs are computed from XG's stored equities as they are
+  (Hal: "That's bad Xg data; we merely echo what's there"), never rounded
+  and never corrected: a no-double equity stored at +1.0000015 with
+  gammons not possible gives Double / Pass a cost of 0.0000015, which the
+  zero rule judges (see "When a loss counts as zero").
+- **Not wire.** `BestAnswer` and `GammonsPossible` are `[JsonIgnore]`d,
+  and `ClaimOf` and `CostOf` take a parameter, so a record's wire is
+  unchanged and the flat row gains no column.
+
+**The evidence, and its owner.** This library verifies the rules with
+synthetic pins, which gate, each building full decisions where the gammon
+fact matters: `CubeAnswerTests` (the four, their projections and the
+inverse), `CubeDecisionDataBestAnswerTests` (the truth in every region and
+at each boundary, and from the equities alone), `CubeDecisionGammonsPossibleTests`
+(each gate on its own with its complement, every combination of gates,
+and that XG's gammon chances decide nothing), `CubeDecisionClaimOfTests`
+(each answer's reading under both gammon states, the fourth's label
+following each gate, the one derivation), and `CubeDecisionCostOfTests`
+(every cell of both tables with exact parts, the boundaries, the positions
+ruled on halheinrich/backgammon#326, and over a grid that the parts keep
+their shape and the truth always costs nothing). Checking the rules'
+inputs against what XG stores remains ConvertXgToJson_Lib's
+(SPEC-scoring §3); no test here reads `TestData/`.
+
+### When a loss counts as zero
+
+**`EquityLoss` owns how an equity loss is shown and when it counts as
+zero** (halheinrich/backgammon#202, folded into halheinrich/backgammon#326
+by Hal on 2026-10-01; SPEC-scoring §2a and §3). An equity loss is any cost
+or error in equity: a cube answer's cost or either part, a checker play's
+error under a ranking, a cube action's error, an error the analyser stored.
+
+- **`Format(loss)`** — four decimals, culture-invariant: the one display
+  of every cost and loss. A loss that rounds to zero shows as `0.0000`
+  whatever its sign; a negative one beyond that, which only an error the
+  analyser stored can be, shows its sign, echoing the data. A NaN or an
+  infinity is refused.
+- **`CountsAsZero(loss)`** — exactly when `Format` shows `0.0000`: for a
+  loss that is not negative, below 0.00005. It reads `Format`'s own text
+  rather than a threshold of its own, so what is shown and what is judged
+  cannot disagree anywhere, and the precision is stated once, in a private
+  format string. The double nearest 0.00005 lies just above it and shows
+  as `0.0001`, so the boundary falls where "below 0.00005" says.
+- **Verdicts only.** The rule changes no stored number: costs, errors and
+  equities stay exact, and so does which region of §3's tables a decision
+  falls in. A sum is judged as a sum: two parts that each count as zero can
+  add up to a cost that does not, so a whole answer is judged on its total
+  and each part on its own.
+- **Applying it is the consumers'.** BgGame_Lib's leg judges every verdict
+  by it — checker plays, each part of a cube answer, each whole answer —
+  and every surface that shows a cost or a loss shows it through `Format`,
+  keeping no format string or threshold of its own.
+
+`EquityLossTests` pins the display, the threshold just below, at and just
+above 0.00005 through the shared formatting, and the two members'
+agreement over values on both sides of it.
 
 ### The decision kinds
 
@@ -1374,7 +1514,7 @@ BgDecisionData (abstract)       Kind, Id, Position, Descriptive; Match, Switch;
 │                               Dice (canonical), AfterBoardOf(i), AfterBoardOfBest(ranking),
 │                               AfterPlayerBoard (derived)
 └── CubeDecision                Decision : CubeDecisionData
-                                CanBeTooGood
+                                GammonsPossible (derived), ClaimOf(answer), CostOf(answer)
 ```
 
 Design points a maintainer needs before touching it:
@@ -1382,8 +1522,9 @@ Design points a maintainer needs before touching it:
 - **Where the kind lives: the record.** The kind is the record's type, not a
   category's, because every member only one kind has belongs to that kind's
   type, and some need the whole record: the after-boards need the position
-  and the candidates, and `CanBeTooGood` needs the session and the cube
-  owner.
+  and the candidates, and `GammonsPossible` — with what each cube answer
+  reads as and costs, which read it — needs the board, the cube and the
+  session.
   A polymorphic `Decision` category under one composite would have left
   those on the shared type, answering (or throwing) for the kind they do
   not apply to. Each kind keeps the category structure: `Decision` is its
@@ -1495,12 +1636,15 @@ Design points a maintainer needs before touching it:
   record's top level is exactly `Kind`, `Id`, `Position`, `Descriptive`,
   `Decision`, pinned by test for each kind (the XGID left it when it became
   derived: see "The XGID, derived").
-- **`CanBeTooGood` lives on `CubeDecision`**, the Too Good offerability of
-  SPEC-scoring §3's 2026-09-02 amendment (`halheinrich/backgammon#187`) —
-  see "Cube-decision scoring on CubeDecisionData". Only the record sees
-  the session and the cube owner together, and only a cube decision has
-  the question; the claim itself stays on `CubeDecisionData`, derived from
-  equities alone.
+- **`GammonsPossible`, `ClaimOf` and `CostOf` live on `CubeDecision`**
+  (SPEC-scoring §3, amended 2026-10-01 on halheinrich/backgammon#326) —
+  see "Cube answers and their costs". Only the record sees the board, the
+  cube and the session together, and only a cube decision has the
+  question; the truth, `BestAnswer`, stays on `CubeDecisionData`, derived
+  from equities alone, and so does the cost's calculation, which the
+  record asks with its gammon fact. They replaced `CanBeTooGood`, the Too
+  good offerability fact of the 2026-09-02 amendment
+  (`halheinrich/backgammon#187`), which this point used to place.
 
 ### Money and match: the session kinds
 
@@ -1601,8 +1745,9 @@ Design points a maintainer needs before touching it:
   every money session's terms state the Jacoby rule, so there is no unknown
   rule. The in-tree producer always knows it (XG's match header). The
   unknown-rule rungs it removed: `ProblemKey`'s no-key rung for a money
-  record without the fact, the row's bare `money` token, and
-  `CanBeTooGood`'s unknown-rule case.
+  record without the fact, the row's bare `money` token, and the Too good
+  offerability fact's unknown-rule case (that fact is itself retired now,
+  for `CubeDecision.GammonsPossible`, which reads the rule).
 - **The facts only the XGID carried, placed by the same rule.** The beaver
   rule is money's (XG spells it in the XGID for money only), and so is the
   cube limit the record carries: XG keeps it among the match header's
@@ -1628,7 +1773,7 @@ Design points a maintainer needs before touching it:
 - **Where it is read.** `IDecisionFilterData.Session` (the view's is the
   record's, the row's is built from its columns and held to the kind's
   rules on read); `DecisionRules.CrawfordAllows(kind, session)`;
-  `CubeDecision.CanBeTooGood`; `ProblemKey.From`, whose text is
+  `CubeDecision.GammonsPossible`; `ProblemKey.From`, whose text is
   unchanged (see "ProblemKey"); `DecisionRow.MatchScore`;
   `BgDecisionData.Xgid`.
 
@@ -2216,9 +2361,17 @@ public sealed class CheckerPlayDecision : BgDecisionData
 public sealed class CubeDecision : BgDecisionData
 {
     public required CubeDecisionData Decision { get; init; }
-    // Offerability of the Too Good verdict (SPEC-scoring §3, 2026-09-02):
-    // false iff Session is MoneySession { Terms.IsJacoby: true } && cube centred.
-    [JsonIgnore] public bool CanBeTooGood { get; }
+
+    // The cube answers at this decision (SPEC-scoring §3, amended on
+    // halheinrich/backgammon#326); see "Cube answers and their costs".
+    [JsonIgnore] public bool GammonsPossible { get; }      // false iff the opponent has a checker borne off,
+                                                           // or a match's cube >= OnRollNeeds,
+                                                           // or money under Jacoby with the cube centred
+    public CubeClaim ClaimOf(CubeAnswer answer);           // NoDouble → NoDouble; DoubleTake, DoublePass → Double;
+                                                           // NoDoublePass → TooGood iff GammonsPossible, else NoDouble
+                                                           // (the fourth's label choice)
+    public CubeAnswerCost CostOf(CubeAnswer answer);       // exactly per §3's two tables, in two parts;
+                                                           // both refuse an undefined answer (ArgumentOutOfRangeException)
 }
 
 public sealed class CheckerPlayDecisionData    // unmapped members refused
@@ -2292,8 +2445,9 @@ public sealed class CubeDecisionData           // unmapped members refused
     [JsonIgnore] public double? UserDoubleError { get; }  // DoublerActionError(UserDoublerAction) ?? unstated
     [JsonIgnore] public double? UserTakeError { get; }    // TakerActionError(UserTakerAction) ?? unstated
 
-    // Cube-decision scoring (computed; a cube decision's only). Each action's
-    // equity is the one calculation the rest reads.
+    // The analysis's cube actions (computed; a cube decision's only). Each
+    // action's equity is the one calculation the rest reads. Facts of the
+    // analysis, not what an answer costs (that is CubeDecision.CostOf).
     public double ActionEquity(CubeAction action);                // the doubler's perspective, every action:
                                                                   // NoDouble → NoDoubleEquity, Take → DoubleTakeEquity,
                                                                   // Pass → +1 (the cash), Double → the taker's best
@@ -2301,12 +2455,10 @@ public sealed class CubeDecisionData           // unmapped members refused
     [JsonIgnore] public CubeAction  BestDoublerAction { get; }   // Double or NoDouble
     [JsonIgnore] public CubeAction  BestTakerAction   { get; }   // Take or Pass
 
-    // Claim-layer truth derivation (SPEC-scoring §3, amended 2026-09-02).
-    [JsonIgnore] public CubeClaim     BestDoublerClaim { get; }  // TooGood iff best is NoDouble
-                                                                 // && NoDoubleEquity > 1
-                                                                 // && BestTakerAction == Pass
-    [JsonIgnore] public CubeClaimPair BestClaimPair    { get; }  // (BestDoublerClaim, BestTakerAction);
-                                                                 // never TooGoodTake
+    // The truth among the four answers (SPEC-scoring §3, halheinrich/backgammon#326):
+    // the answer whose projections are the two best actions. From the equities alone;
+    // the representative, never the test of a correct answer.
+    [JsonIgnore] public CubeAnswer BestAnswer { get; }
 
     public double DoublerActionError(CubeAction action);          // ActionEquity(BestDoublerAction) − ActionEquity(action);
                                                                   // throws ArgumentOutOfRangeException on Take/Pass.
@@ -2469,17 +2621,44 @@ public enum CubeOwner { OnRoll, Opponent, Centered }
 
 public enum CubeAction { NoDouble, Double, Take, Pass }
 
-// The doubler half of a cube answer at the claim layer (SPEC-scoring §3):
-// a claim about the position, not a board action. Declaration order is the
-// ruled claim axis. Serializes as string (strict converter).
+// The four cube answers (SPEC-scoring §3, amended 2026-09-30 on
+// halheinrich/backgammon#326): a submitted answer and the truth alike. The
+// fourth, "don't double, they'd pass", reads Too good or No double / Pass by
+// the decision (CubeDecision.ClaimOf). Declaration order is the offered
+// order. Strict converter; no document embeds it, so not a context root.
+public enum CubeAnswer { NoDouble, DoubleTake, DoublePass, NoDoublePass }
+
+// Its projections, each total over the four; ArgumentOutOfRangeException on
+// anything else. Never stored beside the answer.
+public static class CubeAnswerExtensions
+{
+    public static CubeAction DoublerAction(this CubeAnswer answer);  // NoDouble, NoDoublePass → NoDouble; else Double
+    public static CubeAction TakerAction(this CubeAnswer answer);    // NoDouble (implied), DoubleTake → Take; else Pass
+    public static bool CommitsToResponse(this CubeAnswer answer);    // false for NoDouble alone: its take is never charged
+    // internal static CubeAnswer Of(CubeAction doubler, CubeAction taker): the inverse
+}
+
+// What an answer costs at a decision (CubeDecision.CostOf): no public
+// constructor, exact, value equality over the two parts.
+public sealed class CubeAnswerCost : IEquatable<CubeAnswerCost>, IEqualityOperators<CubeAnswerCost, CubeAnswerCost, bool>
+{
+    public double DoublingPart { get; }               // never negative
+    public double TakePart { get; }                   // never negative; 0 for NoDouble
+    public double Total { get; }                      // DoublingPart + TakePart
+}
+
+// The three-way claim an answer reads as at a decision (SPEC-scoring §1/§3):
+// derived once, by CubeDecision.ClaimOf. Not a board action. Strict
+// converter; no longer a context root (no document embeds it).
 public enum CubeClaim { NoDouble, Double, TooGood }
 
-// The claim→action collapse, single-sourced: NoDouble and TooGood both map
-// to CubeAction.NoDouble; Double maps to Double. No reverse mapping exists
-// (the claim is underdetermined by the action alone).
-public static class CubeClaimExtensions
+// The one display of an equity loss and the one zero rule
+// (halheinrich/backgammon#202); see "When a loss counts as zero".
+public static class EquityLoss
 {
-    public static CubeAction ToCubeAction(this CubeClaim claim);  // throws on undefined
+    public static string Format(double loss);         // four decimals, invariant; a loss rounding to zero shows
+                                                      // "0.0000" whatever its sign; NaN/∞ refused
+    public static bool CountsAsZero(double loss);     // exactly when Format shows "0.0000": not negative, below 0.00005
 }
 
 // The two-axis depth taxonomy: mode (how the numbers were produced) ×
@@ -2532,25 +2711,6 @@ public readonly record struct DiceRoll :
 // a cross-half value throws ArgumentOutOfRangeException. default is
 // non-meaningful (see Pitfalls).
 public readonly record struct CubeDecisionPair(CubeAction Doubler, CubeAction Taker);
-
-// The two-part cube answer (SPEC-scoring §3): claim × taker response, a
-// closed 3×2 with six named canonical instances — the four reachable
-// verdict cells, plus two representable-but-never-offered cells (the
-// retired TooGoodTake and the incoherent NoDoublePass). Validated
-// halves: Claim any defined CubeClaim member, Taker ∈ {Take, Pass}.
-// default is non-meaningful (see Pitfalls).
-public readonly record struct CubeClaimPair(CubeClaim Claim, CubeAction Taker)
-{
-    public static CubeClaimPair NoDoubleTake { get; }
-    public static CubeClaimPair NoDoublePass { get; }   // the incoherent cell
-    public static CubeClaimPair DoubleTake { get; }
-    public static CubeClaimPair DoublePass { get; }
-    public static CubeClaimPair TooGoodTake { get; }    // retired as a verdict 2026-09-02
-                                                        // (halheinrich/backgammon#187);
-                                                        // never derived, not offered
-    public static CubeClaimPair TooGoodPass { get; }
-    public bool IsIncoherent { get; }                   // == NoDoublePass
-}
 
 public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<DecisionId>
 {
@@ -2676,7 +2836,8 @@ public abstract class NamedCollectionJsonConverter<TValue, TSelf> : JsonConverte
 
 Serialization contract: round-trips cleanly through `System.Text.Json` —
 no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
-`CubeClaim`, `AnalysisMode`, and `AnalysisLevel` bundle
+`AnalysisMode`, and `AnalysisLevel`, like every enum (`CubeAnswer` and
+`CubeClaim`, which no document embeds, included), bundle
 `StrictJsonStringEnumConverter<TEnum>` via attribute;
 `Play` bundles `PlayJsonConverter`; `DecisionId` bundles
 `DecisionIdJsonConverter`; `DiceRoll` bundles `DiceRollJsonConverter`;
@@ -3016,16 +3177,34 @@ measure" is not a valid comparison on this hardware.
   higher equity) it is `null` — a play the ranking does not score has no
   error, so there is nothing negative to sum by mistake. Identifying the
   best uses `RankedPlays.Best`; testing membership in its equivalence class
-  uses `Error == 0.0`. There is no ranking-free best or loss to read, and
+  uses `Error == 0.0`. Judging a play *correct* does not: that is the zero
+  rule, `EquityLoss.CountsAsZero`, which a play a hair off the best passes
+  too. There is no ranking-free best or loss to read, and
   none to state: a producer states equities and depths.
-- **The cube-scoring helpers are a cube decision's only.** All seven (four
-  computed properties — the action pair and the claim pair — plus three
-  methods, `ActionEquity` and the two errors) live on `CubeDecisionData`,
-  so asking them of a checker play does not compile; the `IsCube` guard
-  they needed is gone. Callers in mixed-decision contexts match on the
-  record (`Match` / `Switch`). The four computed properties carry
+- **Judge a loss zero, and show it, only through `EquityLoss`.** Every
+  verdict — a checker play, each part of a cube answer, each whole answer
+  — asks `CountsAsZero`, and every display of a cost or a loss calls
+  `Format`. An `== 0.0` test, a format string or a numeric threshold of a
+  consumer's own is a second statement of halheinrich/backgammon#202's
+  rule, and can disagree with what is shown. Judge a whole answer on its
+  `Total`, never as the conjunction of its parts' verdicts: two parts that
+  each count as zero can add up to a cost that does not.
+- **The cube helpers are a cube decision's only.** `ActionEquity`, the
+  two best actions, the two errors and `BestAnswer` live on
+  `CubeDecisionData`, and `GammonsPossible`, `ClaimOf` and `CostOf` on
+  `CubeDecision`, so asking any of them of a checker play does not compile;
+  the `IsCube` guard they needed is gone. Callers in mixed-decision contexts
+  match on the record (`Match` / `Switch`). The computed properties carry
   `[JsonIgnore]`; do not strip those attributes.
-- **Cube-scoring atomic-action methods reject the wrong half.**
+- **An action error is not an answer's cost.** `DoublerActionError` and
+  `TakerActionError` are the analysis's: what an action loses against the
+  best of its half. What an answer costs is `CubeDecision.CostOf`, per
+  SPEC-scoring §3, which adds the response the answer commits to and charges
+  two misreadings that lose no equity. Do not score an answer from the
+  action errors, and do not re-spell its parts: a No double answer's implied
+  take is never charged (`CommitsToResponse`), and the conventions apply
+  only where gammons are possible.
+- **The action-error methods reject the wrong half.**
   `DoublerActionError(CubeAction)` accepts only `Double` / `NoDouble`;
   `TakerActionError(CubeAction)` accepts only `Take` / `Pass`. The
   other half throws `ArgumentOutOfRangeException`. `ActionEquity` takes
@@ -3035,8 +3214,8 @@ measure" is not a valid comparison on this hardware.
   is `+DoubleTakeEquity` and a pass +1, not their negations, and the
   taker's own equity is the negation. Spelling `Math.Min(DoubleTakeEquity,
   1)` or a pass constant in a consumer creates a second source of the
-  calculation the errors derive from, and inside this library the constant
-  has one reader, `ActionEquity`.
+  calculation the errors, the truth and the costs derive from, and inside
+  this library the constant has one reader, `ActionEquity`.
 - **`UserDoublerAction` / `UserTakerAction`: half-guarded on init,
   cross-half consistency is NOT guarded.** Each rejects the other half's
   actions with `ArgumentOutOfRangeException` at `init`, but "a recorded
@@ -3062,40 +3241,29 @@ measure" is not a valid comparison on this hardware.
   Construct pairs explicitly; do not treat `default` as a "no decision"
   sentinel. This is the standard value-type caveat, shared with `Play`
   and `DiceRoll`.
-- **`default(CubeClaimPair)` is non-meaningful.** Same caveat, same shape:
-  `default` bypasses the half-guards and carries `(NoDouble, NoDouble)` —
-  whose `Taker` is not a valid taker action. "No answer" is
-  `CubeClaimPair?` null, never `default`.
-- **`CubeClaim.TooGood` and `CubeAction.NoDouble` are the same board
-  action.** The claim layer exists precisely because two claims collapse to
-  one action (SPEC-scoring §3). Code bridging claims to the action-level
-  scoring helpers must go through `CubeClaimExtensions.ToCubeAction` —
-  re-encoding the collapse inline creates a second source of the rule. The
-  reverse direction does not exist: never infer a claim from an action
-  (underdetermined); the only equities→claim door is
-  `CubeDecisionData.BestDoublerClaim`.
-- **`BestClaimPair` can derive the incoherent cell — on the tie boundary
-  only.** At `NoDoubleEquity == 1` exactly with `DoubleTakeEquity >= 1`,
-  both halves tie and the ruled tie-breaks (NoDouble; Pass) compose to
-  `CubeClaimPair.NoDoublePass` — the cell SPEC-scoring §3 calls "never a
-  verdict". Measure-zero and equity-neutral (every answer scores
-  identically there), pinned by test as the spec-literal reading of the
-  strict `> 1` predicate, and flagged to the umbrella as a candidate spec
-  sharpening; the 2026-09-02 amendment left it standing. Off the boundary
-  the derived truth is always one of the four reachable verdict cells
-  (pinned over a grid). Consumers rendering the derived truth should not
-  assume `!IsIncoherent`.
-- **`CubeClaimPair.TooGoodTake` is representable but never derived.**
-  Since SPEC-scoring §3's 2026-09-02 amendment (`halheinrich/backgammon#187`)
-  Too Good requires the pass, so `BestClaimPair` cannot compose it (pinned
-  over a grid, `BestClaimPair_NeverDerivesTheRetiredTooGoodTakeCell`). The cell stays
-  on the closed 3×2 because a data-types library does not hide cells;
-  consumers do not offer it, and must not treat its presence in the type as
-  a hint that it is reachable.
-- **Never re-derive Too Good offerability from the session.**
-  `CubeDecision.CanBeTooGood` is the one site; spelling
-  `Session is MoneySession { Terms.IsJacoby: true } && CubeOwner == Centered` in a
-  consumer creates a second source of the ruling.
+- **`default(CubeAnswer)` is an answer.** The zero value is `NoDouble`, so
+  an unset field reads as a real answer. "No answer" is `CubeAnswer?`
+  null, never `default`.
+- **The fourth answer is not Too good.** `CubeAnswer.NoDoublePass` is "don't
+  double, they'd pass"; it reads Too good only where gammons are possible.
+  Label it from `CubeDecision.ClaimOf`, never by a fixed mapping from the
+  answer, and never re-derive the choice from the board or the session.
+- **Never re-derive whether gammons are possible.**
+  `CubeDecision.GammonsPossible` is the one site; spelling a borne-off
+  count, a cube-against-needs comparison or a Jacoby-and-centred test in a
+  consumer creates a second source of the ruling, and so does reading
+  XG's gammon chances as the fact.
+- **The truth is a representative, not the correct answer.**
+  `CubeDecisionData.BestAnswer` is what classification and display read.
+  An answer is correct when its cost counts as zero, so at an equity tie
+  more than one is: at the halheinrich/backgammon#293 tie, No double,
+  Double / Pass and the fourth answer all cost nothing. Never test
+  correctness as equality with the truth.
+- **Never map an answer to its actions, or back, by hand.** The
+  projections are `CubeAnswerExtensions`' (`DoublerAction`, `TakerAction`,
+  `CommitsToResponse`); a consumer's own switch is a second statement of
+  them. No claim leads back to an action, and no action or answer to a
+  claim without the decision (`ClaimOf`).
 - **A `NamedCollection` specialization is a closed pattern, and every part
   of it is load-bearing.** The shape (the saved-filter document of
   halheinrich/backgammon#190 leg (B) and the queued mix document follow it):

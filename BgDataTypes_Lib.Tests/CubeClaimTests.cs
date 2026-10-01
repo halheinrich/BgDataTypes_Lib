@@ -3,7 +3,9 @@ using BgDataTypes_Lib;
 
 namespace BgDataTypes_Lib.Tests;
 
-// The claim vocabulary of halheinrich/backgammon#86 (SPEC-scoring §1/§3).
+// The claim vocabulary of halheinrich/backgammon#86 (SPEC-scoring §1/§3),
+// a reading of the cube answer at a decision since halheinrich/backgammon#326:
+// the reading itself is pinned in CubeDecisionClaimOfTests.
 public class CubeClaimTests
 {
     // No explicit enum-converter registration: CubeClaim bundles its own
@@ -18,8 +20,8 @@ public class CubeClaimTests
         Assert.Equal(3, Enum.GetValues<CubeClaim>().Length);
     }
 
-    // Declaration order is the ruled claim axis {No Double, Double, Too Good}
-    // (SPEC-scoring §3) — what a UI offering the claims renders.
+    // Declaration order is SPEC-scoring §1's claim axis {No Double, Double,
+    // Too Good}.
     [Fact]
     public void MembersAreInExpectedOrder()
     {
@@ -47,25 +49,18 @@ public class CubeClaimTests
         Assert.Equal(claim, JsonSerializer.Deserialize<CubeClaim>(json));
     }
 
-    // ---------------------------------------------------------------------
-    //  ToCubeAction — the claim-to-action collapse, single-sourced
-    // ---------------------------------------------------------------------
-
-    // Both no-double claims perform the identical board action: the claim
-    // layer's defining collapse (SPEC-scoring §3, "Too Good is claim-layer
-    // only").
-    [Theory]
-    [InlineData(CubeClaim.NoDouble, CubeAction.NoDouble)]
-    [InlineData(CubeClaim.TooGood, CubeAction.NoDouble)]
-    [InlineData(CubeClaim.Double, CubeAction.Double)]
-    public void ToCubeAction_CollapsesClaimToBoardAction(CubeClaim claim, CubeAction expected)
-    {
-        Assert.Equal(expected, claim.ToCubeAction());
-    }
-
+    // The claim-to-action collapse is retired with the six-value pair
+    // (halheinrich/backgammon#326): an answer's doubling action is its own
+    // projection, CubeAnswerExtensions.DoublerAction, and nothing maps a
+    // claim to an action or back.
     [Fact]
-    public void ToCubeAction_OnUndefinedClaim_Throws()
+    public void NoMember_MapsAClaimToAnAction()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => ((CubeClaim)99).ToCubeAction());
+        Assert.Null(typeof(CubeClaim).Assembly.GetType("BgDataTypes_Lib.CubeClaimExtensions"));
+        Assert.DoesNotContain(
+            typeof(CubeClaim).Assembly.GetExportedTypes()
+                .SelectMany(t => t.GetMethods())
+                .Where(m => m.IsStatic && m.GetParameters() is [{ ParameterType: var p }, ..] && p == typeof(CubeClaim)),
+            m => m.ReturnType == typeof(CubeAction));
     }
 }

@@ -255,7 +255,6 @@ public class BgDataTypesJsonContextTests
         AssertContextMatchesReflection(AnalysisMode.BookRollout);
         AssertContextMatchesReflection(AnalysisLevel.Ply3Red);
         AssertContextMatchesReflection(CubeAction.Pass);
-        AssertContextMatchesReflection(CubeClaim.TooGood);
         AssertContextMatchesReflection(CubeOwner.Opponent);
         AssertContextMatchesReflection(DecisionKind.Cube);
         AssertContextMatchesReflection(SessionKind.Money);
@@ -346,14 +345,9 @@ public class BgDataTypesJsonContextTests
         AssertOnlyTheNumericTokenIsRefused<BgDecisionData>(TestRecords.Cube(), "Kind", 1);
         AssertOnlyTheNumericTokenIsRefused(TestRecords.Row(), "Kind", 1);
 
-        // CubeClaim has no embedding document in this library yet (it is a
-        // declared root ahead of its first downstream document — the
-        // halheinrich/backgammon#86 arc's consumer legs), so its strictness
-        // through the context is pinned on the bare token.
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CubeClaim>(
-            "2", ContextOptions));
-
-        // So has Seat, which no record holds: a producer's header may.
+        // Seat has no embedding document in this library (no record holds
+        // one; a producer's header may), so its strictness through the
+        // context is pinned on the bare token.
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Seat>("1", ContextOptions));
         Assert.Equal(Seat.Player2, JsonSerializer.Deserialize<Seat>("\"Player2\"", ContextOptions));
     }
@@ -376,6 +370,20 @@ public class BgDataTypesJsonContextTests
     //  to any document type lands in side A automatically and fails here
     //  until the context resolves it.
     // -----------------------------------------------------------------------
+
+    // The cube answer and the claim it reads as are no wire unit: no
+    // document embeds either (halheinrich/backgammon#326 measured none, and
+    // retired the claim's registration made ahead of one), so neither is a
+    // root and the walk from the roots reaches neither. A document that comes
+    // to hold one fails here, which is the moment to declare it.
+    [Fact]
+    public void Context_HoldsNeitherTheCubeAnswerNorTheClaim()
+    {
+        Assert.DoesNotContain(typeof(CubeAnswer), WireClosure());
+        Assert.DoesNotContain(typeof(CubeClaim), WireClosure());
+        Assert.Null(BgDataTypesJsonContext.Default.GetTypeInfo(typeof(CubeAnswer)));
+        Assert.Null(BgDataTypesJsonContext.Default.GetTypeInfo(typeof(CubeClaim)));
+    }
 
     [Fact]
     public void Context_CoversTheFullWireClosure()
@@ -410,7 +418,7 @@ public class BgDataTypesJsonContextTests
             typeof(Play), typeof(Move), typeof(DecisionId),
             typeof(ProblemKey), typeof(DiceRoll), typeof(BoardPosition),
             typeof(AnalysisMode), typeof(AnalysisLevel), typeof(BookEdition), typeof(PlayRanking), typeof(PlayerResultKind),
-            typeof(CubeAction), typeof(CubeClaim), typeof(CubeOwner)
+            typeof(CubeAction), typeof(CubeOwner)
         ];
 
         var closure = new HashSet<Type>();

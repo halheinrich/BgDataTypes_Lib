@@ -44,9 +44,9 @@ public sealed class MoneyTerms : SessionTerms
     /// voids undoubled gammons outright and shifts the doubling window, so it
     /// can change the correct answer: it takes part in a money decision's
     /// <see cref="ProblemKey"/> (SPEC-stats-identity.md §1, amended
-    /// 2026-08-20; halheinrich/backgammon#120) and decides whether the Too
-    /// Good verdict can occur (<see cref="CubeDecision.CanBeTooGood"/>). Every
-    /// money session states it: there is no unknown rule.
+    /// 2026-08-20; halheinrich/backgammon#120) and, with the cube centred,
+    /// makes gammons not possible (<see cref="CubeDecision.GammonsPossible"/>).
+    /// Every money session states it: there is no unknown rule.
     /// </summary>
     public required bool IsJacoby { get; init; }
 

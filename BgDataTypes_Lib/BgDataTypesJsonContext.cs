@@ -22,10 +22,13 @@ namespace BgDataTypes_Lib;
 /// <see cref="IGameInfo"/>), and the types
 /// that define their own wire token via a bundled converter
 /// (<see cref="Play"/>, <see cref="DecisionId"/>, <see cref="ProblemKey"/>,
-/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and every enum — <see cref="CubeClaim"/>
-/// among them ahead of its first embedding document, so the claim
-/// vocabulary of halheinrich/backgammon#86 is born source-genned and
-/// downstream contexts chain rather than re-cover it). Composite parts
+/// <see cref="DiceRoll"/>, <see cref="BoardPosition"/>, and every enum a
+/// document or a producer's header holds). <see cref="CubeAnswer"/> and
+/// <see cref="CubeClaim"/> are not roots: no document embeds either
+/// (halheinrich/backgammon#326 found none, and retired the claim's
+/// registration ahead of a document that never came). Each still bundles its
+/// strict converter, so the first document to hold one reaches it through
+/// the generator's walk with its token already strict. Composite parts
 /// (<see cref="PositionData"/>, <see cref="CheckerPlayDecisionData"/>,
 /// <see cref="CubeDecisionData"/>, <see cref="DescriptiveData"/>,
 /// <see cref="PlayCandidate"/>) ride the generator's property-graph walk
@@ -223,7 +226,6 @@ namespace BgDataTypes_Lib;
 [JsonSerializable(typeof(AnalysisMode))]
 [JsonSerializable(typeof(AnalysisLevel))]
 [JsonSerializable(typeof(CubeAction))]
-[JsonSerializable(typeof(CubeClaim))]
 [JsonSerializable(typeof(CubeOwner))]
 [JsonSerializable(typeof(DecisionKind))]
 [JsonSerializable(typeof(SessionKind))]

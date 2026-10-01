@@ -92,6 +92,10 @@ public class EnumTokenStrictnessTests
         AssertStringTokenExact(CubeClaim.TooGood);
 
     [Fact]
+    public void CubeAnswer_IsStringTokenExact() =>
+        AssertStringTokenExact(CubeAnswer.NoDoublePass);
+
+    [Fact]
     public void CubeOwner_IsStringTokenExact() =>
         AssertStringTokenExact(CubeOwner.Centered);
 
@@ -107,6 +111,7 @@ public class EnumTokenStrictnessTests
         AssertEveryMemberRoundTrips<AnalysisMode>();
         AssertEveryMemberRoundTrips<BookEdition>();
         AssertEveryMemberRoundTrips<CubeAction>();
+        AssertEveryMemberRoundTrips<CubeAnswer>();
         AssertEveryMemberRoundTrips<CubeClaim>();
         AssertEveryMemberRoundTrips<CubeOwner>();
         AssertEveryMemberRoundTrips<PlayRanking>();
