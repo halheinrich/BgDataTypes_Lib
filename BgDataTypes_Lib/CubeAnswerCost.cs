@@ -22,8 +22,9 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// A cost is not an analysis fact: an answer's doubling part is the doubling
 /// action's error (<see cref="CubeDecisionData.DoublerActionError"/>) except
-/// where §3's conventions charge a misreading that loses no equity, so the
-/// action errors describe the analysis and these describe the answer.
+/// where one of SPEC-scoring §3's two ruled conventions (its "Two
+/// conventions" bullet) charges the answer by rule instead, so the action
+/// errors describe the analysis and these describe the answer.
 /// </para>
 /// </remarks>
 public sealed class CubeAnswerCost : IEquatable<CubeAnswerCost>, IEqualityOperators<CubeAnswerCost, CubeAnswerCost, bool>

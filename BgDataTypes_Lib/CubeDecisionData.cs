@@ -619,8 +619,9 @@ public sealed class CubeDecisionData
     /// action errors are facts of the analysis: what each action loses
     /// against the best of its half. They are not what a cube answer costs,
     /// which is SPEC-scoring §3's (<see cref="CubeDecision.CostOf"/>): a cost
-    /// adds a response the answer commits to, and charges two misreadings
-    /// that lose no equity. Derived on each call and never stored: it is not
+    /// adds a response the answer commits to, and §3's two ruled conventions
+    /// (its "Two conventions" bullet) can make it differ from the action's
+    /// error. Derived on each call and never stored: it is not
     /// on the wire, and the flat row carries none.
     /// </para>
     /// </remarks>

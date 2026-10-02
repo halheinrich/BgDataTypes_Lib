@@ -1284,7 +1284,8 @@ members read them: the diagram's equity and loss table, a stated action's
 `UserDoubleError` and `UserTakeError`, the filter view's player result.
 What a cube answer costs is SPEC-scoring §3's, `CubeDecision.CostOf` (see
 "Cube answers and their costs"): it adds the response an answer commits
-to, and charges two misreadings that lose no equity. So a consumer showing
+to, and §3's two ruled conventions (its "Two conventions" bullet) can make
+an answer's cost differ from its action's error. So a consumer showing
 each action's equity beside its error shows the analysis's own numbers,
 consistent with each other, and the quiz's answer costs are §3's, not
 these. (Until halheinrich/backgammon#326 this section said the action
@@ -3275,8 +3276,9 @@ measure" is not a valid comparison on this hardware.
 - **An action error is not an answer's cost.** `DoublerActionError` and
   `TakerActionError` are the analysis's: what an action loses against the
   best of its half. What an answer costs is `CubeDecision.CostOf`, per
-  SPEC-scoring §3, which adds the response the answer commits to and charges
-  two misreadings that lose no equity. Do not score an answer from the
+  SPEC-scoring §3, which adds the response the answer commits to and whose
+  two ruled conventions (its "Two conventions" bullet) can make an answer's
+  cost differ from its action's error. Do not score an answer from the
   action errors, and do not re-spell its parts: a No double answer's implied
   take is never charged (`CommitsToResponse`), and the conventions apply
   only where gammons are possible.

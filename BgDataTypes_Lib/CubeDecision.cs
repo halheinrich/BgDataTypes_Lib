@@ -154,7 +154,9 @@ public sealed class CubeDecision : BgDecisionData
     /// (SPEC-scoring §3, amended 2026-09-30 and 2026-10-01 on
     /// halheinrich/backgammon#326, whose tables it implements exactly): an
     /// answer costs what it loses in equity, except where gammons are
-    /// possible (<see cref="GammonsPossible"/>) and a misreading loses none.
+    /// possible (<see cref="GammonsPossible"/>) and one of §3's two ruled
+    /// conventions (its "Two conventions" bullet) charges it by rule, so its
+    /// cost can differ from its action's error.
     /// </summary>
     /// <remarks>
     /// <para>
