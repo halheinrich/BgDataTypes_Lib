@@ -145,7 +145,7 @@ public class NoneRecordedTests
     }
 
     [Fact]
-    public void ARowsNoneRecorded_IsNull_AndAnEmptyCsvCell()
+    public void ARowsNoneRecorded_IsNull()
     {
         var record = TestRecords.CheckerPlay(
             descriptive: TestRecords.Descriptive(onRollName: null),
@@ -158,10 +158,5 @@ public class NoneRecordedTests
         Assert.Null(row.Player);
         Assert.Null(row.AnalysisDepth);
         Assert.Null(((IDecisionFilterData)row).Player);
-        // Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,…,Roll,AnalysisDepth,Equity,Ranking
-        var cells = row.ToCsvLine().Split(',');
-        Assert.Equal(string.Empty, cells[4]);
-        Assert.Equal(string.Empty, cells[10]);
-        Assert.DoesNotContain("null", row.ToCsvLine());
     }
 }

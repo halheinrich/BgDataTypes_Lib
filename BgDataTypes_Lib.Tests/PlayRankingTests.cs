@@ -392,7 +392,6 @@ public class PlayRankingTests
         Assert.Equal(depth, row.AnalysisDepth);
         Assert.Equal(equity, row.Equity);
         Assert.Equal(record.AfterBoardOfBest(ranking), row.AfterBestBoard);
-        Assert.EndsWith($",{ranking},Scored", row.ToCsvLine());
     }
 
     [Fact]
@@ -409,8 +408,8 @@ public class PlayRankingTests
         Assert.Equal(PlayerResult.NotRecorded, none.ViewFor(PlayRanking.DepthFirst).PlayerResult);
         Assert.NotEqual(PlayerResult.NotScored, PlayerResult.NotRecorded);
 
-        // The row: an empty Error cell for both, and the Result column that
-        // tells them apart, in JSON and in CSV.
+        // The row: no Error for either, and the Result column that tells
+        // them apart.
         var notScored = DecisionRow.From(played, PlayRanking.DepthFirst);
         var notRecorded = DecisionRow.From(none, PlayRanking.DepthFirst);
         Assert.Null(notScored.Error);
@@ -419,8 +418,6 @@ public class PlayRankingTests
         Assert.Equal(PlayerResultKind.NotRecorded, notRecorded.Result);
         Assert.Equal(PlayerResult.NotScored, notScored.PlayerResult);
         Assert.Equal(PlayerResult.NotRecorded, notRecorded.PlayerResult);
-        Assert.EndsWith(",DepthFirst,NotScored", notScored.ToCsvLine());
-        Assert.EndsWith(",DepthFirst,NotRecorded", notRecorded.ToCsvLine());
     }
 
     [Fact]
@@ -473,12 +470,13 @@ public class PlayRankingTests
         foreach (var property in typeof(IDecisionFilterData).GetProperties().Where(p => p.Name != nameof(IDecisionFilterData.Ranking)))
             Assert.Equal(property.GetValue(byEquity), property.GetValue(depthFirst));
 
-        // Every cell but the Ranking column, the second to last.
-        string[] equityCells = DecisionRow.From(cube, PlayRanking.Equity).ToCsvLine().Split(',');
-        string[] depthFirstCells = DecisionRow.From(cube, PlayRanking.DepthFirst).ToCsvLine().Split(',');
-        Assert.Equal(["Equity", "DepthFirst"], [equityCells[^2], depthFirstCells[^2]]);
-        equityCells[^2] = depthFirstCells[^2] = "";
-        Assert.Equal(equityCells, depthFirstCells);
+        // Every public property of the row but its Ranking; the boards compare
+        // by value.
+        var equityRow = DecisionRow.From(cube, PlayRanking.Equity);
+        var depthFirstRow = DecisionRow.From(cube, PlayRanking.DepthFirst);
+        Assert.Equal([PlayRanking.Equity, PlayRanking.DepthFirst], [equityRow.Ranking, depthFirstRow.Ranking]);
+        foreach (var property in typeof(DecisionRow).GetProperties().Where(p => p.Name != nameof(DecisionRow.Ranking)))
+            Assert.Equal(property.GetValue(equityRow), property.GetValue(depthFirstRow));
     }
 
     // ── Built once per ranking ────────────────────────────────────

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using BgDataTypes_Lib;
@@ -7,7 +6,7 @@ namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
 /// The flat row: built only by projecting a record (<see cref="DecisionRow.From"/>),
-/// round-tripped through JSON, and written to CSV. Rewritten for the records
+/// and round-tripped through JSON. Rewritten for the records
 /// leg of halheinrich/backgammon#273: a row is no longer hand-built, so each
 /// fixture states the record facts its columns come from, through
 /// <see cref="PlayRow"/> and <see cref="CubeRow"/> below.
@@ -400,7 +399,7 @@ public class DecisionRowSerializationTests
     public void DecisionRow_OtherKindsColumns_AreEmpty_EachKind()
     {
         // Added: a cube row's checker-play columns are empty — null, never
-        // zero — in JSON and in CSV; a checker row has no cube-only column.
+        // zero — on the row and in JSON; a checker row has no cube-only column.
         var cube = CubeRow(player: "Mochy");
         var json = JsonSerializer.Serialize(cube, Options);
 
@@ -410,7 +409,6 @@ public class DecisionRowSerializationTests
         Assert.Null(cube.AfterPlayerBoard);
         Assert.Contains("\"Roll\":null", json);
         Assert.Contains("\"AfterBestBoard\":null", json);
-        Assert.Contains(",Cube,,", cube.ToCsvLine());
 
         var play = PlayRow();
         Assert.NotNull(play.Roll);
@@ -517,7 +515,7 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  AnalysisMode / AnalysisLevel — JSON only, excluded from CSV
+    //  AnalysisMode / AnalysisLevel
     // -----------------------------------------------------------------------
 
     [Fact]
@@ -564,17 +562,6 @@ public class DecisionRowSerializationTests
         Assert.Equal(row.AnalysisMode, restored.AnalysisMode);
         Assert.Equal(row.AnalysisLevel, restored.AnalysisLevel);
         Assert.Equal("3-ply", restored.AnalysisDepth);
-    }
-
-    [Fact]
-    public void DecisionRow_AnalysisModeAndLevel_NotInCsvOutput()
-    {
-        var row = PlayRow(analysisMode: AnalysisMode.Evaluation, analysisLevel: AnalysisLevel.Ply3);
-
-        Assert.DoesNotContain("AnalysisMode", DecisionRow.CsvHeader);
-        Assert.DoesNotContain("AnalysisLevel", DecisionRow.CsvHeader);
-        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
-        Assert.Equal(13, row.ToCsvLine().Count(c => c == ','));
     }
 
     [Fact]
@@ -649,19 +636,14 @@ public class DecisionRowSerializationTests
     }
 
     [Fact]
-    public void DecisionRow_MoneyRow_WritesAnEmptyMatchLengthCell()
+    public void DecisionRow_MatchLength_IsNullForMoney_AndTheLengthForAMatch()
     {
-        // Rewritten from DecisionRow_IsMoneyGame_NotInCsvOutput: the column
-        // count is unchanged (14 columns, 13 commas), and a money row's
-        // MatchLength cell is empty — never the 0 it used to write.
-        var row = PlayRow(session: Money(true));
-        string[] cells = row.ToCsvLine().Split(',');
-
-        Assert.DoesNotContain("IsMoneyGame", DecisionRow.CsvHeader);
-        Assert.Equal(14, cells.Length);
-        Assert.Equal("MatchLength", DecisionRow.CsvHeader.Split(',')[3]);
-        Assert.Equal("", cells[3]);
-        Assert.Equal("9", PlayRow(session: Match(9, 3, 5)).ToCsvLine().Split(',')[3]);
+        // Rewritten from DecisionRow_MoneyRow_WritesAnEmptyMatchLengthCell,
+        // which read the fact off the row's CSV cell: a money row's
+        // MatchLength is null — never the 0 it used to stand at — and a match
+        // row's is its length.
+        Assert.Null(PlayRow(session: Money(true)).MatchLength);
+        Assert.Equal(9, PlayRow(session: Match(9, 3, 5)).MatchLength);
     }
 
     [Fact]
@@ -736,121 +718,27 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  CSV
+    //  Ranking and Result
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void DecisionRow_CsvHeader_ContainsExpectedColumns()
+    public void DecisionRow_StatesTheRankingItWasBuiltFor_AndTheResult_EachKind()
     {
-        // Rewritten: the row carries its kind, so the CSV does — a column of
-        // its own beside the roll, never inferred from an empty roll — and
-        // the ranking it was built for, since the error, depth and equity
-        // before it are that ranking's — and last the player's result, which
-        // tells the two empty Error cells apart.
-        Assert.Equal(
-            "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result",
-            DecisionRow.CsvHeader);
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_EndsWithTheRankingsToken_ThenTheResults_EachKind()
-    {
-        // Added: the declared names, as on the wire.
+        // Rewritten from the test that read the ranking's and the result's
+        // tokens off the end of the row's CSV line (halheinrich/backgammon#424):
+        // a row of either kind states the ranking it was built for, and a cube
+        // row is scored under each.
         foreach (var ranking in Enum.GetValues<PlayRanking>())
         {
-            Assert.EndsWith($",{ranking},Scored", PlayRow(ranking: ranking).ToCsvLine());
-            Assert.EndsWith($",{ranking},Scored", CubeRow(ranking: ranking).ToCsvLine());
-            Assert.EndsWith($",{ranking},Unstated", PlayRow(error: 0.1, ranking: ranking).ToCsvLine());
-            Assert.EndsWith($",{ranking},NotRecorded", PlayRow(userPlayIndex: null, ranking: ranking).ToCsvLine());
+            Assert.Equal((ranking, PlayerResultKind.Scored), (PlayRow(ranking: ranking).Ranking, PlayRow(ranking: ranking).Result));
+            Assert.Equal((ranking, PlayerResultKind.Scored), (CubeRow(ranking: ranking).Ranking, CubeRow(ranking: ranking).Result));
+            Assert.Equal((ranking, PlayerResultKind.Unstated), (PlayRow(error: 0.1, ranking: ranking).Ranking, PlayRow(error: 0.1, ranking: ranking).Result));
+            Assert.Equal((ranking, PlayerResultKind.NotRecorded), (PlayRow(userPlayIndex: null, ranking: ranking).Ranking, PlayRow(userPlayIndex: null, ranking: ranking).Result));
         }
-        Assert.EndsWith(",DepthFirst,Scored", PlayRow(ranking: PlayRanking.DepthFirst).ToCsvLine());
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_KindAndRoll_EachKind()
-    {
-        // Added: the kind's token, then the roll — empty for a cube.
-        Assert.Contains(",CheckerPlay,63,", PlayRow(dice: [6, 3]).ToCsvLine());
-        Assert.Contains(",Cube,,", CubeRow().ToCsvLine());
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_EscapesCommas()
-    {
-        var row = PlayRow(session: Match(9, 3, 5), player: "Last, First");
-        var line = row.ToCsvLine();
-        Assert.Contains("\"Last, First\"", line);
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_EscapesQuotes()
-    {
-        var row = PlayRow(player: "say \"hello\"");
-        var line = row.ToCsvLine();
-        Assert.Contains("\"say \"\"hello\"\"\"", line);
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_DoublesFormattedG6()
-    {
-        var row = PlayRow(error: 0.12345678, equity: -0.98765432);
-        var line = row.ToCsvLine();
-        Assert.Contains("0.123457", line);
-        Assert.Contains("-0.987654", line);
-    }
-
-    [Theory]
-    [InlineData("de-DE")]
-    [InlineData("sv-SE")]
-    public void DecisionRow_ToCsvLine_IsCultureInvariant(string cultureName)
-    {
-        // Added: every number in a CSV line is written with the invariant
-        // culture, whatever the ambient one. Pinned under two comma-decimal
-        // cultures — sv-SE also writes its minus sign as U+2212 under ICU — so
-        // a number formatted with the ambient culture would split its cell in
-        // two or change its sign.
-        var row = PlayRow(
-            error: 0.12345678, equity: -0.98765432, dice: [6, 3],
-            session: Match(9, 3, 5));
-        const string expected = "XGID=-b----E-C---eE---c-e----B-:0:0:1:63:6:4:0:9:10,0.123457,3a5a,9,Alice,match.xg,1,1,CheckerPlay,63,3-ply,-0.987654,Equity,Unstated";
-
-        var original = CultureInfo.CurrentCulture;
-        try
-        {
-            var culture = new CultureInfo(cultureName);
-            CultureInfo.CurrentCulture = culture;
-            Assert.Equal(",", culture.NumberFormat.NumberDecimalSeparator);  // the pin is live
-
-            Assert.Equal(expected, row.ToCsvLine());
-        }
-        finally
-        {
-            CultureInfo.CurrentCulture = original;
-        }
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_NoErrorRecorded_IsAnEmptyCell()
-    {
-        // Added: "no user decision recorded" is null, an empty cell — the
-        // 0 the producer used to write in its place was a stand-in.
-        var row = PlayRow(error: null, userPlayIndex: null);
-
-        Assert.Null(row.Error);
-        Assert.StartsWith("XGID=-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10,,", row.ToCsvLine());
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_BoardNotInCsv()
-    {
-        var row = PlayRow(board: new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, 0, 0, 0, 0, -5, 0, -2, 0, 0, 0, 0, 2, 1]));
-        var line = row.ToCsvLine();
-        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
-        Assert.Equal(13, line.Count(c => c == ','));
     }
 
     // -----------------------------------------------------------------------
-    //  SourceFile — field and CSV behaviour
+    //  SourceFile — the Id's filename
     // -----------------------------------------------------------------------
 
     [Fact]
@@ -866,40 +754,6 @@ public class DecisionRowSerializationTests
 
         foreach (var (_, options) in WirePaths.Both)
             Assert.Equal("match.xg", JsonSerializer.Deserialize<DecisionRow>(document.ToJsonString(), options)!.SourceFile);
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_SourceFile_IsTheIdsFilename()
-    {
-        // Rewritten from DecisionRow_ToCsvLine_SourceFile_EmptyCellWhenNull:
-        // every decision has a source file — its Id's — so the cell is never
-        // empty. Header: Xgid,Error,MatchScore,MatchLength,Player,SourceFile,...
-        // (column index 5, between Player and Game).
-        Assert.Contains(",Mochy,match.xg,1,1,", PlayRow(player: "Mochy").ToCsvLine());
-        Assert.Contains(",Mochy,position.xgp,,,",
-            PlayRow(id: new XgpDecisionId("position.xgp"), player: "Mochy").ToCsvLine());
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_SourceFile_PlainFilename()
-    {
-        var line = PlayRow(id: new XgDecisionId("mochy-falafel.xg", 1, 1, IsCube: false)).ToCsvLine();
-        Assert.Contains(",mochy-falafel.xg,", line);
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_SourceFile_FilenameWithSpaces_Unquoted()
-    {
-        var line = PlayRow(id: new XgpDecisionId("Mochy vs Falafel.xgp")).ToCsvLine();
-        // RFC 4180 does not require quoting on spaces; value passes through literally.
-        Assert.Contains(",Mochy vs Falafel.xgp,", line);
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_SourceFile_FilenameWithComma_Quoted()
-    {
-        var line = PlayRow(id: new XgDecisionId("file,with,commas.xg", 1, 1, IsCube: false)).ToCsvLine();
-        Assert.Contains("\"file,with,commas.xg\"", line);
     }
 
     [Fact]
@@ -1065,16 +919,6 @@ public class DecisionRowSerializationTests
     }
 
     [Fact]
-    public void DecisionRow_Dice_NotInCsvOutput()
-    {
-        var row = PlayRow(dice: [6, 3]);
-
-        Assert.DoesNotContain("Dice", DecisionRow.CsvHeader);
-        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
-        Assert.Equal(13, row.ToCsvLine().Count(c => c == ','));
-    }
-
-    [Fact]
     public void DecisionRow_IDecisionFilterData_Dice()
     {
         IDecisionFilterData play = PlayRow(dice: [5, 2]);
@@ -1085,7 +929,7 @@ public class DecisionRowSerializationTests
     }
 
     // -----------------------------------------------------------------------
-    //  After-boards — the record's derivation, JSON only, excluded from CSV
+    //  After-boards — the record's derivation
     // -----------------------------------------------------------------------
 
     [Fact]
@@ -1119,21 +963,6 @@ public class DecisionRowSerializationTests
                 Assert.Equal(record.AfterPlayerBoard, restored.AfterPlayerBoard);
             }
         }
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_AfterBoardsNotInCsv()
-    {
-        var line = PlayRow().ToCsvLine();
-        // Rewritten: 14 columns with the Kind, Ranking and Result columns → 13 commas.
-        Assert.Equal(13, line.Count(c => c == ','));
-    }
-
-    [Fact]
-    public void DecisionRow_CsvHeader_DoesNotMentionAfterBoards()
-    {
-        Assert.DoesNotContain("AfterBestBoard", DecisionRow.CsvHeader);
-        Assert.DoesNotContain("AfterPlayerBoard", DecisionRow.CsvHeader);
     }
 
     [Fact]
@@ -1216,28 +1045,6 @@ public class DecisionRowSerializationTests
     }
 
     [Fact]
-    public void DecisionRow_ToCsvLine_MoveNumberInColumnOrder()
-    {
-        var row = PlayRow(
-            id: new XgDecisionId("m.xg", Game: 2, MoveNumber: 17, IsCube: false),
-            player: "Mochy",
-            dice: [6, 3]);
-        var line = row.ToCsvLine();
-        // CSV header is: ...Player,SourceFile,Game,MoveNumber,Kind,Roll,...
-        // Rewritten: the source file is the Id's, never an empty cell.
-        Assert.Contains(",Mochy,m.xg,2,17,CheckerPlay,63,", line);
-    }
-
-    [Fact]
-    public void DecisionRow_ToCsvLine_StandalonePosition_GameAndMoveNumberAreEmptyCells()
-    {
-        var row = PlayRow(id: new XgpDecisionId("position.xgp"), player: "Mochy", dice: [6, 3]);
-
-        // Neither a 1 nor a 0: no game applies (halheinrich/backgammon#124).
-        Assert.Contains(",Mochy,position.xgp,,,CheckerPlay,63,", row.ToCsvLine());
-    }
-
-    [Fact]
     public void DecisionRow_IDecisionFilterData_MoveNumberAndIsStandardStart()
     {
         IDecisionFilterData row = PlayRow(
@@ -1289,17 +1096,8 @@ public class DecisionRowSerializationTests
         Assert.Contains("\"Id\":\"match.xg:g2:m17:play\"", json);
     }
 
-    [Fact]
-    public void DecisionRow_Id_NotInCsvOutput()
-    {
-        var row = CubeRow(id: new XgDecisionId("match.xg", 2, 17, IsCube: true), player: "Mochy");
-
-        Assert.DoesNotContain("Id", DecisionRow.CsvHeader);
-        Assert.DoesNotContain("match.xg:g2:m17:cube", row.ToCsvLine());
-    }
-
     // -----------------------------------------------------------------------
-    //  IsJacoby — a money row's column, CSV via MatchScore
+    //  IsJacoby — a money row's column, spelled in MatchScore
     // -----------------------------------------------------------------------
 
     [Fact]
@@ -1364,23 +1162,5 @@ public class DecisionRowSerializationTests
 
         Assert.IsType<MatchSession>(data.Session);
         Assert.Null(((DecisionRow)data).IsJacoby);
-    }
-
-    [Theory]
-    [InlineData(true, "moneyJ")]
-    [InlineData(false, "moneyNJ")]
-    public void DecisionRow_ToCsvLine_IsJacoby_RidesTheMatchScoreColumn(bool isJacoby, string expectedToken)
-    {
-        // Rewritten: the rule-unknown "money" case is gone.
-        var row = PlayRow(session: Money(isJacoby));
-        var line = row.ToCsvLine();
-
-        // Header: Xgid,Error,MatchScore,MatchLength,... — MatchScore is column
-        // index 2 (0-based). No column is added for it; the token carries the
-        // fact.
-        Assert.Equal(expectedToken, line.Split(',')[2]);
-        Assert.DoesNotContain("IsJacoby", DecisionRow.CsvHeader);
-        Assert.Equal(13, line.Count(c => c == ','));
-        Assert.DoesNotContain("null", line);
     }
 }

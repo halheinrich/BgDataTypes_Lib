@@ -5,8 +5,14 @@ using System.Text.Json.Serialization;
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// A single analysed decision as one flat row, for CSV and JSON export: one
-/// row per decision, one column per field, of either kind.
+/// A single analysed decision as one flat row: one row per decision, one
+/// column per fact, of either kind, with its JSON wire form.
+///
+/// <para>
+/// <b>It carries no file format.</b> Since 2026-10-20 the CSV layout is
+/// Extract's own (<c>CsvLayout</c>), so one app's columns can no longer reach
+/// another's file through this shared row (halheinrich/backgammon#424).
+/// </para>
 ///
 /// <para>
 /// <b>A projection of the record, built one way.</b> A row is made by
@@ -30,8 +36,8 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// <b>It carries the kind</b> (<see cref="Kind"/>), and the other kind's
 /// columns are empty, never zero (halheinrich/backgammon#273): a cube row's
-/// <see cref="Roll"/> and after-boards are <see langword="null"/> — empty
-/// cells in CSV. A standalone position's <see cref="Game"/>,
+/// <see cref="Roll"/> and after-boards are <see langword="null"/>. A
+/// standalone position's <see cref="Game"/>,
 /// <see cref="MoveNumber"/> and <see cref="IsStandardStart"/> are
 /// <see langword="null"/> likewise (halheinrich/backgammon#124).
 /// </para>
@@ -147,8 +153,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <summary>
     /// Stable, persistent identifier for this decision within its source file
     /// (<see cref="BgDecisionData.Id"/>). Serialized to JSON via
-    /// <see cref="DecisionIdJsonConverter"/>; excluded from CSV (the column set
-    /// is explicit). The one stored place of <see cref="Game"/>,
+    /// <see cref="DecisionIdJsonConverter"/>. The one stored place of <see cref="Game"/>,
     /// <see cref="MoveNumber"/> and <see cref="SourceFile"/>.
     /// </summary>
     public required DecisionId Id { get; init; }
@@ -168,7 +173,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <see cref="AnalysisMode"/>, <see cref="AnalysisLevel"/> and
     /// <see cref="AfterBestBoard"/> are that ranking's. A cube row's columns
     /// do not depend on it; it still states the ranking it was exported
-    /// under. A CSV column, before <see cref="Result"/>.
+    /// under.
     /// </summary>
     public required PlayRanking Ranking { get; init; }
 
@@ -177,7 +182,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <see cref="Result"/> is <see cref="PlayerResultKind.Scored"/> (never
     /// negative) or <see cref="PlayerResultKind.Unstated"/> — the record's
     /// <see cref="IDecisionFilterData.PlayerResult"/>'s error. Otherwise
-    /// <see langword="null"/>, an empty CSV cell, never 0: which of the two
+    /// <see langword="null"/>, never 0: which of the two
     /// errorless cases it is, <see cref="Result"/> says.
     /// </summary>
     public double? Error { get; init; }
@@ -187,14 +192,14 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// (<see cref="PlayerResultKind"/>): the column that tells a move the
     /// ranking does not score from a decision with no move recorded, which
     /// both leave <see cref="Error"/> empty. A cube row's is never
-    /// <see cref="PlayerResultKind.NotScored"/>. The last CSV column.
+    /// <see cref="PlayerResultKind.NotScored"/>.
     /// </summary>
     public required PlayerResultKind Result { get; init; }
 
     /// <summary>
     /// Name of the player who made the decision
     /// (<see cref="IDecisionFilterData.Player"/>); <see langword="null"/> when
-    /// the source recorded no name — an empty CSV cell — never empty text.
+    /// the source recorded no name, never empty text.
     /// </summary>
     public string? Player { get; init; }
 
@@ -203,7 +208,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// directory: the <see cref="Id"/>'s <see cref="DecisionId.Filename"/>,
     /// as <see cref="BgDecisionData.SourceFile"/> is. Derived, so excluded
     /// from JSON (<see cref="Id"/> is the wire form, and a document still
-    /// stating the retired column reads with it ignored); a CSV column.
+    /// stating the retired column reads with it ignored).
     /// </summary>
     [JsonIgnore]
     public string SourceFile => Id.Filename;
@@ -211,8 +216,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <summary>
     /// The 1-based number of the game this decision was played in, within
     /// its source file; <see langword="null"/> for a decision in a standalone
-    /// position, which belongs to no game (halheinrich/backgammon#124) — an
-    /// empty CSV cell, never a stamped 1. Derived from <see cref="Id"/>, as
+    /// position, which belongs to no game (halheinrich/backgammon#124), never
+    /// a stamped 1. Derived from <see cref="Id"/>, as
     /// <see cref="BgDecisionData.Game"/> is, so excluded from JSON;
     /// <see cref="Id"/> is the wire form.
     /// </summary>
@@ -236,8 +241,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     /// <summary>
     /// A checker play's dice as rolled, as a two-digit integer in rolled order
-    /// (e.g. 63, 11); <see langword="null"/> for a cube decision — an empty CSV
-    /// cell, never 0. <see cref="Dice"/> is its canonical form.
+    /// (e.g. 63, 11); <see langword="null"/> for a cube decision, never 0. <see cref="Dice"/> is its canonical form.
     /// </summary>
     public int? Roll { get; init; }
 
@@ -246,8 +250,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// (<see cref="IDecisionFilterData.Dice"/>): <see langword="null"/> for a
     /// cube decision, otherwise the roll's two digits canonicalized by
     /// <see cref="DiceRoll"/> ("13" and "31" both yield high 3, low 1).
-    /// Derived, so excluded from JSON; <see cref="Roll"/> remains the CSV and
-    /// JSON wire form.
+    /// Derived, so excluded from JSON; <see cref="Roll"/> remains the wire
+    /// form.
     /// </summary>
     [JsonIgnore]
     public DiceRoll? Dice => Roll is int roll ? new DiceRoll(roll / 10, roll % 10) : null;
@@ -258,7 +262,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <see cref="Ranking"/> (<see cref="PlayCandidate.Depth"/>), a cube
     /// decision's cube analysis's
     /// (<see cref="CubeDecisionData.Depth"/>). <see langword="null"/> when
-    /// the producer recorded no label — an empty CSV cell — never empty text.
+    /// the producer recorded no label, never empty text.
     /// </summary>
     public string? AnalysisDepth { get; init; }
 
@@ -268,16 +272,14 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// <see cref="AnalysisLevel"/> it is the taxonomy form of
     /// <see cref="AnalysisDepth"/>, used for depth filtering.
     /// <see cref="BgDataTypes_Lib.AnalysisMode.Unknown"/> when the producer
-    /// did not record it. Serializes to JSON; excluded from CSV output
-    /// (<see cref="AnalysisDepth"/> remains the CSV depth column).</summary>
+    /// did not record it. Serializes to JSON.</summary>
     public required AnalysisMode AnalysisMode { get; init; }
 
     /// <summary>Evaluation level of the analysis behind this decision — the
     /// level axis paired with <see cref="AnalysisMode"/>
     /// (<see cref="IDecisionFilterData.AnalysisLevel"/>).
     /// <see cref="BgDataTypes_Lib.AnalysisLevel.Unknown"/> when the producer
-    /// did not record it. Serializes to JSON; excluded from CSV
-    /// output.</summary>
+    /// did not record it. Serializes to JSON.</summary>
     public required AnalysisLevel AnalysisLevel { get; init; }
 
     /// <summary>
@@ -298,7 +300,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// </summary>
     public required SessionKind SessionKind { get; init; }
 
-    /// <summary>A match's length (<see cref="MatchTerms.Length"/>); <see langword="null"/> for a money row — an empty CSV cell, never 0.</summary>
+    /// <summary>A match's length (<see cref="MatchTerms.Length"/>); <see langword="null"/> for a money row, never 0.</summary>
     public int? MatchLength { get; init; }
 
     /// <summary>What the player on roll still needs in a match (<see cref="MatchSession.OnRollNeeds"/>); <see langword="null"/> for a money row, never 0.</summary>
@@ -347,8 +349,8 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     public Session Session => _session!;
 
     /// <summary>
-    /// The match score as one token, for CSV output only, spelled from
-    /// <see cref="Session"/>: a match's away scores, <c>3a5a</c>, with a
+    /// The session as one token, spelled from <see cref="Session"/>, which
+    /// the filter grammar and Extract's exports consume: a match's away scores, <c>3a5a</c>, with a
     /// <c>C</c> suffix in the Crawford game (<c>1a4aC</c>); money as
     /// <c>moneyJ</c> or <c>moneyNJ</c> by its Jacoby rule — the same
     /// in-grammar suffix shape. Every money session states its rule, so the
@@ -356,8 +358,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// (halheinrich/backgammon#273).
     /// <para>
     /// A token, so culture-invariant: the away scores are written with the
-    /// invariant culture whatever the ambient one, as every number in
-    /// <see cref="ToCsvLine"/> is.
+    /// invariant culture whatever the ambient one.
     /// </para>
     /// </summary>
     [JsonIgnore]
@@ -373,7 +374,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// the points, 25 the on-roll player's bar; positive counts are the
     /// on-roll player's checkers, negative the opponent's (the
     /// <see cref="BoardPosition"/> layout, as <see cref="PositionData.Mop"/>).
-    /// Not included in CSV output. It holds a checker of each side, as a
+    /// It holds a checker of each side, as a
     /// decision position's board does (<see cref="PositionData.Mop"/>); a row
     /// read back is refused otherwise.
     /// </summary>
@@ -384,7 +385,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// in the next mover's frame — the record's
     /// <see cref="CheckerPlayDecision.AfterBoardOfBest"/>, taken from it when the
     /// row is built. Always present on a checker-play row;
-    /// <see langword="null"/> on a cube row. Not included in CSV output.
+    /// <see langword="null"/> on a cube row.
     /// </summary>
     public BoardPosition? AfterBestBoard { get; init; }
 
@@ -392,7 +393,7 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// The board the user's checker play leaves, in the same frame — the
     /// record's <see cref="CheckerPlayDecision.AfterPlayerBoard"/>.
     /// <see langword="null"/> when the user's play is not among the
-    /// candidates, and on a cube row. Not included in CSV output.
+    /// candidates, and on a cube row.
     /// </summary>
     public BoardPosition? AfterPlayerBoard { get; init; }
 
@@ -519,50 +520,4 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     private static bool IsTwoFaces(int roll) =>
         roll / 10 is >= 1 and <= 6 && roll % 10 is >= 1 and <= 6;
-
-    // -----------------------------------------------------------------------
-    //  CSV support
-    // -----------------------------------------------------------------------
-
-    /// <summary>CSV header row matching the column order of <see cref="ToCsvLine"/>.</summary>
-    public static string CsvHeader =>
-        "Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result";
-
-    /// <summary>
-    /// Formats this row as a CSV line (no trailing newline). A
-    /// <see langword="null"/> column — the other kind's, or a fact that does
-    /// not apply — is an empty cell. Every number is written with the
-    /// invariant culture, whatever the ambient one: a decimal comma would
-    /// split a cell in two, and the file must read the same wherever it was
-    /// written.
-    /// </summary>
-    public string ToCsvLine()
-    {
-        var invariant = CultureInfo.InvariantCulture;
-        return string.Join(",",
-            CsvEscape(Xgid),
-            Error?.ToString("G6", invariant),
-            CsvEscape(MatchScore),
-            MatchLength?.ToString(invariant),
-            CsvEscape(Player),
-            CsvEscape(SourceFile),
-            Game?.ToString(invariant),
-            MoveNumber?.ToString(invariant),
-            Kind,
-            Roll?.ToString(invariant),
-            CsvEscape(AnalysisDepth),
-            Equity.ToString("G6", invariant),
-            Ranking,
-            Result);
-    }
-
-    /// <summary><paramref name="value"/> as a CSV cell; <see langword="null"/> (none recorded) is an empty one.</summary>
-    private static string CsvEscape(string? value)
-    {
-        if (value is null)
-            return string.Empty;
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        return value;
-    }
 }
