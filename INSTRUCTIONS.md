@@ -136,8 +136,9 @@ against the incremental `Add` spelling. See Benchmarks below.
 
 **`BgDataTypes_Lib.TestSupport/`** — what consumers' tests share, shipped
 for test projects to reference, this repository's and every consumer's:
-`TestRecords`, the record builders, and `AllocationProbe`, the allocation
-pins' one measurement. Not a product and not a test project; see "The
+`TestRecords`, the record builders; `AllocationProbe`, the allocation
+pins' one measurement; and the test loggers, `RecordingLogger<T>` (with its
+`LogEntry`) and `ThrowingLogger<T>`. Not a product and not a test project; see "The
 test-support project" under Architecture.
 
 **`BgDataTypes_Lib.Tests/`** — xUnit, one test class per type or per
@@ -2188,18 +2189,31 @@ otherwise each restate. The second thing so shared is `AllocationProbe`,
 the allocation pins' measurement (halheinrich/backgammon#273): a consumer
 copied it and the copy drifted within a leg (it dropped the early exit), so
 the one statement lives here, public, and consumers' tests reference it
-rather than copy it. It depends on the runtime alone, so the posture below
-holds unchanged; its behaviour is pinned by `AllocationProbeTests` in this
-suite, and that the suite keeps no copy by `TestSupportPostureTests`.
+rather than copy it. It depends on the runtime alone; its behaviour is
+pinned by `AllocationProbeTests` in this suite, and that the suite keeps no
+copy by `TestSupportPostureTests`.
+
+The third is the test loggers (halheinrich/backgammon#424). Three test
+projects each stated the same logger — a recording one, and one whose every
+entry throws, as a failing logging provider does — and two more suites were
+about to. `RecordingLogger<T>` keeps every entry in order as a
+`LogEntry(Level, Message, Exception)`, the message fully formatted, with
+every level enabled and a scope that does nothing; `ThrowingLogger<T>`
+throws `InvalidOperationException` with `Failure` on every entry and counts
+`Attempts`, for the pins that logging what happened stops nothing. They are
+pinned by `TestLoggersTests`. They are the reason for the one package below.
 
 **Posture** — the BgUiPrimitives_Razor test-support project is the
-precedent, and all three of its properties are mirrored:
+precedent, and all three of its properties are mirrored, the second revised
+for the loggers:
 
 - **Not packable.** Consumers reach it by `ProjectReference` from their test
   projects.
-- **References only the library** — no other project and no package; in
-  particular no test framework, so a consumer's test project keeps its own.
-  The library grants it no internals (`InternalsVisibleTo` names this suite
+- **References the library and one package** — no other project, and no
+  package but `Microsoft.Extensions.Logging.Abstractions`, which the test
+  loggers implement and every member already uses; in particular no test
+  framework, so a consumer's test project keeps its own. The library itself
+  takes no package. The library grants it no internals (`InternalsVisibleTo` names this suite
   only), so a builder can build nothing a producer cannot.
 - **Production code cannot use it.** The assembly declares
   `[UnsupportedOSPlatform("browser")]`: every project that can reach a

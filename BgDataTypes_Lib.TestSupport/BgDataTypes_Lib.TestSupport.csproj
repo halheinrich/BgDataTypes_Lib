@@ -8,8 +8,10 @@
        reference — this repository's and every consumer's. The record builders
        (TestRecords), so a test builds a well-formed decision record by stating
        only what it cares about and no test anywhere restates the records'
-       construction; and the allocation probe (AllocationProbe), so every
-       repository's allocation pins measure one way. It is not a product
+       construction; the allocation probe (AllocationProbe), so every
+       repository's allocation pins measure one way; and the test loggers
+       (RecordingLogger, ThrowingLogger), so no test project states its own.
+       It is not a product
        assembly and not a test project: it carries no test SDK, so
        `dotnet test` does not try to run it. The BgUiPrimitives_Razor
        test-support project is the precedent it mirrors (INSTRUCTIONS.md,
@@ -32,12 +34,16 @@
     </AssemblyAttribute>
   </ItemGroup>
 
-  <!-- The library, and nothing else: no test framework, so a consumer's test
-       project keeps its own; no package at all. The builders use the
-       library's public surface only — the library grants this assembly no
-       internals, so a builder can do nothing a producer cannot. -->
+  <!-- The library, and one package: no test framework, so a consumer's test
+       project keeps its own. The package is the logging abstractions — the
+       test loggers (RecordingLogger, ThrowingLogger) implement ILogger<T>,
+       and every member already uses those abstractions; the library itself
+       takes no package. The builders use the library's public surface only —
+       the library grants this assembly no internals, so a builder can do
+       nothing a producer cannot. -->
   <ItemGroup>
     <ProjectReference Include="..\BgDataTypes_Lib\BgDataTypes_Lib.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
 </Project>

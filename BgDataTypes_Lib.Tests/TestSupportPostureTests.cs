@@ -8,8 +8,8 @@ namespace BgDataTypes_Lib.Tests;
 /// <summary>
 /// The declarations that keep the test-support assembly out of products, and
 /// the direction of the dependency between it and the library. What it ships
-/// — the record builders and the allocation probe, what consumers' tests
-/// share — is for tests, this repository's and every consumer's, and must
+/// — the record builders, the allocation probe and the test loggers, what
+/// consumers' tests share — is for tests, this repository's and every consumer's, and must
 /// never reach a product; what stops that from this repository's side is one
 /// assembly-level declaration, and these pin that nobody quietly removes it.
 /// The BgUiPrimitives_Razor test-support project is the precedent.
@@ -72,10 +72,13 @@ public class TestSupportPostureTests
         Assert.DoesNotContain(TestSupport.GetName().Name, friends);
     }
 
-    // The test-support project references the library and nothing else: no
-    // other project, and no package at all.
+    // The test-support project references the library and one package: no
+    // other project, and no package but the logging abstractions, which the
+    // test loggers implement (halheinrich/backgammon#424) and every member
+    // already uses. No test framework rides along; the library itself takes no
+    // package, which this project's package reference does not change.
     [Fact]
-    public void TheTestSupportProject_ReferencesOnlyTheLibrary()
+    public void TheTestSupportProject_ReferencesOnlyTheLibraryAndTheLoggingAbstractions()
     {
         var project = StagedProject("BgDataTypes_Lib.TestSupport.csproj");
 
@@ -83,7 +86,11 @@ public class TestSupportPostureTests
         Assert.Equal(
             @"..\BgDataTypes_Lib\BgDataTypes_Lib.csproj",
             reference.Attribute("Include")?.Value);
-        Assert.Empty(project.Descendants("PackageReference"));
+
+        var package = Assert.Single(project.Descendants("PackageReference"));
+        Assert.Equal(
+            "Microsoft.Extensions.Logging.Abstractions",
+            package.Attribute("Include")?.Value);
     }
 
     // Consumers reach it by project reference from their test projects; it is
