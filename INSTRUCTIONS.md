@@ -66,8 +66,8 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `PlayRanking`, and `RankedPlays` of `RankedPlay`, what a checker play
   derives for one — the player's result, `PlayerResult` and
   `PlayerResultKind`, and the internal `DecisionView`, a record's filter
-  view for one ranking. `DecisionRow` is the flat projection for CSV/JSON
-  export.
+  view for one ranking. `DecisionRow` is the record's flat projection, one
+  row per decision, with its JSON wire form.
 - **Identity** — two distinct keys, deliberately not one. `DecisionId`
   (with `DecisionIdJsonConverter`) is the file-navigation identity: *where
   did this record come from*. `ProblemKey` (with `ProblemKeyJsonConverter`)
@@ -1076,7 +1076,7 @@ records store no copy: `BgDecisionData.Game` / `MoveNumber` and
 internal `DecisionId.GameInFile` / `MoveInGame` — the `XgDecisionId`'s
 numbers, or `null` for an `XgpDecisionId`. A number therefore cannot
 disagree with the identifier, and a standalone position has nowhere to
-carry one. The row's CSV writes an empty cell for each.
+carry one.
 
 **The identifier binds the record two ways more** (`DecisionRules`, see
 "The decision kinds"): an `XgDecisionId` names its kind in its canonical
@@ -1945,8 +1945,8 @@ XG's own after-positions.
 
 ### DecisionRow
 
-Flat CSV/JSON export: one row per decision of either kind, one column per
-field. **A projection of the record, built one way**: `DecisionRow.From`
+One flat row per decision of either kind, one column per fact, with its
+JSON wire form; it carries no file format. **A projection of the record, built one way**: `DecisionRow.From`
 takes every column from a `BgDecisionData` — the shared ones through its
 `IDecisionFilterData` view for the row's ranking, the kind's own from the
 kind — and the constructor is internal, so outside this library a row
@@ -1956,15 +1956,14 @@ best after-board under that ranking (see "The ranking") and stores it as
 the required `Ranking` column; a cube row's columns do not depend on it. The after-board columns are the record's derivation, never
 computed a second way, and a row and its record cannot disagree on
 anything they share (the converter's row/record agreement test becomes
-structural). Carries its own CSV methods (`ToCsvLine`, `CsvHeader`, private
-`CsvEscape`).
+structural).
 
 **It carries the kind** (`Kind`, a required column, written first), and the
 other kind's columns are empty, never zero: a cube row's `Roll` and
-after-boards are `null` — empty CSV cells. The player's result is two
+after-boards are `null`. The player's result is two
 columns: `Result`, required, its case (`PlayerResultKind`), and `Error`,
 stated exactly when the case is `Scored` or `Unstated` — otherwise `null`,
-an empty CSV cell, never the 0.0 the producer wrote as a stand-in; which of
+never the 0.0 the producer wrote as a stand-in; which of
 the errorless cases it is, `Result` says. `PlayerResult` is the two typed,
 `[JsonIgnore]`d, as `Dice` is `Roll`'s. Read back, a row is held to their
 agreement: the error stated exactly for `Scored` and `Unstated`, a scored
@@ -1984,8 +1983,8 @@ like `MatchScore`.
 a match's `MatchLength`, `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, a
 money session's `IsJacoby`, `IsBeaver`, `CubeLimit`, `OnRollScore`,
 `OpponentScore` — each nullable, and the other kind's empty,
-never zero: a money row's `MatchLength` is an empty CSV cell, not the 0 it
-used to write. `Session` is the columns typed as the record's kind,
+never zero: a money row's `MatchLength` is `null`, not the 0 it used to
+be. `Session` is the columns typed as the record's kind,
 `[JsonIgnore]`d: a row from `From` holds the record's own session, and a
 row read from JSON the session its columns state.
 
@@ -2005,28 +2004,16 @@ complete row. The retired row shape (no kind, a 0 roll as the cube) is
 refused whole.
 
 `Board` is a required `BoardPosition` in the frame of `PositionData.Mop`.
-The three boards and `AnalysisMode` / `AnalysisLevel` serialize to JSON but
-are **excluded from CSV**; `AnalysisDepth` remains the CSV depth column.
-The CSV header is
-`Xgid,Error,MatchScore,MatchLength,Player,SourceFile,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result`:
-the `Kind` column is new with the kinds, beside the roll it governs; the
-`Ranking` column (its token, `Equity` or `DepthFirst`) is new with the
-ranking; the `Result` column (`NotRecorded`, `NotScored`, `Scored`,
-`Unstated`) is new with the player's result, last — appended, so no
-earlier column moves. The session kinds changed no column: `MatchScore`
-spells the session, and a money row's `MatchLength` cell is empty.
+The three boards and `AnalysisMode` / `AnalysisLevel` serialize to JSON,
+beside `AnalysisDepth`, the depth's label.
 
-**Culture-invariant.** `ToCsvLine` writes every number with the invariant
-culture, whatever the ambient one — `Error` and `Equity` as `G6` with a
-decimal point and an ASCII minus, the integers as plain digits — and
-`MatchScore` spells its away scores the same way. A comma-decimal culture
-would otherwise split a cell in two. Pinned under `de-DE` and `sv-SE`
-(`DecisionRow_ToCsvLine_IsCultureInvariant`).
+`MatchScore` is the session as one token, which the filter grammar and
+Extract's exports consume; it spells its away scores with the invariant
+culture, whatever the ambient one.
 
-`IsJacoby` is the money session's rule, carried as a column because the
-CSV shape spells it (`halheinrich/backgammon#121`). It reaches CSV the way
-`IsCrawford` does: through the computed `MatchScore` token, as an in-grammar
-suffix on the money score. A money row is `moneyJ` or `moneyNJ`; the bare
+`IsJacoby` is the money session's rule, carried as a column
+(`halheinrich/backgammon#121`). It reaches `MatchScore` the way
+`IsCrawford` does: as an in-grammar suffix on the money score. A money row is `moneyJ` or `moneyNJ`; the bare
 `money` a row whose rule was unknown once wrote is gone, since every money
 session states its rule. No column is added for it. Like `IsCrawford`, it
 also serializes to JSON.
@@ -2547,9 +2534,9 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
 
     public required DecisionKind Kind { get; init; }          // written first
     public required DecisionId Id { get; init; }
-    public required PlayRanking Ranking { get; init; }        // the ranking the row was built for; a CSV column
+    public required PlayRanking Ranking { get; init; }        // the ranking the row was built for
     public double? Error { get; init; }                       // the result's error; stated exactly for Scored and Unstated
-    public required PlayerResultKind Result { get; init; }    // the result's case; the last CSV column
+    public required PlayerResultKind Result { get; init; }    // the result's case
     [JsonIgnore] public PlayerResult PlayerResult { get; }    // Result with Error, typed
     public bool? IsStandardStart { get; init; }               // null for a standalone position
     public int? Roll { get; init; }                           // rolled dice, e.g. 13; null for a cube
@@ -2569,18 +2556,14 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     // Other flat columns required — see DecisionRow.cs.
     [JsonIgnore] public Session Session { get; }              // the session columns, typed as the record's kind
     [JsonIgnore] public int? Game { get; }                    // from Id, as MoveNumber
-    [JsonIgnore] public string SourceFile { get; }            // Id.Filename; a CSV column
+    [JsonIgnore] public string SourceFile { get; }            // Id.Filename
     [JsonIgnore] public DiceRoll? Dice { get; }               // canonical Roll
     [JsonIgnore] public string MatchScore { get; }            // spelled from Session: "3a5a", "1a4aC", "moneyJ", "moneyNJ"
-    public static string CsvHeader { get; }                   // …,Game,MoveNumber,Kind,Roll,AnalysisDepth,Equity,Ranking,Result
-    public string ToCsvLine();                                // null → empty cell; numbers invariant-culture
     // Read from JSON, a row is checked whole (OnDeserialized): the kind's
     // columns present and the other's empty, the roll two faces, a board with
     // a checker of each side, the session kind's columns stated and the
     // other's empty, the session's rules, and DecisionRules; a breach is a
-    // JsonException. The three boards and
-    // AnalysisMode / AnalysisLevel serialize to JSON but not to CSV; Id is
-    // JSON-only too.
+    // JsonException.
 }
 
 public class PositionData    { /* required init-only properties per the categories table; Mop is a BoardPosition with a checker of each side; Session a MoneySession or MatchSession */
@@ -3108,10 +3091,10 @@ measure" is not a valid comparison on this hardware.
 - **`DecisionRow.MatchScore` is computed, not stored.** It is spelled from
   the row's `Session` — the session columns typed — on every access. Do not
   try to set it.
-- **CSV methods live on `DecisionRow`.** This is a deliberate, accepted
-  deviation from the "pure data, no behavior" principle — the CSV format
-  is tightly coupled to the column order and travels with the type. Do
-  not move it into a separate formatter class without a strong reason.
+- **`DecisionRow` carries no file format.** Extract owns its CSV
+  (`CsvLayout`) since 2026-10-20 (halheinrich/backgammon#424): while the
+  layout lived on the shared row, one app's columns reached the other's
+  file. Do not put a file layout back on the row; its writer owns it.
 - **Mop sign convention is player-relative, not color-relative.** Positive
   always means the on-roll player, regardless of which physical color they
   are playing. Code that forgets this will silently mirror boards.
