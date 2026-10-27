@@ -19,7 +19,9 @@ namespace BgDataTypes_Lib.Tests;
 /// exactly as its explicit <c>null</c> does, on both — as <see langword="null"/>,
 /// or refused when <c>null</c> would break a rule of the decision's kind (a
 /// checker row without its roll). And every member is exactly one of the two,
-/// so none can arrive silently as a default. An explicit <c>null</c> for a
+/// so none can arrive silently as a default — but the rule's one named
+/// exception, the row's <see cref="DecisionRow.TakerResultKind"/>, which is
+/// both: it must be stated, and may be <c>null</c>. An explicit <c>null</c> for a
 /// member that is not nullable is a <see cref="JsonException"/> too, on both
 /// paths, whatever the caller's options say about nullable annotations. The
 /// rules are stated on <see cref="BgDataTypesJsonContext"/>.
@@ -157,17 +159,44 @@ public class WireAbsenceTests
         Assert.Equal(expected.OrderBy(t => t.Name), owners.OrderBy(t => t.Name));
     }
 
+    /// <summary>
+    /// The one member that is both required and nullable, as the rule on
+    /// <see cref="BgDataTypesJsonContext"/> names it: a row states its
+    /// taker's result, which is <see langword="null"/> where no double was
+    /// offered (halheinrich/backgammon#440).
+    /// </summary>
+    private static readonly (Type Owner, string Name) RequiredAndNullable =
+        (typeof(DecisionRow), nameof(DecisionRow.TakerResultKind));
+
+    private static bool IsTheException(Member member) =>
+        (member.Owner, member.Info.Name) == RequiredAndNullable;
+
     [Theory]
     [MemberData(nameof(Members))]
     public void EveryMember_IsRequiredOrNullable_NeverBoth(Member member)
     {
         // The rule's third bullet: no member arrives silently as a default,
-        // because none is neither.
+        // because none is neither. Rewritten for the rule's one exception: it
+        // is both, and no other member may be.
         bool required = member.Info.IsRequired;
         bool nullable = IsNullable(member.Info);
 
-        Assert.True(required != nullable,
-            $"{member} is {(required ? "required and nullable" : "neither required nor nullable")}");
+        if (IsTheException(member))
+            Assert.True(required && nullable, $"{member}, the rule's one exception, is not both required and nullable");
+        else
+            Assert.True(required != nullable,
+                $"{member} is {(required ? "required and nullable" : "neither required nor nullable")}");
+    }
+
+    [Fact]
+    public void TheRequiredAndNullableMembers_AreTheRowsTakerResultKind_Alone()
+    {
+        // Added with the exception: the walk finds it on each row document,
+        // and nowhere else — a second required nullable member fails here.
+        var both = AllMembers().Where(m => m.Info.IsRequired && IsNullable(m.Info)).ToArray();
+
+        Assert.Equal(["DecisionRow.TakerResultKind", "DecisionRow(Cube).TakerResultKind"], both.Select(m => m.ToString()));
+        Assert.All(both, member => Assert.True(IsTheException(member), $"{member}"));
     }
 
     [Theory]

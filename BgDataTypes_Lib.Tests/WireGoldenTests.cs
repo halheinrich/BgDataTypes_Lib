@@ -161,6 +161,18 @@ public class WireGoldenTests
         """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=golden-cube","Ranking":"DepthFirst","Error":0.25,"Result":"Scored","MatchLength":7,"Player":"Alice","IsStandardStart":true,"Roll":null,"AnalysisDepth":"Book V2: 12960 trials. 4-ply","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.75,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":false,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
 
     // -----------------------------------------------------------------------
+    //  The rows before the taker's columns (halheinrich/backgammon#440) —
+    //  documents the library must refuse: a row states its taker's result,
+    //  null where no double was offered, and these state nothing about it.
+    // -----------------------------------------------------------------------
+
+    private const string CheckerPlayRowGoldenBeforeTakers =
+        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=a-BaBBDABa-Ab---b--bbAb-b-:1:-1:1:54:4:2:0:7:10","Ranking":"Equity","Error":0.125,"Result":"Scored","Player":"Alice","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"SessionKind":"Match","MatchLength":7,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":null,"IsBeaver":null,"CubeLimit":null,"OnRollScore":null,"OpponentScore":null,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
+
+    private const string CubeRowGoldenBeforeTakers =
+        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=a-BaBBDABa-Ab---b--bbAb-b-:1:1:1:00:3:5:2:0:6","Ranking":"DepthFirst","Error":0.25,"Result":"Scored","Player":"Alice","IsStandardStart":true,"Roll":null,"AnalysisDepth":"Book V2: 12960 trials. 4-ply","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.75,"SessionKind":"Money","MatchLength":null,"OnRollNeeds":null,"OpponentNeeds":null,"IsCrawford":null,"IsJacoby":false,"IsBeaver":true,"CubeLimit":64,"OnRollScore":3,"OpponentScore":5,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
+
+    // -----------------------------------------------------------------------
     //  Today's shape
     // -----------------------------------------------------------------------
 
@@ -171,10 +183,10 @@ public class WireGoldenTests
         """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Position":{"Mop":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"CubeSize":2,"CubeOwner":"OnRoll","Session":{"Terms":{"Kind":"Money","IsJacoby":false,"IsBeaver":true,"CubeLimit":64},"OnRollScore":3,"OpponentScore":5}},"Descriptive":{"OnRollName":"Alice","OpponentName":"Bob","Title":"Golden","Date":"2026-09-25","Event":"Club","IsStandardStart":true,"Comment":"note","Flagged":true},"Decision":{"AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","RolloutTrials":12960,"BookEdition":"V2","UnrecognizedLevelCode":null,"NoDoubleEquity":0.75,"DoubleTakeEquity":0.5,"CubelessNoDoubleEquity":0.375,"CubelessDoubleTakeEquity":0.625,"WinPctAfterNoDouble":0.51,"GammonPctAfterNoDouble":0.12,"BgPctAfterNoDouble":0.013,"LoseGammonPctAfterNoDouble":0.14,"LoseBgPctAfterNoDouble":0.015,"WinPctAfterDoubleTake":0.52,"GammonPctAfterDoubleTake":0.16,"BgPctAfterDoubleTake":0.017,"LoseGammonPctAfterDoubleTake":0.18,"LoseBgPctAfterDoubleTake":0.019,"UserDoublerAction":"Double","UserTakerAction":null,"UnstatedDoublerActionError":null,"UnstatedTakerActionError":0.04}}""";
 
     private const string CheckerPlayRowGolden =
-        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=a-BaBBDABa-Ab---b--bbAb-b-:1:-1:1:54:4:2:0:7:10","Ranking":"Equity","Error":0.125,"Result":"Scored","Player":"Alice","IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"SessionKind":"Match","MatchLength":7,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":null,"IsBeaver":null,"CubeLimit":null,"OnRollScore":null,"OpponentScore":null,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
+        """{"Kind":"CheckerPlay","Id":"golden.xg:g3:m17:play","Xgid":"XGID=a-BaBBDABa-Ab---b--bbAb-b-:1:-1:1:54:4:2:0:7:10","Ranking":"Equity","Error":0.125,"Result":"Scored","Player":"Alice","Taker":null,"TakerResultKind":null,"TakerError":null,"IsStandardStart":true,"Roll":54,"AnalysisDepth":"3-ply","AnalysisMode":"Evaluation","AnalysisLevel":"Ply3","Equity":0.25,"SessionKind":"Match","MatchLength":7,"OnRollNeeds":3,"OpponentNeeds":5,"IsCrawford":false,"IsJacoby":null,"IsBeaver":null,"CubeLimit":null,"OnRollScore":null,"OpponentScore":null,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,-1,0,1,-1,0,-4,-2,-2,-2,-2,0,2],"AfterPlayerBoard":[0,2,0,2,-1,2,2,0,0,2,0,0,0,2,0,0,1,-2,0,-5,-2,-2,-1,-2,0,2]}""";
 
     private const string CubeRowGolden =
-        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=a-BaBBDABa-Ab---b--bbAb-b-:1:1:1:00:3:5:2:0:6","Ranking":"DepthFirst","Error":0.25,"Result":"Scored","Player":"Alice","IsStandardStart":true,"Roll":null,"AnalysisDepth":"Book V2: 12960 trials. 4-ply","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.75,"SessionKind":"Money","MatchLength":null,"OnRollNeeds":null,"OpponentNeeds":null,"IsCrawford":null,"IsJacoby":false,"IsBeaver":true,"CubeLimit":64,"OnRollScore":3,"OpponentScore":5,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
+        """{"Kind":"Cube","Id":"golden.xg:g3:m18:cube","Xgid":"XGID=a-BaBBDABa-Ab---b--bbAb-b-:1:1:1:00:3:5:2:0:6","Ranking":"DepthFirst","Error":0.25,"Result":"Scored","Player":"Alice","Taker":"Bob","TakerResultKind":"Unstated","TakerError":0.04,"IsStandardStart":true,"Roll":null,"AnalysisDepth":"Book V2: 12960 trials. 4-ply","AnalysisMode":"BookRollout","AnalysisLevel":"Ply4","Equity":0.75,"SessionKind":"Money","MatchLength":null,"OnRollNeeds":null,"OpponentNeeds":null,"IsCrawford":null,"IsJacoby":false,"IsBeaver":true,"CubeLimit":64,"OnRollScore":3,"OpponentScore":5,"Board":[-1,0,2,-1,2,2,4,1,2,-1,0,1,-2,0,0,0,-2,0,0,-2,-2,1,-2,0,-2,0],"AfterBestBoard":null,"AfterPlayerBoard":null}""";
 
     public static TheoryData<string> Kinds => ["CheckerPlay", "Cube"];
 
@@ -213,7 +225,10 @@ public class WireGoldenTests
     [MemberData(nameof(Kinds))]
     public void FullRow_Bytes_BothPaths(string kind)
     {
-        // Rewritten from FullRow_Bytes_BothPaths for each kind.
+        // Rewritten from FullRow_Bytes_BothPaths for each kind. Rewritten
+        // again for the taker's columns (halheinrich/backgammon#440), which
+        // follow the player's: none for the checker play, and for the cube's
+        // stated double Bob's unstated take error.
         var (_, _, row, golden) = Golden(kind);
 
         Assert.Equal(golden, JsonSerializer.Serialize(row, ReflectionOptions));
@@ -481,6 +496,33 @@ public class WireGoldenTests
             var ex = Record.Exception(() => JsonSerializer.Deserialize(json, readAs, options));
             Assert.True(ex is JsonException, $"{name}: {ex?.GetType().Name ?? "loaded"}");
         }
+    }
+
+    public static TheoryData<string, string> RowsBeforeTakers => new()
+    {
+        { "play row", CheckerPlayRowGoldenBeforeTakers },
+        { "cube row", CubeRowGoldenBeforeTakers },
+    };
+
+    [Theory]
+    [MemberData(nameof(RowsBeforeTakers))]
+    public void ARowWrittenBeforeTheTakersColumns_IsRefused_BothPaths(string name, string json)
+    {
+        // Added (halheinrich/backgammon#440): a breaking read, deliberately.
+        // A row states its taker's result, null where no double was offered;
+        // one that states nothing about it is refused, never read as having
+        // no taker decision. Today's row is the previous one with the three
+        // columns added after the player's, and nothing else changed.
+        foreach (var (path, options) in WirePaths.Both)
+        {
+            var ex = Record.Exception(() => JsonSerializer.Deserialize<DecisionRow>(json, options));
+            Assert.True(ex is JsonException, $"{name} on the {path} path: {ex?.GetType().Name ?? "loaded"}");
+        }
+
+        var today = JsonNode.Parse(name == "play row" ? CheckerPlayRowGolden : CubeRowGolden)!.AsObject();
+        foreach (var column in new[] { "Taker", "TakerResultKind", "TakerError" })
+            Assert.True(today.Remove(column), column);
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(json), today), name);
     }
 
     [Fact]

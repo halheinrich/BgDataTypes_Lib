@@ -868,12 +868,20 @@ public class BgDecisionDataSerializationTests
             TestRecords.CheckerPlayData(userPlayIndex: null, unlistedPlayError: 0.1), "UnlistedPlayError");
         Assert.Null(playAbsent.UnlistedPlayError);
         Assert.All(Enum.GetValues<PlayRanking>(), ranking => Assert.Equal(PlayerResult.NotRecorded, playAbsent.RankedBy(ranking).PlayerResult));
-        var cubeAbsent = ReadWithout(
-            TestRecords.CubeData(userDoublerAction: null, userTakerAction: null,
-                unstatedDoublerActionError: 0.2, unstatedTakerActionError: 0.3),
-            "UnstatedDoublerActionError", "UnstatedTakerActionError");
-        Assert.Null(cubeAbsent.UserDoubleError);
-        Assert.Null(cubeAbsent.UserTakeError);
+        // Rewritten for the recorded cube actions (halheinrich/backgammon#440):
+        // the two unstated errors were stated together on one record with no
+        // stated double, which no record can hold now; each is read away on
+        // the shape that holds it.
+        var doublerAbsent = ReadWithout(
+            TestRecords.CubeData(userDoublerAction: null, userTakerAction: null, unstatedDoublerActionError: 0.2),
+            "UnstatedDoublerActionError");
+        Assert.Null(doublerAbsent.UserDoubleError);
+        Assert.Null(doublerAbsent.UserTakeError);
+        var takerAbsent = ReadWithout(
+            TestRecords.CubeData(userTakerAction: null, unstatedTakerActionError: 0.3),
+            "UnstatedTakerActionError");
+        Assert.Equal(RecordedCubeActions.DoubleUnanswered, takerAbsent.Recorded);
+        Assert.Null(takerAbsent.UserTakeError);
     }
 
     // -----------------------------------------------------------------------
@@ -999,18 +1007,24 @@ public class BgDecisionDataSerializationTests
     }
 
     [Fact]
-    public void BgDecisionData_IDecisionFilterData_CubePlay_UserTakeError()
+    public void BgDecisionData_IDecisionFilterData_CubePlay_DoubleUnanswered()
     {
-        // Rewritten: no doubler action stated, so no doubling error; the take
-        // of double/take +1.011 loses 0.011.
+        // Rewritten from BgDecisionData_IDecisionFilterData_CubePlay_UserTakeError
+        // (halheinrich/backgammon#440): that record stated a take beside no
+        // stated double, which no record can hold now. A stated double with no
+        // answer recorded — the opponent resigned — is scored as the double,
+        // since the double was recorded: no double +1.025 against the cash
+        // doubles at a loss of 0.025. The taker was offered a decision, whose
+        // result is not recorded (Hal, 2026-10-26).
         IDecisionFilterData data = TestRecords.Cube(decision: TestRecords.CubeData(
             noDoubleEquity: 1.025,
             doubleTakeEquity: 1.011,
-            userDoublerAction: null)).ViewFor(PlayRanking.Equity);
+            userTakerAction: null)).ViewFor(PlayRanking.Equity);
 
-        Assert.Equal(PlayerResultKind.Scored, data.PlayerResult.Kind);  // Falls through to UserTakeError
+        Assert.Equal(PlayerResultKind.Scored, data.PlayerResult.Kind);
         Assert.True(data.PlayerResult.TryGetError(out double error));
-        Assert.Equal(0.011, error, 12);
+        Assert.Equal(0.025, error, 12);
+        Assert.Equal(PlayerResult.NotRecorded, data.TakerResult);
     }
 
     [Fact]

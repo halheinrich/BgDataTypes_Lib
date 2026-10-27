@@ -53,7 +53,8 @@ namespace BgDataTypes_Lib;
 /// <para>
 /// <b>Absence on the wire</b> (halheinrich/backgammon#222) — the one
 /// statement of the rule for every type in this graph. Every serialized
-/// member is one of two kinds, and no member arrives silently as a default:
+/// member but one is one of two kinds, and no member arrives silently as a
+/// default:
 /// </para>
 /// <list type="bullet">
 /// <item><description>a member that must be present is <c>required</c>: an
@@ -70,6 +71,15 @@ namespace BgDataTypes_Lib;
 /// and its own documentation says what <see langword="null"/>
 /// means.</description></item>
 /// </list>
+/// <para>
+/// The one exception is a member that must be stated and may be
+/// <see langword="null"/>: <see cref="DecisionRow.TakerResultKind"/>, required
+/// and nullable. Its <see langword="null"/> says something — no double was
+/// offered — so a default would say it of every row that omits the column,
+/// each row written before it among them; required, such a row is refused
+/// instead (halheinrich/backgammon#440). The absence walk names it as the one
+/// such member, so a second fails it.
+/// </para>
 /// <para>
 /// The paths agree because no member keeps a property initializer for the
 /// reflection path to honour and the generated creator to drop: a required
@@ -138,21 +148,27 @@ namespace BgDataTypes_Lib;
 /// <see cref="MoneySession"/>, <see cref="MatchSession"/>,
 /// <see cref="MoneyTerms"/>, <see cref="MatchTerms"/>,
 /// <see cref="MoneyStanding"/>, <see cref="MatchStanding"/> — has an internal
-/// one-parameter serializer constructor beside the parameterless one code
-/// uses (public, but internal for the two sessions, which code outside this
-/// library builds through <see cref="Session.Create"/> alone). It marks the
-/// instance as read, and each guard then refuses a breach as a
+/// serializer constructor beside the parameterless one code uses (public, but
+/// internal for the two sessions, which code outside this library builds
+/// through <see cref="Session.Create"/> alone). It marks the instance as read,
+/// and each guard then refuses a breach as a
 /// <see cref="System.Text.Json.JsonException"/> carrying the guard's
-/// exception. A serializer constructor must bind one wire member. A kind — of
-/// a decision, terms or a standing — binds its <c>"Kind"</c>, which the base
-/// holds to the type; a session, whose kind is its terms', binds its
-/// <c>"Terms"</c>, whose own contract holds their kind to the type. <b>A category binds its
-/// first member only because a serializer constructor must bind one</b>:
-/// nothing about that member is special, and binding it changes nothing
-/// about how it is read. It stays required, and the absence walk
+/// exception. A serializer constructor must bind at least one wire member. A
+/// kind — of a decision, terms or a standing — binds its <c>"Kind"</c>, which
+/// the base holds to the type; a session, whose kind is its terms', binds its
+/// <c>"Terms"</c>, whose own contract holds their kind to the type. <b>A
+/// category binds its first member only because a serializer constructor must
+/// bind one</b>: nothing about that member is special, and binding it changes
+/// nothing about how it is read. It stays required, and the absence walk
 /// (<c>WireAbsenceTests</c>) fails if it ever stops being so, since a member
 /// that is neither required nor nullable breaks the walk's first rule. The
-/// constructors are internal, so code can never mark an instance as read.
+/// one category that binds more is <see cref="CubeDecisionData"/>: it binds
+/// the four members of its recorded cube actions, the members it validates
+/// together — one rule spans them, which no init setter run one at a time can
+/// keep — and builds them into one value (<see cref="RecordedCubeActions"/>)
+/// whatever order the document states them in; each is nullable, so an
+/// absent one binds <see langword="null"/>. The constructors are internal, so
+/// code can never mark an instance as read.
 /// This is the separate-internal-constructor pattern answering a measured
 /// ordering, not a way around validation: every rule still runs, on the same
 /// setters. <see cref="DecisionRow"/> needs no such constructor. It has no

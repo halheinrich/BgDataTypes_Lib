@@ -132,6 +132,9 @@ public class DocumentRefusalTests
             d => d["UserDoublerAction"] = "Take", typeof(ArgumentOutOfRangeException));
         yield return ("a taker half holding a doubler action", typeof(CubeDecisionData), TestRecords.CubeData(),
             d => d["UserTakerAction"] = "Double", typeof(ArgumentOutOfRangeException));
+        // Added: a taker half needs a stated double (halheinrich/backgammon#440).
+        yield return ("a response beside no double", typeof(CubeDecisionData), TestRecords.CubeData(),
+            d => d["UserDoublerAction"] = "NoDouble", typeof(ArgumentException));
         // Added: a match session and a position read on their own
         // (halheinrich/backgammon#273), as the base and as the kind.
         yield return ("an away score of 0", typeof(Session), TestRecords.MatchSession(),
@@ -263,7 +266,6 @@ public class DocumentRefusalTests
     [InlineData(typeof(CheckerPlayDecision))]
     [InlineData(typeof(CubeDecision))]
     [InlineData(typeof(CheckerPlayDecisionData))]
-    [InlineData(typeof(CubeDecisionData))]
     [InlineData(typeof(PlayCandidate))]
     [InlineData(typeof(DescriptiveData))]
     [InlineData(typeof(PositionData))]
@@ -281,6 +283,29 @@ public class DocumentRefusalTests
         var serializer = Assert.Single(serializers);
         Assert.True(serializer.IsAssembly, $"{type.Name}'s serializer constructor is not internal");
         Assert.Single(serializer.GetParameters());
+
+        var code = Assert.Single(constructors, c => c.IsPublic);
+        Assert.Empty(code.GetParameters());
+    }
+
+    [Fact]
+    public void TheCubeCategorysSerializerConstructor_IsInternal_AndBindsTheFourRecordedMembers()
+    {
+        // Split from the theory above for the recorded cube actions
+        // (halheinrich/backgammon#440): the cube category's serializer
+        // constructor binds the four members it validates together, which it
+        // builds into one value, rather than one member it must bind.
+        var type = typeof(CubeDecisionData);
+        var constructors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        var serializer = Assert.Single(constructors, c => c.IsDefined(typeof(JsonConstructorAttribute)));
+        Assert.True(serializer.IsAssembly, "CubeDecisionData's serializer constructor is not internal");
+        Assert.Equal(
+            [
+                (typeof(CubeAction?), "userDoublerAction"), (typeof(CubeAction?), "userTakerAction"),
+                (typeof(double?), "unstatedDoublerActionError"), (typeof(double?), "unstatedTakerActionError"),
+            ],
+            serializer.GetParameters().Select(p => (p.ParameterType, p.Name)));
 
         var code = Assert.Single(constructors, c => c.IsPublic);
         Assert.Empty(code.GetParameters());

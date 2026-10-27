@@ -60,16 +60,31 @@ public sealed class CubeDecisionData
     }
 
     /// <summary>
-    /// The serializer's constructor. It binds <paramref name="analysisMode"/>, its
-    /// first member, only because a serializer constructor must bind one; why
-    /// the pattern exists is stated once, on <see cref="BgDataTypesJsonContext"/>
-    /// ("The serializer constructors").
+    /// The serializer's constructor. It binds the four members of the
+    /// recorded cube actions, which it builds into <see cref="Recorded"/> — the
+    /// one value that holds them to their rules together, whatever order a
+    /// document states them in, an absent member binding
+    /// <see langword="null"/>; a breach is refused as a
+    /// <see cref="System.Text.Json.JsonException"/> carrying the value's
+    /// exception. Why the pattern exists is stated once, on
+    /// <see cref="BgDataTypesJsonContext"/> ("The serializer constructors").
     /// </summary>
+    /// <exception cref="System.Text.Json.JsonException">The four break a rule of <see cref="RecordedCubeActions"/>.</exception>
     [JsonConstructor]
-    internal CubeDecisionData(AnalysisMode analysisMode)
+    internal CubeDecisionData(
+        CubeAction? userDoublerAction, CubeAction? userTakerAction,
+        double? unstatedDoublerActionError, double? unstatedTakerActionError)
     {
         _read = true;
-        AnalysisMode = analysisMode;
+        try
+        {
+            Recorded = new RecordedCubeActions(
+                userDoublerAction, userTakerAction, unstatedDoublerActionError, unstatedTakerActionError);
+        }
+        catch (ArgumentException fault)
+        {
+            throw DocumentRefusal.Of(fault);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -351,86 +366,48 @@ public sealed class CubeDecisionData
     //  The record of what was actually played, carried explicitly: it is
     //  source data — a zero error does not identify the action when the two
     //  cube equities tie — and the error of a stated action is derived from
-    //  it (UserDoubleError / UserTakeError). Each half is guarded to its own
-    //  action domain, the halves CubeAnswerExtensions.Of accepts, and to the
-    //  absence of an unstated-action error for the same half. Cross-half
-    //  consistency (a recorded taker response implies the doubler doubled)
-    //  is a producer contract, not guarded here — init-only halves are set
-    //  independently.
+    //  it (UserDoubleError / UserTakeError). The four recorded members are one
+    //  value, Recorded, whose constructor holds them to their rules together:
+    //  each half to its own action domain, the halves CubeAnswerExtensions.Of
+    //  accepts, and to the absence of an unstated-action error for the same
+    //  half; and a taker half to a stated Double (SPEC-scoring §3, 2026-10-25),
+    //  the rule that spans the halves, which no init-only member set on its
+    //  own could keep. The four wire members read through it, and a document
+    //  reaches it through the serializer's constructor.
 
-    private readonly CubeAction? _userDoublerAction;
-    private readonly CubeAction? _userTakerAction;
+    /// <summary>
+    /// The cube actions the record states were played, and the analyser's
+    /// error for each half it does not state, held to their rules as one
+    /// value (<see cref="RecordedCubeActions"/>): no record holds a taker half
+    /// without a stated double. <see cref="RecordedCubeActions.None"/> when
+    /// nothing is recorded. Not on the wire itself: its four members are,
+    /// as <see cref="UserDoublerAction"/>, <see cref="UserTakerAction"/>,
+    /// <see cref="UnstatedDoublerActionError"/> and
+    /// <see cref="UnstatedTakerActionError"/>.
+    /// </summary>
+    [JsonIgnore]
+    public RecordedCubeActions Recorded { get; init; }
 
     /// <summary>
     /// The doubler action the player on roll actually played —
-    /// <see cref="CubeAction.NoDouble"/> or <see cref="CubeAction.Double"/>.
-    /// Null when the played action is not recorded.
+    /// <see cref="CubeAction.NoDouble"/> or <see cref="CubeAction.Double"/> —
+    /// as <see cref="Recorded"/> states it
+    /// (<see cref="RecordedCubeActions.DoublerAction"/>). Null when the played
+    /// action is not recorded.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown on init when the value is not <see cref="CubeAction.NoDouble"/>,
-    /// <see cref="CubeAction.Double"/> or null.
-    /// </exception>
-    /// <exception cref="ArgumentException">
-    /// Thrown on init when the value is stated and
-    /// <see cref="UnstatedDoublerActionError"/> already is.
-    /// </exception>
-    public CubeAction? UserDoublerAction
-    {
-        get => _userDoublerAction;
-        init
-        {
-            try
-            {
-                if (value is not (null or CubeAction.NoDouble or CubeAction.Double))
-                    throw new ArgumentOutOfRangeException(nameof(UserDoublerAction), value,
-                        "UserDoublerAction requires a doubler-half action (Double or NoDouble).");
-                if (value is not null && _unstatedDoublerActionError is not null)
-                    throw new ArgumentException(UnstatedDoublerMessage, nameof(UserDoublerAction));
-            }
-            catch (ArgumentException fault) when (_read)
-            {
-                throw DocumentRefusal.Of(fault);
-            }
-            _userDoublerAction = value;
-        }
-    }
+    public CubeAction? UserDoublerAction => Recorded.DoublerAction;
 
     /// <summary>
     /// The taker action the opponent actually played —
-    /// <see cref="CubeAction.Take"/> or <see cref="CubeAction.Pass"/>.
-    /// Present only when a double was offered and a response recorded: in an
-    /// undoubled game no taker decision exists, so this stays null even when
-    /// <see cref="UserDoublerAction"/> is recorded. Null also when the played
-    /// actions are not recorded.
+    /// <see cref="CubeAction.Take"/> or <see cref="CubeAction.Pass"/> — as
+    /// <see cref="Recorded"/> states it
+    /// (<see cref="RecordedCubeActions.TakerAction"/>). Present only when a
+    /// double was offered and a response recorded: in an undoubled game no
+    /// taker decision exists, so this is null unless
+    /// <see cref="UserDoublerAction"/> is <see cref="CubeAction.Double"/>.
+    /// Null also when the response is not recorded.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown on init when the value is not <see cref="CubeAction.Take"/>,
-    /// <see cref="CubeAction.Pass"/> or null.
-    /// </exception>
-    /// <exception cref="ArgumentException">
-    /// Thrown on init when the value is stated and
-    /// <see cref="UnstatedTakerActionError"/> already is.
-    /// </exception>
-    public CubeAction? UserTakerAction
-    {
-        get => _userTakerAction;
-        init
-        {
-            try
-            {
-                if (value is not (null or CubeAction.Take or CubeAction.Pass))
-                    throw new ArgumentOutOfRangeException(nameof(UserTakerAction), value,
-                        "UserTakerAction requires a taker-half action (Take or Pass).");
-                if (value is not null && _unstatedTakerActionError is not null)
-                    throw new ArgumentException(UnstatedTakerMessage, nameof(UserTakerAction));
-            }
-            catch (ArgumentException fault) when (_read)
-            {
-                throw DocumentRefusal.Of(fault);
-            }
-            _userTakerAction = value;
-        }
-    }
+    public CubeAction? UserTakerAction => Recorded.TakerAction;
 
     // -----------------------------------------------------------------------
     //  The user's errors
@@ -444,9 +421,6 @@ public sealed class CubeDecisionData
     //  and the derivation stands: the serializer skips a derived member's
     //  JSON even where it refuses a member the category does not have.
     // -----------------------------------------------------------------------
-
-    private readonly double? _unstatedDoublerActionError;
-    private readonly double? _unstatedTakerActionError;
 
     /// <summary>
     /// Equity loss from the user's doubling decision against the correct
@@ -464,8 +438,9 @@ public sealed class CubeDecisionData
     /// response (≥ 0): the <see cref="TakerActionError"/> of
     /// <see cref="UserTakerAction"/> when the record states it, otherwise the
     /// analyser's <see cref="UnstatedTakerActionError"/>.
-    /// <see langword="null"/> when neither exists — in particular when no
-    /// double was offered. Derived, never stored.
+    /// <see langword="null"/> when neither exists — in particular whenever no
+    /// double was offered: a take error exists only under a stated double
+    /// (<see cref="Recorded"/>). Derived, never stored.
     /// </summary>
     [JsonIgnore]
     public double? UserTakeError =>
@@ -475,62 +450,25 @@ public sealed class CubeDecisionData
     /// The doubling error the producing analyser recorded for a decision
     /// whose played doubler action the record does not state
     /// (<see cref="UserDoublerAction"/> <see langword="null"/>) — the one
-    /// doubling error nothing here determines. <see langword="null"/> when
-    /// none was recorded, and always when the action is stated: its error is
-    /// then derived (<see cref="UserDoubleError"/>), so stating it here too
-    /// would store a copy.
+    /// doubling error nothing here determines — as <see cref="Recorded"/>
+    /// states it (<see cref="RecordedCubeActions.UnstatedDoublerError"/>).
+    /// <see langword="null"/> when none was recorded, and always when the
+    /// action is stated: its error is then derived
+    /// (<see cref="UserDoubleError"/>), so stating it here too would store a
+    /// copy.
     /// </summary>
-    /// <exception cref="ArgumentException">
-    /// Thrown on init when the value is stated and <see cref="UserDoublerAction"/>
-    /// already is.
-    /// </exception>
-    public double? UnstatedDoublerActionError
-    {
-        get => _unstatedDoublerActionError;
-        init
-        {
-            try
-            {
-                FiniteNumber.Check(value, nameof(UnstatedDoublerActionError));
-                if (value is not null && _userDoublerAction is not null)
-                    throw new ArgumentException(UnstatedDoublerMessage, nameof(UnstatedDoublerActionError));
-            }
-            catch (ArgumentException fault) when (_read)
-            {
-                throw DocumentRefusal.Of(fault);
-            }
-            _unstatedDoublerActionError = value;
-        }
-    }
+    public double? UnstatedDoublerActionError => Recorded.UnstatedDoublerError;
 
     /// <summary>
     /// The take/pass error the producing analyser recorded for a decision
     /// whose played taker action the record does not state
     /// (<see cref="UserTakerAction"/> <see langword="null"/>), as
-    /// <see cref="UnstatedDoublerActionError"/> is for the doubler half.
+    /// <see cref="UnstatedDoublerActionError"/> is for the doubler half, and
+    /// as <see cref="Recorded"/> states it
+    /// (<see cref="RecordedCubeActions.UnstatedTakerError"/>): only under a
+    /// stated <see cref="CubeAction.Double"/>, where a double was offered.
     /// </summary>
-    /// <exception cref="ArgumentException">
-    /// Thrown on init when the value is stated and <see cref="UserTakerAction"/>
-    /// already is.
-    /// </exception>
-    public double? UnstatedTakerActionError
-    {
-        get => _unstatedTakerActionError;
-        init
-        {
-            try
-            {
-                FiniteNumber.Check(value, nameof(UnstatedTakerActionError));
-                if (value is not null && _userTakerAction is not null)
-                    throw new ArgumentException(UnstatedTakerMessage, nameof(UnstatedTakerActionError));
-            }
-            catch (ArgumentException fault) when (_read)
-            {
-                throw DocumentRefusal.Of(fault);
-            }
-            _unstatedTakerActionError = value;
-        }
-    }
+    public double? UnstatedTakerActionError => Recorded.UnstatedTakerError;
 
     /// <summary><paramref name="value"/>, once it keeps the number rule (<see cref="FiniteNumber"/>).</summary>
     private double Finite(double value, string member)
@@ -545,12 +483,6 @@ public sealed class CubeDecisionData
         }
         return value;
     }
-
-    private const string UnstatedDoublerMessage =
-        "UnstatedDoublerActionError is the error of a doubler action the record does not state; when UserDoublerAction states it, its error is derived from the equities and is not stated.";
-
-    private const string UnstatedTakerMessage =
-        "UnstatedTakerActionError is the error of a taker action the record does not state; when UserTakerAction states it, its error is derived from the equities and is not stated.";
 
     // -----------------------------------------------------------------------
     //  The analysis's cube actions, and the four answers

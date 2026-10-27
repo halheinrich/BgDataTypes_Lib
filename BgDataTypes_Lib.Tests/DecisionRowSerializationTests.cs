@@ -326,6 +326,8 @@ public class DecisionRowSerializationTests
             Assert.Equal(record.Board, row.Board);
             Assert.Equal(record.AfterBoardOfBest(ranking), row.AfterBestBoard);
             Assert.Equal(record.AfterPlayerBoard, row.AfterPlayerBoard);
+            // Added: a checker play has no taker (halheinrich/backgammon#440).
+            Assert.Equal((null, null, null), (row.Taker, row.TakerResultKind, row.TakerError));
         }
     }
 
@@ -333,8 +335,12 @@ public class DecisionRowSerializationTests
     public void DecisionRow_From_TakesEveryColumnFromTheRecord_Cube()
     {
         // Added: the cube's own columns, and the checker play's empty.
+        // Rewritten for the taker's columns (halheinrich/backgammon#440): the
+        // record stated an unstated take error beside no stated double, which
+        // no record can hold now. Under a stated Double, the doubling is the
+        // row's result and the analyser's take error the taker's.
         var record = TestRecords.Cube(decision: TestRecords.CubeData(
-            userDoublerAction: null, userTakerAction: null, unstatedTakerActionError: 0.04));
+            userTakerAction: null, unstatedTakerActionError: 0.04));
 
         foreach (var ranking in Enum.GetValues<PlayRanking>())
         {
@@ -342,7 +348,8 @@ public class DecisionRowSerializationTests
 
             Assert.Equal(ranking, row.Ranking);
             Assert.Equal(DecisionKind.Cube, row.Kind);
-            Assert.Equal(0.04, row.Error);
+            Assert.Equal((PlayerResultKind.Scored, record.Decision.DoublerActionError(CubeAction.Double)), (row.Result, row.Error));
+            Assert.Equal(("Bob", PlayerResultKind.Unstated, 0.04), (row.Taker, row.TakerResultKind, row.TakerError));
             Assert.Equal(record.Decision.Depth, row.AnalysisDepth);
             Assert.Equal(record.Decision.AnalysisMode, row.AnalysisMode);
             Assert.Equal(record.Decision.AnalysisLevel, row.AnalysisLevel);
@@ -359,13 +366,22 @@ public class DecisionRowSerializationTests
         // Added: the IDecisionFilterData contract, member by member, read off
         // the record's view and off its row, each built for the same ranking
         // — the agreement the converter used to test after building the two
-        // separately is structural now.
+        // separately is structural now. Extended for the taker's members
+        // (halheinrich/backgammon#440): a cube record of each shape of its
+        // recorded actions, and one with no names recorded.
         foreach (BgDecisionData record in new BgDecisionData[]
                  {
                      TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(dice: [1, 3], userPlayIndex: 1)),
                      TestRecords.CheckerPlay(id: new XgpDecisionId("p.xgp"), decision: TestRecords.CheckerPlayData(userPlayIndex: null)),
                      TestRecords.Cube(),
                      TestRecords.Cube(position: TestRecords.Position(session: Money(true))),
+                     TestRecords.Cube(decision: TestRecords.CubeData(userTakerAction: CubeAction.Pass)),
+                     TestRecords.Cube(decision: TestRecords.CubeData(userTakerAction: null, unstatedTakerActionError: 0.04)),
+                     TestRecords.Cube(decision: TestRecords.CubeData(userTakerAction: null)),
+                     TestRecords.Cube(decision: TestRecords.CubeData(userDoublerAction: CubeAction.NoDouble, userTakerAction: null)),
+                     TestRecords.Cube(decision: TestRecords.CubeData(userDoublerAction: null, userTakerAction: null, unstatedDoublerActionError: 0.02)),
+                     TestRecords.Cube(decision: TestRecords.CubeData(userDoublerAction: null, userTakerAction: null)),
+                     TestRecords.Cube(descriptive: TestRecords.Descriptive(onRollName: null, opponentName: null)),
                  })
         {
             foreach (var ranking in Enum.GetValues<PlayRanking>())
@@ -854,6 +870,189 @@ public class DecisionRowSerializationTests
 
         var ex = WirePaths.AssertRefused<DecisionRow>(document.ToJsonString());
         Assert.False(string.IsNullOrEmpty(ex.Message), because);
+    }
+
+    // -----------------------------------------------------------------------
+    //  The taker's columns (SPEC-filtering §8, halheinrich/backgammon#440)
+    // -----------------------------------------------------------------------
+
+    /// <summary>A cube row of the builder's short race, with <paramref name="recorded"/> its recorded actions, Alice on roll against Bob.</summary>
+    private static DecisionRow CubeRowWith(RecordedCubeActions recorded, string? opponentName = "Bob") =>
+        TestRecords.Row(TestRecords.Cube(
+            decision: TestRecords.CubeData(
+                userDoublerAction: recorded.DoublerAction, userTakerAction: recorded.TakerAction,
+                unstatedDoublerActionError: recorded.UnstatedDoublerError,
+                unstatedTakerActionError: recorded.UnstatedTakerError),
+            descriptive: TestRecords.Descriptive(opponentName: opponentName)));
+
+    public static TheoryData<string, string?, PlayerResultKind?, double?> TakerColumns => new()
+    {
+        // (shape, Taker, TakerResultKind, TakerError) on the builder's
+        // double/take (no double +0.512, double/take +0.634): the take loses
+        // nothing, the pass 0.366.
+        { "None", null, null, null },
+        { "NoDouble", null, null, null },
+        { "UnstatedDoubler", null, null, null },
+        { "DoubleAnswered Take", "Bob", PlayerResultKind.Scored, 0.0 },
+        { "DoubleAnswered Pass", "Bob", PlayerResultKind.Scored, 0.366 },
+        { "DoubleWithUnstatedResponse", "Bob", PlayerResultKind.Unstated, 0.04 },
+        { "DoubleUnanswered", "Bob", PlayerResultKind.NotRecorded, null },
+    };
+
+    private static RecordedCubeActions Shape(string name) => name switch
+    {
+        "None" => RecordedCubeActions.None,
+        "NoDouble" => RecordedCubeActions.NoDouble,
+        "UnstatedDoubler" => RecordedCubeActions.UnstatedDoubler(0.02),
+        "DoubleAnswered Take" => RecordedCubeActions.DoubleAnswered(CubeAction.Take),
+        "DoubleAnswered Pass" => RecordedCubeActions.DoubleAnswered(CubeAction.Pass),
+        "DoubleWithUnstatedResponse" => RecordedCubeActions.DoubleWithUnstatedResponse(0.04),
+        "DoubleUnanswered" => RecordedCubeActions.DoubleUnanswered,
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
+    };
+
+    [Theory]
+    [MemberData(nameof(TakerColumns))]
+    public void DecisionRow_TheTakersColumns_AreTheViews_AndRoundTrip_BothPaths(
+        string shape, string? taker, PlayerResultKind? takerResult, double? takerError)
+    {
+        var row = CubeRowWith(Shape(shape));
+
+        Assert.Equal(taker, row.Taker);
+        Assert.Equal(takerResult, row.TakerResultKind);
+        Assert.Equal(takerError is null, row.TakerError is null);
+        if (takerError is double error)
+            Assert.Equal(error, row.TakerError!.Value, 12);
+        foreach (var (path, options) in WirePaths.Both)
+        {
+            var restored = RoundTrip(row, options);
+            Assert.True((row.Taker, row.TakerResultKind, row.TakerError) == (restored.Taker, restored.TakerResultKind, restored.TakerError),
+                $"{shape} on the {path} path");
+            Assert.Equal(row.TakerResult, restored.TakerResult);
+        }
+    }
+
+    [Fact]
+    public void DecisionRow_AnOfferedDoubleWithNoTakersName_StatesTheResult_AndNoName()
+    {
+        var row = CubeRowWith(RecordedCubeActions.DoubleAnswered(CubeAction.Pass), opponentName: null);
+
+        Assert.Null(row.Taker);
+        Assert.Equal(PlayerResultKind.Scored, row.TakerResultKind);
+        Assert.Null(RoundTrip(row).Taker);
+    }
+
+    [Fact]
+    public void DecisionRow_TheTakerResult_IsTheKindWithTheError()
+    {
+        // The typed member reads the two columns, as PlayerResult reads Result and Error.
+        Assert.Equal(PlayerResult.Unstated(0.04), CubeRowWith(RecordedCubeActions.DoubleWithUnstatedResponse(0.04)).TakerResult);
+        Assert.Equal(PlayerResult.NotRecorded, CubeRowWith(RecordedCubeActions.DoubleUnanswered).TakerResult);
+        Assert.Null(CubeRowWith(RecordedCubeActions.NoDouble).TakerResult);
+        Assert.Null(PlayRow().TakerResult);
+    }
+
+    public static TheoryData<string, string> TakerColumnBreaches => new()
+    {
+        // (a fixture's mutation, what it breaks)
+        { "play-with-taker", "A checker-play row's taker columns are empty" },
+        { "play-with-taker-result", "A checker-play row's taker columns are empty" },
+        { "play-with-taker-error", "A checker-play row's taker columns are empty" },
+        { "cube-taker-not-scored", "taker result is never NotScored" },
+        { "scored-taker-without-error", "TakerError is stated exactly when" },
+        { "unstated-taker-without-error", "TakerError is stated exactly when" },
+        { "not-recorded-taker-with-error", "TakerError is stated exactly when" },
+        { "no-taker-decision-with-error", "TakerError is stated exactly when" },
+        { "negative-scored-taker-error", "A scored taker error is a finite number, never negative" },
+        { "no-taker-decision-with-taker", "A row with no taker decision names no taker" },
+        { "blank-taker", "Taker states text" },
+    };
+
+    private static string TakerMalformed(string name)
+    {
+        var play = WirePaths.Document(PlayRow());
+        var taken = WirePaths.Document(CubeRowWith(RecordedCubeActions.DoubleAnswered(CubeAction.Pass)));
+        var unstated = WirePaths.Document(CubeRowWith(RecordedCubeActions.DoubleWithUnstatedResponse(0.04)));
+        var unanswered = WirePaths.Document(CubeRowWith(RecordedCubeActions.DoubleUnanswered));
+        var undoubled = WirePaths.Document(CubeRowWith(RecordedCubeActions.NoDouble));
+        switch (name)
+        {
+            case "play-with-taker": play["Taker"] = "Bob"; return play.ToJsonString();
+            case "play-with-taker-result": play["TakerResultKind"] = "NotRecorded"; return play.ToJsonString();
+            case "play-with-taker-error": play["TakerError"] = 0.1; return play.ToJsonString();
+            case "cube-taker-not-scored": taken["TakerResultKind"] = "NotScored"; taken["TakerError"] = null; return taken.ToJsonString();
+            case "scored-taker-without-error": taken["TakerError"] = null; return taken.ToJsonString();
+            case "unstated-taker-without-error": unstated["TakerError"] = null; return unstated.ToJsonString();
+            case "not-recorded-taker-with-error": unanswered["TakerError"] = 0.1; return unanswered.ToJsonString();
+            case "no-taker-decision-with-error": undoubled["TakerError"] = 0.1; return undoubled.ToJsonString();
+            case "negative-scored-taker-error": taken["TakerError"] = -0.1; return taken.ToJsonString();
+            case "no-taker-decision-with-taker": undoubled["Taker"] = "Bob"; return undoubled.ToJsonString();
+            case "blank-taker": taken["Taker"] = " "; return taken.ToJsonString();
+            default: throw new ArgumentOutOfRangeException(nameof(name), name, null);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(TakerColumnBreaches))]
+    public void DecisionRow_Read_BreakingATakerColumnsRule_IsRefused_BothPaths(string mutation, string reason)
+    {
+        var ex = WirePaths.AssertRefused<DecisionRow>(TakerMalformed(mutation));
+
+        Assert.Contains(reason, ex.Message);
+    }
+
+    [Fact]
+    public void DecisionRow_Read_TheTakerColumnsControls_Load_BothPaths()
+    {
+        // The control for every refusal above: each base document loads.
+        foreach (var row in new[]
+                 {
+                     PlayRow(),
+                     CubeRowWith(RecordedCubeActions.DoubleAnswered(CubeAction.Pass)),
+                     CubeRowWith(RecordedCubeActions.DoubleWithUnstatedResponse(0.04)),
+                     CubeRowWith(RecordedCubeActions.DoubleUnanswered),
+                     CubeRowWith(RecordedCubeActions.NoDouble),
+                 })
+            foreach (var (_, options) in WirePaths.Both)
+                Assert.NotNull(RoundTrip(row, options));
+    }
+
+    public static TheoryData<string> RowsOfEachTakerCase => ["checker play", "undoubled cube", "doubled cube"];
+
+    private static DecisionRow RowOf(string name) => name switch
+    {
+        "checker play" => PlayRow(),
+        "undoubled cube" => CubeRowWith(RecordedCubeActions.NoDouble),
+        _ => CubeRowWith(RecordedCubeActions.DoubleAnswered(CubeAction.Take)),
+    };
+
+    [Theory]
+    [MemberData(nameof(RowsOfEachTakerCase))]
+    public void DecisionRow_MissingTakerResultKind_IsRefused_BothPaths(string name)
+    {
+        // The one required nullable column: a document must state it, so a
+        // row written before it — which states nothing about the taker — is
+        // refused rather than read as having no taker decision.
+        var document = WirePaths.Document(RowOf(name));
+        Assert.True(document.Remove("TakerResultKind"));
+
+        WirePaths.AssertRefused<DecisionRow>(document.ToJsonString());
+    }
+
+    [Theory]
+    [InlineData("checker play")]
+    [InlineData("undoubled cube")]
+    public void DecisionRow_AnExplicitNullTakerResultKind_ReadsAsNull_WhereNoTakerDecisionApplies_BothPaths(string name)
+    {
+        var document = WirePaths.Document(RowOf(name));
+        Assert.Contains("\"TakerResultKind\":null", document.ToJsonString());
+
+        foreach (var (path, options) in WirePaths.Both)
+        {
+            var restored = JsonSerializer.Deserialize<DecisionRow>(document.ToJsonString(), options)!;
+            Assert.True(restored.TakerResultKind is null, $"{name} on the {path} path read {restored.TakerResultKind}");
+            Assert.Null(restored.TakerResult);
+        }
     }
 
     // -----------------------------------------------------------------------

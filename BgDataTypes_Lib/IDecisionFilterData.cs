@@ -8,6 +8,11 @@ namespace BgDataTypes_Lib;
 /// decision — the one kind without them. No member holds a value standing
 /// for "not applicable" (halheinrich/backgammon#273): where a fact does not
 /// apply, the member is <see langword="null"/> and its documentation says so.
+/// A cube decision is two decisions (SPEC-filtering §8): the doubler's, the
+/// player on roll's (<see cref="Player"/>, <see cref="PlayerResult"/>), and —
+/// only where a double was offered — the taker's (<see cref="Taker"/>,
+/// <see cref="TakerResult"/>), which are <see langword="null"/> for a checker
+/// play and wherever no double was offered.
 /// </summary>
 /// <remarks>
 /// <b>A view is built for one ranking</b> (SPEC-scoring §2a,
@@ -38,11 +43,23 @@ public interface IDecisionFilterData
     DecisionKind Kind { get; }
 
     /// <summary>
-    /// Name of the player who made the decision; <see langword="null"/> when
-    /// the source recorded no name — never empty text, the one spelling of
-    /// "none recorded" (<see cref="DescriptiveData.OnRollName"/>).
+    /// Name of the player who made the decision — the player on roll, for a
+    /// cube decision the doubler; <see langword="null"/> when the source
+    /// recorded no name — never empty text, the one spelling of "none
+    /// recorded" (<see cref="DescriptiveData.OnRollName"/>).
     /// </summary>
     string? Player { get; }
+
+    /// <summary>
+    /// Name of the player who answers a double — the opponent of the player
+    /// on roll (<see cref="DescriptiveData.OpponentName"/>).
+    /// <see langword="null"/> unless a double was offered — for a checker
+    /// play, and for a cube decision whose doubler action is not
+    /// <see cref="CubeAction.Double"/> — and <see langword="null"/> where the
+    /// source recorded no name; never empty text. So it is stated only where
+    /// <see cref="TakerResult"/> is.
+    /// </summary>
+    string? Taker { get; }
 
     /// <summary>
     /// The session the decision was played in, as it stands at the decision,
@@ -102,15 +119,30 @@ public interface IDecisionFilterData
     /// player's result under <see cref="Ranking"/>
     /// (<see cref="RankedPlays.PlayerResult"/>): scored with its error, not
     /// scored (no error), unstated with the analyser's error, or not recorded.
-    /// For a cube decision, the doubler's result or, when the record holds
-    /// none, the taker's: a stated action is scored with its error
-    /// (<see cref="CubeDecisionData.UserDoubleError"/>,
-    /// <see cref="CubeDecisionData.UserTakeError"/>), an unstated one with an
-    /// analyser's error is unstated; a cube decision is never not scored. The
-    /// filter's "erred by more than x" is
+    /// For a cube decision, the doubler's half alone, never the taker's
+    /// (<see cref="TakerResult"/> is that): a stated doubler action is scored
+    /// with its error (<see cref="CubeDecisionData.UserDoubleError"/>), an
+    /// unstated one with the analyser's error is unstated, and otherwise it
+    /// is not recorded; a cube decision is never not scored. The filter's
+    /// "erred by more than x" is
     /// <c>PlayerResult.TryGetError(out var error) &amp;&amp; error &gt; x</c>.
     /// </summary>
     PlayerResult PlayerResult { get; }
+
+    /// <summary>
+    /// The taker's result on a cube decision where a double was offered,
+    /// each case by name: the stated response scored with its error
+    /// (<see cref="CubeDecisionData.TakerActionError"/>), the analyser's
+    /// error for a response not stated as unstated
+    /// (<see cref="CubeDecisionData.UnstatedTakerActionError"/>), or not
+    /// recorded where the record holds neither — a double the opponent
+    /// answered by resigning is a decision the taker was offered, with no
+    /// error (Hal, 2026-10-26; SPEC-filtering §8). Never not scored.
+    /// <see langword="null"/> where the record holds no taker decision: for a
+    /// checker play, and for a cube decision whose doubler action is not
+    /// <see cref="CubeAction.Double"/>.
+    /// </summary>
+    PlayerResult? TakerResult { get; }
 
     /// <summary>
     /// The board at the moment of the decision. <b>Frame: the player on

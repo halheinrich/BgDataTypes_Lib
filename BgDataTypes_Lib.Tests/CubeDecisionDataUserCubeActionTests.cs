@@ -8,8 +8,10 @@ public class CubeDecisionDataUserCubeActionTests
     // The played-cube-action halves are guarded to their own action domains,
     // the halves CubeAnswerExtensions.Of accepts: UserDoublerAction admits
     // NoDouble / Double (or null), UserTakerAction admits Take / Pass (or
-    // null). Cross-half consistency between the two is a producer contract
-    // and deliberately not guarded — see the section comment in CubeDecisionData.
+    // null). Rewritten for the recorded cube actions (halheinrich/backgammon#440):
+    // the halves are one value now, whose constructor also holds a taker half
+    // to a stated Double — the rule pinned in RecordedCubeActionsTests and,
+    // on the wire, in CubeDecisionDataRecordedTests.
 
     // ---------------------------------------------------------------------
     //  Valid domains — every in-domain value (including null) is accepted
@@ -21,7 +23,8 @@ public class CubeDecisionDataUserCubeActionTests
     [InlineData(CubeAction.Double)]
     public void UserDoublerAction_DoublerHalfOrNull_Accepted(CubeAction? action)
     {
-        var d = TestRecords.CubeData(userDoublerAction: action);
+        // Rewritten: with no taker half, since only a stated Double has one.
+        var d = TestRecords.CubeData(userDoublerAction: action, userTakerAction: null);
 
         Assert.Equal(action, d.UserDoublerAction);
     }
@@ -38,7 +41,7 @@ public class CubeDecisionDataUserCubeActionTests
     }
 
     // ---------------------------------------------------------------------
-    //  Half-guards — a cross-half value throws on init
+    //  Half-guards — a cross-half value is refused as the value is built
     // ---------------------------------------------------------------------
 
     [Theory]

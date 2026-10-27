@@ -205,7 +205,13 @@ public static class TestRecords
     /// name. By default a 3-ply double/take (no double +0.512, double/take
     /// +0.634), played as double and take — at no cost, which the category
     /// derives from the equities, as it does the depth's label, abbreviation
-    /// and rank from its typed facts.
+    /// and rank from its typed facts. The last four arguments are the four
+    /// members of the category's <see cref="CubeDecisionData.Recorded"/>,
+    /// built through <see cref="RecordedCubeActions"/>'s constructor, so a
+    /// combination its rules refuse — a taker half under a doubler action
+    /// that is not <see cref="CubeAction.Double"/> among them — is refused
+    /// here as it is anywhere: a test that overrides
+    /// <paramref name="userDoublerAction"/> states the taker half it means.
     /// </summary>
     public static CubeDecisionData CubeData(
         AnalysisMode analysisMode = AnalysisMode.Evaluation,
@@ -251,10 +257,8 @@ public static class TestRecords
         BgPctAfterDoubleTake = bgPctAfterDoubleTake,
         LoseGammonPctAfterDoubleTake = loseGammonPctAfterDoubleTake,
         LoseBgPctAfterDoubleTake = loseBgPctAfterDoubleTake,
-        UserDoublerAction = userDoublerAction,
-        UserTakerAction = userTakerAction,
-        UnstatedDoublerActionError = unstatedDoublerActionError,
-        UnstatedTakerActionError = unstatedTakerActionError,
+        Recorded = new RecordedCubeActions(
+            userDoublerAction, userTakerAction, unstatedDoublerActionError, unstatedTakerActionError),
     };
 
     /// <summary>

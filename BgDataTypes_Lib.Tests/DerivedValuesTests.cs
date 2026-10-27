@@ -164,55 +164,50 @@ public class DerivedValuesTests
     [Fact]
     public void ACubeError_OfAnUnstatedAction_IsTheAnalysers_AndCannotBeStatedBesideTheAction()
     {
-        var unstated = TestRecords.CubeData(
-            userDoublerAction: null, userTakerAction: null,
-            unstatedDoublerActionError: 0.05, unstatedTakerActionError: 0.06);
-        Assert.Equal(0.05, unstated.UserDoubleError);
-        Assert.Equal(0.06, unstated.UserTakeError);
+        // Rewritten for the recorded cube actions (halheinrich/backgammon#440):
+        // the one record that stated both unstated errors held a taker half
+        // with no stated double, which no record can hold now. The doubler's
+        // unstated error stands alone; the taker's stands under a stated
+        // Double. The refusal beside the same half's action is the value's,
+        // built in one constructor, so no initializer order is left to pin
+        // (RecordedCubeActionsTests).
+        var unstatedDoubler = new CubeDecisionData
+        {
+            AnalysisMode = AnalysisMode.Evaluation, AnalysisLevel = AnalysisLevel.Ply3,
+            NoDoubleEquity = 0.5, DoubleTakeEquity = 0.6, CubelessNoDoubleEquity = 0.4, CubelessDoubleTakeEquity = 0.4,
+            WinPctAfterNoDouble = 0.7, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
+            LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
+            WinPctAfterDoubleTake = 0.7, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
+            LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
+            Recorded = RecordedCubeActions.UnstatedDoubler(0.05),
+        };
+        Assert.Equal(0.05, unstatedDoubler.UserDoubleError);
+        Assert.Null(unstatedDoubler.UserTakeError);
+
+        var unstatedTaker = TestRecords.CubeData(userTakerAction: null, unstatedTakerActionError: 0.06);
+        Assert.Equal(unstatedTaker.DoublerActionError(CubeAction.Double), unstatedTaker.UserDoubleError);
+        Assert.Equal(0.06, unstatedTaker.UserTakeError);
 
         Assert.Throws<ArgumentException>(() => TestRecords.CubeData(unstatedDoublerActionError: 0.05));
         Assert.Throws<ArgumentException>(() => TestRecords.CubeData(unstatedTakerActionError: 0.06));
-        var doublerSecond = Assert.Throws<ArgumentException>(() => new CubeDecisionData
-        {
-            AnalysisMode = AnalysisMode.Evaluation, AnalysisLevel = AnalysisLevel.Ply3,
-            NoDoubleEquity = 0.5, DoubleTakeEquity = 0.6, CubelessNoDoubleEquity = 0.4, CubelessDoubleTakeEquity = 0.4,
-            WinPctAfterNoDouble = 0.7, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
-            LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
-            WinPctAfterDoubleTake = 0.7, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
-            LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
-            UnstatedDoublerActionError = 0.05,
-            UserDoublerAction = CubeAction.Double,
-        });
-        Assert.Equal("UserDoublerAction", doublerSecond.ParamName);
     }
 
     [Fact]
-    public void AnUnstatedTakerError_ThenATakerAction_IsRefusedToo_FromCodeAndFromADocument()
+    public void AnUnstatedTakerError_ThenATakerAction_InADocument_IsRefused()
     {
-        // Added after a mutation check: the builder and a written document
-        // both state the action before its unstated-action error, so only
-        // the error's own guard ran. The action's guard is order-independence's
-        // other half — here the error is stated first, in an initializer and
-        // in a document (the reflection path sets members in document order).
-        var takerSecond = Assert.Throws<ArgumentException>(() => new CubeDecisionData
-        {
-            AnalysisMode = AnalysisMode.Evaluation, AnalysisLevel = AnalysisLevel.Ply3,
-            NoDoubleEquity = 0.5, DoubleTakeEquity = 0.6, CubelessNoDoubleEquity = 0.4, CubelessDoubleTakeEquity = 0.4,
-            WinPctAfterNoDouble = 0.7, GammonPctAfterNoDouble = 0, BgPctAfterNoDouble = 0,
-            LoseGammonPctAfterNoDouble = 0, LoseBgPctAfterNoDouble = 0,
-            WinPctAfterDoubleTake = 0.7, GammonPctAfterDoubleTake = 0, BgPctAfterDoubleTake = 0,
-            LoseGammonPctAfterDoubleTake = 0, LoseBgPctAfterDoubleTake = 0,
-            UnstatedTakerActionError = 0.06,
-            UserTakerAction = CubeAction.Take,
-        });
-        Assert.Equal("UserTakerAction", takerSecond.ParamName);
-
+        // Added after a mutation check, when the halves were init setters:
+        // the builder and a written document both stated the action before
+        // its unstated-action error, so only the error's own guard ran.
+        // Rewritten for the recorded cube actions: the serializer's
+        // constructor builds the value from all four, so the order a document
+        // states them in cannot matter — the error stated first still meets
+        // the value's rule, named by the value's own parameter.
         var document = WirePaths.Document(TestRecords.CubeData(userTakerAction: null, unstatedTakerActionError: 0.06));
         document.Remove("UserTakerAction");
         document["UserTakerAction"] = "Take";
         var ex = Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize<CubeDecisionData>(document.ToJsonString(), WirePaths.Reflection));
-        Assert.Equal("UserTakerAction", Assert.IsType<ArgumentException>(ex.InnerException).ParamName);
+        Assert.Equal("unstatedTakerError", Assert.IsType<ArgumentException>(ex.InnerException).ParamName);
     }
 
     // ── The loss probabilities, from the win probabilities ────────

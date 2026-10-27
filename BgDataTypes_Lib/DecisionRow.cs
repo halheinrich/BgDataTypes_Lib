@@ -62,7 +62,20 @@ namespace BgDataTypes_Lib;
 /// through <see cref="BgDataTypesJsonContext"/> alike. Every column but the
 /// nullable ones is <c>required</c>, per the wire rule stated on
 /// <see cref="BgDataTypesJsonContext"/>; each nullable column's documentation
-/// says what <see langword="null"/> means.
+/// says what <see langword="null"/> means. The one exception is
+/// <see cref="TakerResultKind"/>, required and nullable: its
+/// <see langword="null"/> means no double was offered, so a document must
+/// state it, and a row written before the column — which states nothing
+/// about the taker — is refused rather than read as having no taker decision.
+/// </para>
+///
+/// <para>
+/// <b>A cube row carries both decisions</b> (SPEC-filtering §8): the
+/// doubler's, as <see cref="Player"/>, <see cref="Result"/> and
+/// <see cref="Error"/>, and — where a double was offered — the taker's, as
+/// <see cref="Taker"/>, <see cref="TakerResultKind"/> and
+/// <see cref="TakerError"/>, each taken from the record's view
+/// (<see cref="IDecisionFilterData.Taker"/>, <see cref="IDecisionFilterData.TakerResult"/>).
 /// </para>
 /// </summary>
 public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
@@ -119,6 +132,9 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
             Result = view.PlayerResult.Kind,
             Error = view.PlayerResult.TryGetError(out double error) ? error : null,
             Player = record.Player,
+            Taker = view.Taker,
+            TakerResultKind = view.TakerResult?.Kind,
+            TakerError = view.TakerResult is { } taker && taker.TryGetError(out double takerError) ? takerError : null,
             IsStandardStart = record.IsStandardStart,
             Roll = roll,
             AnalysisDepth = depth,
@@ -202,6 +218,35 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     /// the source recorded no name, never empty text.
     /// </summary>
     public string? Player { get; init; }
+
+    /// <summary>
+    /// Name of the player who answers a double
+    /// (<see cref="IDecisionFilterData.Taker"/>): stated only beside a
+    /// <see cref="TakerResultKind"/>, and <see langword="null"/> there too
+    /// when the source recorded no name; never empty text.
+    /// </summary>
+    public string? Taker { get; init; }
+
+    /// <summary>
+    /// Which case the taker's result is (<see cref="IDecisionFilterData.TakerResult"/>):
+    /// <see langword="null"/> where no double was offered — every
+    /// checker-play row, and a cube row whose doubler did not double — and
+    /// otherwise <see cref="PlayerResultKind.Scored"/>,
+    /// <see cref="PlayerResultKind.Unstated"/> or
+    /// <see cref="PlayerResultKind.NotRecorded"/>, never
+    /// <see cref="PlayerResultKind.NotScored"/>. Required though nullable,
+    /// the one such column (see the class summary): a document states it,
+    /// <see langword="null"/> included.
+    /// </summary>
+    public required PlayerResultKind? TakerResultKind { get; init; }
+
+    /// <summary>
+    /// The taker's error, stated exactly when <see cref="TakerResultKind"/>
+    /// is <see cref="PlayerResultKind.Scored"/> (never negative) or
+    /// <see cref="PlayerResultKind.Unstated"/>, as <see cref="Error"/> is for
+    /// the doubler. Otherwise <see langword="null"/>, never 0.
+    /// </summary>
+    public double? TakerError { get; init; }
 
     /// <summary>
     /// The file the decision came from — its bare name with extension, no
@@ -414,6 +459,21 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
         _ => PlayerResult.NotRecorded,
     };
 
+    /// <summary>
+    /// The taker's result, typed: <see cref="TakerResultKind"/> with
+    /// <see cref="TakerError"/>, which a row read from JSON is held to agree
+    /// with; <see langword="null"/> where no double was offered.
+    /// </summary>
+    [JsonIgnore]
+    public PlayerResult? TakerResult => TakerResultKind switch
+    {
+        null => null,
+        PlayerResultKind.NotScored => PlayerResult.NotScored,
+        PlayerResultKind.Scored => PlayerResult.Scored(TakerError!.Value),
+        PlayerResultKind.Unstated => PlayerResult.Unstated(TakerError!.Value),
+        _ => PlayerResult.NotRecorded,
+    };
+
     // -----------------------------------------------------------------------
     //  Read back whole
     // -----------------------------------------------------------------------
@@ -440,16 +500,27 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
                 $"Roll {Roll} is not two die faces.",
             DecisionKind.CheckerPlay when AfterBestBoard is null =>
                 "A checker-play row states the board its best play leaves.",
+            DecisionKind.CheckerPlay when Taker is not null || TakerResultKind is not null || TakerError is not null =>
+                "A checker-play row's taker columns are empty: Taker, TakerResultKind and TakerError.",
             DecisionKind.Cube when Roll is not null || AfterBestBoard is not null || AfterPlayerBoard is not null =>
                 "A cube row's checker-play columns are empty: Roll, AfterBestBoard and AfterPlayerBoard.",
             DecisionKind.Cube when Result == PlayerResultKind.NotScored =>
                 "A cube row's result is never NotScored: a ranking scores checker plays only.",
+            DecisionKind.Cube when TakerResultKind == PlayerResultKind.NotScored =>
+                "A cube row's taker result is never NotScored: a ranking scores checker plays only.",
             _ when (Result is PlayerResultKind.Scored or PlayerResultKind.Unstated) != Error.HasValue =>
                 $"A row's Error is stated exactly when its Result is Scored or Unstated; the Result is {Result}.",
             _ when Result == PlayerResultKind.Scored && !(double.IsFinite(Error!.Value) && Error.Value >= 0.0) =>
                 $"A scored error is a finite number, never negative (got {Error}).",
+            _ when (TakerResultKind is PlayerResultKind.Scored or PlayerResultKind.Unstated) != TakerError.HasValue =>
+                $"A row's TakerError is stated exactly when its TakerResultKind is Scored or Unstated; the TakerResultKind is {TakerResultKind?.ToString() ?? "null"}.",
+            _ when TakerResultKind == PlayerResultKind.Scored && !(double.IsFinite(TakerError!.Value) && TakerError.Value >= 0.0) =>
+                $"A scored taker error is a finite number, never negative (got {TakerError}).",
+            _ when TakerResultKind is null && Taker is not null =>
+                "A row with no taker decision names no taker: Taker is stated only beside a TakerResultKind.",
             _ when !StatedText.Holds(Xgid) => StatedText.Message(nameof(Xgid)),
             _ when !StatedText.Holds(Player) => StatedText.Message(nameof(Player)),
+            _ when !StatedText.Holds(Taker) => StatedText.Message(nameof(Taker)),
             _ when !StatedText.Holds(AnalysisDepth) => StatedText.Message(nameof(AnalysisDepth)),
             _ when !PositionData.IsDecisionPosition(Board) => PositionData.BoardMessage,
             _ => SessionColumnsFault(),

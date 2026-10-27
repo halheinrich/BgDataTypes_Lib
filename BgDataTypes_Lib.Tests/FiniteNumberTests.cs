@@ -66,16 +66,39 @@ public class FiniteNumberTests
 
     private static bool IsNumber(Type type) => type == typeof(double) || type == typeof(double?);
 
+    /// <summary>
+    /// The stored numbers a record holds through a value rather than sets —
+    /// the cube's two analyser errors, members of its recorded cube actions
+    /// (<see cref="CubeDecisionData.Recorded"/>, halheinrich/backgammon#440) —
+    /// each with the value's constructor parameter that names its breach.
+    /// </summary>
+    private static readonly Dictionary<string, string> ThroughRecorded = new()
+    {
+        ["UnstatedDoublerActionError"] = "unstatedDoublerError",
+        ["UnstatedTakerActionError"] = "unstatedTakerError",
+    };
+
+    /// <summary>Whether <paramref name="type"/>'s serializer constructor binds <paramref name="member"/>.</summary>
+    private static bool BoundBySerializer(Type type, string member) =>
+        type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(c => c.IsDefined(typeof(JsonConstructorAttribute)))
+            .SelectMany(c => c.GetParameters())
+            .Any(p => string.Equals(p.Name, member, StringComparison.OrdinalIgnoreCase));
+
     [Fact]
     public void TheStoredNumbers_AreExactlyTheListedOnes_OnEveryRecordType()
     {
-        // A stored member is one the wire carries: public, settable, not
-        // [JsonIgnore]d (a derived number, such as a loss probability or a
-        // cube error, is not stored).
+        // A stored member is one the wire carries: public, not [JsonIgnore]d
+        // (a derived number, such as a loss probability or a cube error, is
+        // not stored), and read from a document — settable, or bound by the
+        // serializer's constructor. Rewritten for the recorded cube actions:
+        // the cube's two analyser errors are get-only now, read through the
+        // constructor that builds the value they belong to.
         foreach (var (type, members) in StoredNumbers)
         {
             string[] found = [.. type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => IsNumber(p.PropertyType) && p.SetMethod is not null
+                .Where(p => IsNumber(p.PropertyType)
+                    && (p.SetMethod is not null || BoundBySerializer(type, p.Name))
                     && p.GetCustomAttribute<JsonIgnoreAttribute>() is null)
                 .Select(p => p.Name)
                 .Order()];
@@ -87,6 +110,18 @@ public class FiniteNumberTests
     [MemberData(nameof(Breaches))]
     public void ANonFiniteNumber_IsRefusedFromCode_NamingTheMember(string typeName, string member, double value)
     {
+        // Rewritten for the recorded cube actions: code states the cube's
+        // analyser errors through the value, whose constructor refuses the
+        // breach naming its own parameter.
+        if (ThroughRecorded.TryGetValue(member, out string? parameter))
+        {
+            bool taker = member == "UnstatedTakerActionError";
+            var refused = Assert.Throws<ArgumentOutOfRangeException>(() => new RecordedCubeActions(
+                taker ? CubeAction.Double : null, null, taker ? null : value, taker ? value : null));
+            Assert.Equal(parameter, refused.ParamName);
+            return;
+        }
+
         var instance = Valid(TypeNamed(typeName));
         var property = instance.GetType().GetProperty(member)!;
 
@@ -99,6 +134,8 @@ public class FiniteNumberTests
     [MemberData(nameof(Breaches))]
     public void ANonFiniteNumber_IsRefusedFromADocument_AsAJsonException_BothPaths(string typeName, string member, double value)
     {
+        // Rewritten for the recorded cube actions: the cube's analyser errors
+        // reach the value's constructor, whose parameter names the breach.
         var type = TypeNamed(typeName);
         var document = JsonNode.Parse(JsonSerializer.Serialize(Valid(type), type, WirePaths.Context))!.AsObject();
         document[member] = Token(value);
@@ -107,7 +144,7 @@ public class FiniteNumberTests
         {
             var ex = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(document.ToJsonString(), type, options));
             var fault = Assert.IsType<ArgumentOutOfRangeException>(ex.InnerException);
-            Assert.Equal(member, fault.ParamName);
+            Assert.Equal(ThroughRecorded.GetValueOrDefault(member, member), fault.ParamName);
         }
     }
 
