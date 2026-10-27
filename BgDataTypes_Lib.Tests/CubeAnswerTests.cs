@@ -162,10 +162,10 @@ public class CubeAnswerTests
         Assert.Null(typeof(CubeAnswer).Assembly.GetType("BgDataTypes_Lib.CubeDecisionPair"));
     }
 
-    // A recorded no double with a pass reads Too good only where gammons are
-    // possible: its label is the decision's, never the actions'.
+    // The answer NoDoublePass reads Too good only where gammons are possible:
+    // its label is the decision's, never the actions'.
     [Fact]
-    public void TwoRecordedActions_ReadTheirLabelFromTheDecision()
+    public void NoDoublePass_ReadsItsLabelFromTheDecision()
     {
         var answer = CubeAnswerExtensions.Of(CubeAction.NoDouble, CubeAction.Pass);
 

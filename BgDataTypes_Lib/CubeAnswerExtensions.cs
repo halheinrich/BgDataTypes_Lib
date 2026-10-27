@@ -80,13 +80,16 @@ public static class CubeAnswerExtensions
     /// <remarks>
     /// The one way two actions become an answer: the truth is read off the
     /// two best actions this way (<see cref="CubeDecisionData.BestAnswer"/>),
-    /// and a consumer holding two recorded actions forms the answer this way
-    /// too, then reads its label through <see cref="CubeDecision.ClaimOf"/> —
-    /// so a recorded no double with a pass reads Too good only where gammons
-    /// are possible. It replaces the action pair, <c>CubeDecisionPair</c>,
-    /// retired as a second statement of the same four-valued domain
-    /// (halheinrich/backgammon#326). Which recorded halves are trustworthy is
-    /// the caller's to decide before it asks.
+    /// and a consumer holding a record's two actions forms its answer this
+    /// way too, then reads its label through <see cref="CubeDecision.ClaimOf"/>.
+    /// The mapping stays four-way because it maps answers, and
+    /// <see cref="CubeAnswer.NoDoublePass"/> is one (the quiz's Too good, or
+    /// No double / Pass, as the decision reads it); the recorded actions are a
+    /// narrower domain, already validated: <see cref="RecordedCubeActions"/>
+    /// admits a taker half only under a stated <see cref="CubeAction.Double"/>,
+    /// so a record's pair is a double with its response. It replaces the
+    /// action pair, <c>CubeDecisionPair</c>, retired as a second statement of
+    /// the same four-valued domain (halheinrich/backgammon#326).
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="doubler"/> is not

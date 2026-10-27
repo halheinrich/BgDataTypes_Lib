@@ -1436,10 +1436,10 @@ Design points a maintainer needs before touching it:
   `UserTakerAction`) forms the answer this way too, then reads its label
   through `ClaimOf`. A record holds a response only under a stated `Double`
   (`RecordedCubeActions`), so a recorded pair is a double with its
-  response; no record holds a no double with a pass. Which recorded halves
-  are trustworthy stays the caller's to decide. It replaced `CubeDecisionPair`, the four-valued action
-  pair, whose `TooGood` and `IsTooGood` stated the retired rule that no
-  double with a pass is Too good: two types encoded one domain
+  response; no record holds a no double with a pass. It replaced
+  `CubeDecisionPair`, the four-valued action pair, whose `TooGood` and
+  `IsTooGood` stated the retired rule that no double with a pass is Too
+  good: two types encoded one domain
   (halheinrich/backgammon#326, the umbrella's review of step 1).
 - **The truth is the same type, from the equities alone.**
   `CubeDecisionData.BestAnswer` is the answer whose projections are
