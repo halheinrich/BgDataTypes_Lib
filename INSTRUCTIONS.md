@@ -93,7 +93,10 @@ and `Directory.Packages.props` (Central Package Management — no inline
   view implemented by a record's view and by `DecisionRow`, carrying the
   score context a filter needs as the decision's `Session` (a money
   session with its Jacoby and beaver rules, cube limit and scores, or a
-  match with its length, away scores and Crawford flag);
+  match with its length, away scores and Crawford flag), and a cube
+  record's two decisions: the doubler's (`Player`, `PlayerResult`) and,
+  where a double was offered, the taker's (`Taker`, `TakerResult`;
+  SPEC-filtering §8, halheinrich/backgammon#440);
   `IGameInfo` and `IMatchInfo`, implemented by producers so filter layers
   never reference a producer's concrete types, stating money versus match
   as the kind of their `GameStanding` and `SessionTerms`.
@@ -284,10 +287,14 @@ Design points:
   `DescriptiveData.OnRollName`, `OpponentName`, `Title`, `Date`, `Event`,
   `IsStandardStart`, `Comment`; `PlayCandidate.RolloutTrials`,
   `BookEdition`, `UnrecognizedLevelCode` and its five stored probabilities; `DecisionRow.Error`, `Player`,
-  `IsStandardStart`, `Roll`, `AnalysisDepth`, each session column
-  (`MatchLength`, `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, `IsJacoby`,
-  `IsBeaver`, `CubeLimit`, `OnRollScore`, `OpponentScore`: the other session
-  kind's are empty) and both after-boards. Every other
+  `Taker`, `TakerError`, `IsStandardStart`, `Roll`, `AnalysisDepth`, each
+  session column (`MatchLength`, `OnRollNeeds`, `OpponentNeeds`,
+  `IsCrawford`, `IsJacoby`, `IsBeaver`, `CubeLimit`, `OnRollScore`,
+  `OpponentScore`: the other session kind's are empty) and both
+  after-boards. The one member that is both required and nullable is
+  `DecisionRow.TakerResultKind` (see "DecisionRow"): its `null` means no
+  double was offered, so a document must state it; the absence walk names
+  it as the one exception, so a second fails. Every other
   serialized member is required, each record's, each set of terms' and
   each standing's `Kind` included — through `[JsonRequired]`, since the type
   states it and code never does — and so is each of a session's members,
@@ -362,7 +369,7 @@ Every decision holds the two shared categories; each kind holds its own
 | `MoneySession` | a money session's `PositionData.Session` | `Terms` (a `MoneyTerms`: `IsJacoby`, `IsBeaver`, `CubeLimit`, a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
 | `DescriptiveData` | both kinds | `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it), and a match's length is the match session's |
 | `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `UserPlay?`, and for a ranking `RankedBy(ranking)` — the order, the best play, each candidate's error and whether it is scored, the player's error (see "The ranking") |
-| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each only with its half's action unstated); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?`, each cube action's `ActionEquity(action)`, the best actions and their errors, and the truth among the four cube answers, `BestAnswer` (what an answer reads as and costs is the record's: see "Cube answers and their costs") |
+| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, and `Recorded`, the recorded cube actions as one `RecordedCubeActions` value — on the wire as `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each error only with its half's action unstated; a taker half only under a stated `Double`); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?`, each cube action's `ActionEquity(action)`, the best actions and their errors, and the truth among the four cube answers, `BestAnswer` (what an answer reads as and costs is the record's: see "Cube answers and their costs") |
 
 **No stored copy of a derivable value** (the umbrella's verdict on the
 records leg of `halheinrich/backgammon#273`). Every member the others
@@ -482,7 +489,8 @@ asked for it exhaustively). Derived, never stored:
 | `CubeDecisionData.BestAnswer` | the two halves' best actions: the cube answer whose projections they are (see "Cube answers and their costs") |
 | `CubeDecision.GammonsPossible` | the position's board, cube and owner and its session's kind, rules and needs (see "Cube answers and their costs") |
 | `CubeDecision.ClaimOf(answer)`, `CostOf(answer)` | the answer, `GammonsPossible`, and for the cost the equities through `ActionEquity` |
-| `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus: 16,932 of 16,959 doubler errors within 1e-5, the rest within 1e-4; all 830 taker errors equal) |
+| `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus: 16,932 of 16,959 doubler errors within 1e-5, the rest within 1e-4; all 830 taker errors equal). A take error exists only under a stated `Double`, since a taker half does (`RecordedCubeActions`) |
+| `IDecisionFilterData.Taker`, `TakerResult` (a cube record's view, and the row's columns from it) | a stated `Double`: the opponent's name (`DescriptiveData.OpponentName`), and the response scored with its `TakerActionError`, the stored unstated take error, or not recorded where the record holds neither (a double answered by resigning); `null` for a checker play and wherever no double was offered (SPEC-filtering §8) |
 | `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures matched within 9.5e-7 (273,592 candidates) and 2.4e-7 (17,158 cube decisions, each half) |
 | `BgDecisionData.Xgid` | the board, the cube and its owner, the session (its kind's facts) and a checker play's roll, by the format stated on the internal `XgidEncoder` (see "The XGID, derived") |
 | earlier: `Game`, `MoveNumber` (the `Id`), the after-boards (the play rule), `Notation` (the play), `Dice` (the roll), `MatchScore` | — |
@@ -517,7 +525,10 @@ Stored, as source data:
   `UserTakerAction` — and **the analyser's error where the record does not
   state what it scores**: `UnlistedPlayError`,
   `UnstatedDoublerActionError`, `UnstatedTakerActionError`, each refused
-  beside what would determine it.
+  beside what would determine it. The cube's four are one stored value,
+  `CubeDecisionData.Recorded` (`RecordedCubeActions`), which the four wire
+  members read through; its constructor also refuses a taker half without
+  a stated `Double` (SPEC-scoring §3).
 - **The source file's facts** — the roll, the candidates, the board, the
   scores, the cube, Crawford, Jacoby, the names, title, date, event,
   standard start, comment and flag.
@@ -657,9 +668,17 @@ build it; `Scored` refuses a negative or non-finite error. The filter's
 scored and unstated moves above x, never a move not scored, never a
 decision with nothing recorded. `RankedPlays.PlayerResult` is a checker
 play's under a ranking; `IDecisionFilterData.PlayerResult` is the view's —
-for a cube decision, the doubler's result or, when the record holds none,
-the taker's (as `UserDoubleError ?? UserTakeError` reads), never
-`NotScored`. The old `RankedPlays.UserPlayError` and
+for a cube decision, the doubler's half alone (its stated action scored,
+the analyser's error for an unstated one, or not recorded), never
+`NotScored`. The taker's half is its own member,
+`IDecisionFilterData.TakerResult` (`PlayerResult?`): `null` where no double
+was offered, otherwise the response scored, the analyser's take error, or
+`NotRecorded` for a double answered by resigning (Hal, 2026-10-26), never
+`NotScored`; `Taker` names the opponent beside it (SPEC-filtering §8,
+halheinrich/backgammon#440). The view's former fallback to the taker's
+result when the doubler's was absent is gone: no record can hold a taker
+half without a stated double, so it had nothing left to read. Which half a
+facet reads is XgFilter_Lib's. The old `RankedPlays.UserPlayError` and
 `IDecisionFilterData.FilterError` are gone, so a stale use fails to
 compile.
 
@@ -1221,13 +1240,29 @@ action record work):
 - **`UserTakerAction`** (`CubeAction?`) — the taker action the opponent
   played, `Take` or `Pass`. Present only when a double was offered *and* a
   response recorded: in an undoubled game no taker decision exists, so
-  this stays null even when `UserDoublerAction` is recorded.
+  this is null unless `UserDoublerAction` is `Double`.
 
-Both halves are guarded on `init` to their own action domain, the halves
-`CubeAnswerExtensions.Of` accepts — a cross-half value throws
-`ArgumentOutOfRangeException`. Cross-half *consistency* (a recorded taker
-response implies the doubler doubled) is a producer contract, not guarded
-here: init-only halves are set independently. The fields exist because the
+**The recorded cube actions are one value** (halheinrich/backgammon#440):
+`CubeDecisionData.Recorded`, a `RecordedCubeActions` readonly struct
+holding the two actions and the two unstated errors. The four wire members
+are get-only pass-throughs to it, with their names and wire bytes
+unchanged. Its one public constructor takes the four and refuses an action
+outside its half (`ArgumentOutOfRangeException`; the halves
+`CubeAnswerExtensions.Of` accepts), a non-finite error (the
+`FiniteNumber` rule, also an `ArgumentOutOfRangeException`; no sign rule),
+a stated action beside its own half's unstated error (`ArgumentException`)
+and **a taker half — a response or the analyser's take error — unless the
+doubler's action is `Double`** (`ArgumentException`): a take or pass
+without an offered double is invalid data (SPEC-scoring §3, 2026-10-25).
+That rule spans the halves, which init-only members set one at a time
+could not hold, hence one value. Six factories name the six valid shapes
+and build through the constructor: `None` (= `default`), `NoDouble`,
+`DoubleUnanswered` (a double answered by resigning), `DoubleAnswered(takerAction)`,
+`DoubleWithUnstatedResponse(unstatedTakerError)`,
+`UnstatedDoubler(unstatedDoublerError)`. A document reaches the value
+through the serializer's constructor, which binds the four (see "The
+decision kinds"), so it is held to the rule whatever its member order. The fields
+exist because the
 played action is source data: it cannot be recovered from an error — a
 zero error does not identify the action when the two cube equities tie.
 It is the other way round: the error of a stated action is derived from
@@ -1399,9 +1434,10 @@ Design points a maintainer needs before touching it:
   is checked first). The truth is read off the best actions this way, and a
   consumer holding two recorded actions (`UserDoublerAction`,
   `UserTakerAction`) forms the answer this way too, then reads its label
-  through `ClaimOf`, so a recorded no double with a pass reads Too good only
-  where gammons are possible. Which recorded halves are trustworthy stays the
-  caller's to decide. It replaced `CubeDecisionPair`, the four-valued action
+  through `ClaimOf`. A record holds a response only under a stated `Double`
+  (`RecordedCubeActions`), so a recorded pair is a double with its
+  response; no record holds a no double with a pass. Which recorded halves
+  are trustworthy stays the caller's to decide. It replaced `CubeDecisionPair`, the four-valued action
   pair, whose `TooGood` and `IsTooGood` stated the retired rule that no
   double with a pass is Too good: two types encoded one domain
   (halheinrich/backgammon#326, the umbrella's review of step 1).
@@ -1634,7 +1670,7 @@ Design points a maintainer needs before touching it:
   to a rule (`CheckerPlayDecision`, `CubeDecision`,
   `CheckerPlayDecisionData`, `CubeDecisionData`, `PlayCandidate`,
   `PositionData`, `DescriptiveData`, the two kinds each of session, terms
-  and standing) has an internal one-parameter `[JsonConstructor]`
+  and standing) has an internal `[JsonConstructor]`
   beside the parameterless one code uses (public, but internal for the two
   sessions, which code outside the library builds through `Session.Create`
   alone). It marks the instance as read, and each guarded setter rethrows
@@ -1643,7 +1679,16 @@ Design points a maintainer needs before touching it:
   bind one: a kind binds `Kind`, which the base holds to the type — a
   session binds its `Terms`, which carry its kind — and a category binds
   its first member for that reason only. The bound member stays required, and the absence
-  walk fails if it ever stops being so. Measured on .NET 10 before relying
+  walk fails if it ever stops being so. The one exception is
+  `CubeDecisionData`, whose constructor binds the four members it
+  validates together — `UserDoublerAction`, `UserTakerAction`,
+  `UnstatedDoublerActionError`, `UnstatedTakerActionError`, each nullable,
+  an absent one binding `null` — and builds them into `Recorded`, refusing
+  a breach through `DocumentRefusal`: the rule that a taker half needs a
+  stated `Double` spans the four, so no setter run one at a time could
+  hold it in every document order (halheinrich/backgammon#440). Both read
+  paths, the generated context and reflection, construct through it.
+  Measured on .NET 10 before relying
   on it: a generated context sets init and `required` members in an
   object initializer *before* `IJsonOnDeserializing` runs, so a callback
   flag cannot work, and a full-member serializer constructor would need
@@ -1696,8 +1741,8 @@ Design points a maintainer needs before touching it:
   and error, which a ranking decides, so the base is not itself a view:
   `ViewFor(ranking)` builds one (internal `DecisionView`), deriving per kind
   through `Match` — a checker play's best candidate under the ranking and
-  its `PlayerResult`; a cube's analysis and its result, the doubler's or
-  failing that the taker's. The checker play's own filter members — `Dice` and the
+  its `PlayerResult`; a cube's analysis, the doubler's result, and where a
+  double was offered the taker's name and result. The checker play's own filter members — `Dice` and the
   after-boards — are `null` in a cube's view and on neither the base's nor
   the cube's surface; `CheckerPlayDecision` exposes them (the best
   after-board for a ranking). `Game` and `MoveNumber` derive from `Id` (see
@@ -1978,6 +2023,26 @@ refused either way. `Game`, `MoveNumber` derive from `Id`, and
 (`halheinrich/backgammon#124`). `Roll` is the checker play's dice in rolled
 order as a two-digit integer; `Dice` is its canonical form, `[JsonIgnore]`d
 like `MatchScore`.
+
+**A cube row carries both decisions** (SPEC-filtering §8,
+halheinrich/backgammon#440): the doubler's as `Player`, `Result` and
+`Error`, and the taker's as three columns after `Player`, taken from the
+view as `Result` and `Error` are — `Taker` (`string?`, the opponent's
+name), `TakerResultKind` (`PlayerResultKind?`) and `TakerError`
+(`double?`). `TakerResult` is the two typed, `[JsonIgnore]`d, as
+`PlayerResult` is `Result` with `Error`; the column is `TakerResultKind`
+because the row implements the view's `TakerResult` (`PlayerResult?`)
+under that name. `TakerResultKind` is **the one required nullable
+column**: `null` means no double was offered, so a nullable default would
+read every row written before the column as "no double offered"; required,
+a document must state it, `null` included. Read back: a checker-play row's
+three are empty; a cube row's `TakerResultKind` is never `NotScored`;
+`TakerError` is stated exactly when `TakerResultKind` is `Scored` or
+`Unstated`, finite and non-negative when `Scored`; a row whose
+`TakerResultKind` is `null` names no `Taker`; `Taker` holds stated text.
+**A breaking read for row documents:** a row written before these columns
+is refused for its missing `TakerResultKind`. No row corpus is in tree and
+no production reader reads rows, so no migration machinery exists.
 
 **It carries the session's kind the same way** (halheinrich/backgammon#273):
 `SessionKind`, a required column, then one column per fact of each kind —
@@ -2272,12 +2337,14 @@ public interface IDecisionFilterData             // a view built for one ranking
     PlayRanking Ranking { get; }                  // the ranking its best and error members are derived under
     DecisionKind Kind { get; }                    // CheckerPlay or Cube (replaces IsCube)
     string? Player { get; }                         // null when no name was recorded
+    string? Taker { get; }                        // the opponent, where a double was offered; null otherwise or unnamed
     Session Session { get; }                      // money (its Jacoby rule) or a match (length, away scores, Crawford)
     int? MoveNumber { get; }                      // 1-based within the game; null for a standalone position
     bool? IsStandardStart { get; }                // false for non-standard openings; null for a standalone position
     AnalysisMode AnalysisMode { get; }            // cube analysis for cubes, the ranking's best play for checkers
     AnalysisLevel AnalysisLevel { get; }          // level axis of the same analysis AnalysisMode reports
-    PlayerResult PlayerResult { get; }            // under Ranking: NotRecorded, NotScored, Scored(e), Unstated(e)
+    PlayerResult PlayerResult { get; }            // under Ranking: NotRecorded, NotScored, Scored(e), Unstated(e); a cube's doubler half alone
+    PlayerResult? TakerResult { get; }            // where a double was offered: Scored(e), Unstated(e), NotRecorded; else null
     BoardPosition Board { get; }                  // on-roll frame, see Mop layout
 
     // The checker play's own members: null for a cube decision.
@@ -2476,6 +2543,25 @@ public readonly struct PlayerResult : IEquatable<PlayerResult>   // see "The pla
                                   Func<double, TResult> scored, Func<double, TResult> unstated);
 }
 
+public readonly struct RecordedCubeActions : IEquatable<RecordedCubeActions>  // see "Played cube actions on CubeDecisionData"
+{
+    public RecordedCubeActions(CubeAction? doublerAction, CubeAction? takerAction,
+        double? unstatedDoublerError, double? unstatedTakerError);  // refuses: an action outside its half, a non-finite
+                                                                    // error, an action beside its half's error, a taker
+                                                                    // half unless doublerAction is Double
+    public CubeAction? DoublerAction { get; }
+    public CubeAction? TakerAction { get; }
+    public double? UnstatedDoublerError { get; }
+    public double? UnstatedTakerError { get; }
+    public static RecordedCubeActions None { get; }             // = default
+    public static RecordedCubeActions NoDouble { get; }
+    public static RecordedCubeActions DoubleUnanswered { get; } // a double answered by resigning
+    public static RecordedCubeActions DoubleAnswered(CubeAction takerAction);
+    public static RecordedCubeActions DoubleWithUnstatedResponse(double unstatedTakerError);
+    public static RecordedCubeActions UnstatedDoubler(double unstatedDoublerError);
+    // value equality, == and !=; ToString names the shape: "DoubleAnswered Take"
+}
+
 public sealed class RankedPlays : IReadOnlyList<RankedPlay>   // the ranking's order; no public constructor
 {
     public PlayRanking Ranking { get; }
@@ -2507,16 +2593,19 @@ public sealed class CubeDecisionData           // unmapped members refused
     [JsonIgnore] public string? DepthAbbreviation { get; } //   "B4_12960"
     [JsonIgnore] public int? DepthRank { get; }          // derived from the mode and level; null = not recorded
 
-    // Played cube actions — game facts, guarded per half on init (see
-    // "Played cube actions on CubeDecisionData"); serialized; null = not
-    // recorded.
-    public CubeAction? UserDoublerAction { get; init; }  // NoDouble/Double; wrong half throws
-    public CubeAction? UserTakerAction   { get; init; }  // Take/Pass; null in undoubled games
+    // Played cube actions — game facts, one validated value (see "Played
+    // cube actions on CubeDecisionData"); its four members are the wire;
+    // null = not recorded.
+    internal CubeDecisionData(CubeAction? userDoublerAction, CubeAction? userTakerAction,
+        double? unstatedDoublerActionError, double? unstatedTakerActionError);  // [JsonConstructor]: builds Recorded
+    [JsonIgnore] public RecordedCubeActions Recorded { get; init; }  // default None
+    public CubeAction? UserDoublerAction { get; }        // Recorded.DoublerAction: NoDouble/Double
+    public CubeAction? UserTakerAction   { get; }        // Recorded.TakerAction: Take/Pass; only under Double
 
     // The user's errors: a stated action's is derived; the analyser's for an
     // unstated action is the one stored, refused beside a stated action.
-    public double? UnstatedDoublerActionError { get; init; }
-    public double? UnstatedTakerActionError { get; init; }
+    public double? UnstatedDoublerActionError { get; }   // Recorded.UnstatedDoublerError
+    public double? UnstatedTakerActionError { get; }     // Recorded.UnstatedTakerError; only under Double
     [JsonIgnore] public double? UserDoubleError { get; }  // DoublerActionError(UserDoublerAction) ?? unstated
     [JsonIgnore] public double? UserTakeError { get; }    // TakerActionError(UserTakerAction) ?? unstated
 
@@ -2552,6 +2641,10 @@ public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
     public double? Error { get; init; }                       // the result's error; stated exactly for Scored and Unstated
     public required PlayerResultKind Result { get; init; }    // the result's case
     [JsonIgnore] public PlayerResult PlayerResult { get; }    // Result with Error, typed
+    public string? Taker { get; init; }                       // only beside a TakerResultKind
+    public required PlayerResultKind? TakerResultKind { get; init; }  // required AND nullable: null = no double offered
+    public double? TakerError { get; init; }                  // stated exactly for Scored and Unstated
+    [JsonIgnore] public PlayerResult? TakerResult { get; }    // TakerResultKind with TakerError, typed
     public bool? IsStandardStart { get; init; }               // null for a standalone position
     public int? Roll { get; init; }                           // rolled dice, e.g. 13; null for a cube
     public required BoardPosition Board { get; init; }        // on-roll frame
@@ -3291,12 +3384,17 @@ measure" is not a valid comparison on this hardware.
   1)` or a pass constant in a consumer creates a second source of the
   calculation the errors, the truth and the costs derive from, and inside
   this library the constant has one reader, `ActionEquity`.
-- **`UserDoublerAction` / `UserTakerAction`: half-guarded on init,
-  cross-half consistency is NOT guarded.** Each rejects the other half's
-  actions with `ArgumentOutOfRangeException` at `init`, but "a recorded
-  taker response implies the doubler doubled" is a producer contract —
-  init-only halves are set independently, so nothing stops constructing
-  `(NoDouble, Take)`. Null means "not recorded", not "declined": a null
+- **`UserDoublerAction` / `UserTakerAction`: one value, cross-half
+  consistency guarded.** They read through `CubeDecisionData.Recorded`
+  (`RecordedCubeActions`), whose constructor rejects each half's wrong
+  actions with `ArgumentOutOfRangeException` and a taker half — a response
+  or the analyser's take error — beside a doubler action that is not
+  `Double` with `ArgumentException`, from code and from a document alike
+  (halheinrich/backgammon#440; until then it was a producer contract, and
+  `(NoDouble, Take)` could be built). A test that overrides
+  `TestRecords.CubeData`'s `userDoublerAction` keeps the builder's default
+  `Take` unless it says otherwise, and is refused. Null means "not
+  recorded", not "declined": a null
   `UserTakerAction` alongside a recorded `NoDouble` is the normal
   undoubled-game state — no taker decision ever existed — not missing
   data. And they are *actions, never claims* —
