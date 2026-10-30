@@ -5,6 +5,13 @@
 > Mission & principles: [`../VISION.md`](../VISION.md)
 > Open work: the [tracker](https://github.com/halheinrich/backgammon/issues), label `BgDataTypes_Lib`.
 
+## What it is for
+
+The shared data layer every other in-tree library rests on: the decision
+record a producer builds and every consumer reads, its flat row, the board
+and play primitives, and the JSON wire contract they share. The charter, and
+what stays out of it, is in the umbrella's `INSTRUCTIONS.md`.
+
 ## Stack
 
 C# / .NET 10 / Class Library / xUnit / BenchmarkDotNet. Pure data types — no parsing, no rendering, no I/O beyond `System.Text.Json` serialization.
@@ -12,6 +19,18 @@ C# / .NET 10 / Class Library / xUnit / BenchmarkDotNet. Pure data types — no p
 ## Solution
 
 `D:\Users\Hal\Documents\Visual Studio 2026\Projects\backgammon\BgDataTypes_Lib\BgDataTypes_Lib.slnx`
+
+From this directory:
+
+```bash
+dotnet build BgDataTypes_Lib.slnx
+```
+
+```bash
+dotnet test BgDataTypes_Lib.slnx
+```
+
+The benchmarks run on demand, never as part of the suite (see Benchmarks).
 
 ## Repo
 
@@ -170,9 +189,8 @@ test-support project" under Architecture.
 behaviour area of a type (`ProblemKeyTests`, `BoardStateTests`,
 `PipCountTests`, `RaceTests`, the `*SerializationTests` pair, …). Fixtures
 are constructed in code — pure data types need no corpus, so no test reads
-the umbrella `TestData/` (the one that did, `TooGoodCorpusExerciseTests`, was
-retired on halheinrich/backgammon#273; the evidence for the cube rules and
-its owners are under "Cube answers and their costs").
+the umbrella `TestData/` (the evidence for the cube rules and its owners are
+under "Cube answers and their costs").
 
 Every pin that says a path allocates nothing measures through
 `AllocationProbe`, in the test-support project, so this suite's pins and
@@ -204,18 +222,15 @@ the reflection path (pinned by `BgDataTypesJsonContextTests`), every
 bundled converter honored. Its `[JsonSerializable]` roots are the wire
 units — the document roots (`BgDecisionData`, `DecisionRow`), the two
 header types a producer's serialized header embeds (`SessionTerms`,
-`GameStanding`), and the converter-bearing token types (`Play`, `Move`,
+`GameStanding`), and the converter-bearing token types (`Play`,
 `DecisionId`, `ProblemKey`, `DiceRoll`, `BoardPosition`, every enum a
 document or a producer's header holds); composite parts ride
 the generator's graph walk. `CubeAnswer` and `CubeClaim` are not roots: no
-document in the umbrella embeds either, so neither is wire surface.
-`CubeClaim` was registered ahead of a first embedding document that never
-came, and halheinrich/backgammon#326 retired that registration after a
-search of every member's contexts found nothing that depended on it but
-this repo's own pins. Each still bundles the strict converter, so the
-first document that holds one reaches it through the graph walk with its
-token already strict; `Context_HoldsNeitherTheCubeAnswerNorTheClaim` fails
-at that moment, which is when to declare it. Converters stop that walk, so what lies
+document in the umbrella embeds either, so neither is wire surface. Each
+still bundles the strict converter, so the first document that holds one
+reaches it through the graph walk with its token already strict;
+`Context_HoldsNeitherTheCubeAnswerNorTheClaim` fails at that moment, which
+is when to declare it. Converters stop that walk, so what lies
 past them is declared explicitly and resolved through the active options
 at runtime: `Move` (past `Play`'s converter), the two decision kinds
 `CheckerPlayDecision` and `CubeDecision` (past
@@ -284,56 +299,49 @@ Design points:
   its pair is constructor-bound, where `required` cannot reach, so it
   carries `[property: JsonRequired]` (an absent `ToPt` would otherwise read
   as 0, a bear-off).
-- **Why the paths now agree.** The divergence halheinrich/backgammon#222
-  found — the generated creator dropping a property initializer the
-  reflection path honoured — has nothing left to act on: a required member
-  has no initializer, and a nullable one defaults to `null` on both.
-- **The classification, member by member.** Nullable (absent means
-  something): `CheckerPlayDecisionData.UserPlayIndex`
-  and `UnlistedPlayError`; `CubeDecisionData.UserDoublerAction`,
-  `UserTakerAction`, `UnstatedDoublerActionError`,
-  `UnstatedTakerActionError`, `RolloutTrials`, `BookEdition`,
-  `UnrecognizedLevelCode`;
-  `DescriptiveData.OnRollName`, `OpponentName`, `Title`, `Date`, `Event`,
-  `IsStandardStart`, `Comment`; `PlayCandidate.RolloutTrials`,
-  `BookEdition`, `UnrecognizedLevelCode` and its five stored probabilities; `DecisionRow.Error`, `Player`,
-  `Taker`, `TakerError`, `IsStandardStart`, `Roll`, `AnalysisDepth`, each
-  session column (`MatchLength`, `OnRollNeeds`, `OpponentNeeds`,
-  `IsCrawford`, `IsJacoby`, `IsBeaver`, `CubeLimit`, `OnRollScore`,
-  `OpponentScore`: the other session kind's are empty) and both
-  after-boards. The one member that is both required and nullable is
-  `DecisionRow.TakerResultKind` (see "DecisionRow"): its `null` means no
-  double was offered, so a document must state it; the absence walk names
-  it as the one exception, so a second fails. Every other
-  serialized member is required, each record's, each set of terms' and
-  each standing's `Kind` included — through `[JsonRequired]`, since the type
-  states it and code never does — and so is each of a session's members,
-  through `[JsonRequired]` too: their setters are internal, since code
-  outside the library builds a session through `Session.Create` alone. A
-  session's facts are all required: a money session's Jacoby rule has no
-  "unknown" (the `PositionData.IsJacoby?` it replaced did).
-  `WireAbsenceTests` walks every member of every type of the wire graph,
-  taken from the context's own metadata through each kind's contract and
-  each session kind's, and pins both halves of the rule on both paths,
-  plus that every member is exactly one kind. Its completeness check,
-  `TheWalk_ReachesEveryTypeOfTheGraph`, fails when the walk stops reaching
-  a type of the graph or reaches one it does not list, so a member added to
-  any type the walk reaches is a new case without an edit. A nullable member's absence reads exactly as its explicit
-  `null`: as `null`, or refused when `null` breaks a rule of the decision's
-  kind (a checker row states its roll).
+- **Why the paths agree.** The generated creator for every init-only type
+  in the wire graph is one object initializer over an argument array
+  (`ObjectWithParameterizedConstructorCreator`), and an absent member
+  arrives there as `default(T)` where the reflection path keeps an
+  initializer (measured 2026-09-14: `{"Id":"x"}` read with null halves
+  through the context). halheinrich/backgammon#222 left that nothing to
+  act on: a required member has no initializer and is refused absent on
+  both paths before the creator runs, and a nullable one defaults to `null`
+  on both.
+- **The classification is the members' own.** Each nullable member's doc
+  says what `null` means, and `WireAbsenceTests` walks every member of every
+  type of the wire graph, taken from the context's own metadata through each
+  kind's contract and each session kind's, and pins both halves of the rule
+  on both paths, plus that every member is exactly one kind. Its
+  completeness check, `TheWalk_ReachesEveryTypeOfTheGraph`, fails when the
+  walk stops reaching a type of the graph or reaches one it does not list,
+  so a member added to any type the walk reaches is a new case without an
+  edit. Three shapes are worth knowing:
+  - The one member both required and nullable is
+    `DecisionRow.TakerResultKind` (see "DecisionRow"): its `null` means no
+    double was offered, so a document must state it; the walk names it as
+    the one exception, so a second fails.
+  - Each record's, each set of terms' and each standing's `Kind` is
+    required through `[JsonRequired]`, since the type states it and code
+    never does, and so is each of a session's members: their setters are
+    internal, since code outside the library builds a session through
+    `Session.Create` alone.
+  - A session's facts are all required: a money session's Jacoby rule has
+    no "unknown".
+
+  A nullable member's absence reads exactly as its explicit `null`: as
+  `null`, or refused when `null` breaks a rule of the decision's kind (a
+  checker row states its roll).
 - **An explicit `null` for a member that is not nullable is a
   `JsonException`**, on both paths and whatever the caller's options. A
   value-type member's `null` the serializer refuses itself; a reference
   member's the type refuses — its init guard's `ArgumentNullException`,
   which a document gets as a `JsonException` (see "The decision kinds" for
-  how a type tells a document from code). The `Xgid` guard was the one
-  missing then: a null XGID used to be stored (the XGID is derived now, so
-  no record states one). `RespectNullableAnnotations`
-  (.NET 9) was measured on .NET 10 before deciding (2026-09-25): set, it
-  refuses such a `null` on both paths, but it is off by default and on the
-  reflection path it is the caller's option, so nothing here depends on it
-  and the context does not set it. `WireAbsenceTests` sets `null` on every
-  member that is not nullable, on both paths, with the option off and on.
+  how a type tells a document from code). Nothing here depends on
+  `RespectNullableAnnotations`, and the context does not set it (what was
+  measured, on .NET 10, is on the context's doc). `WireAbsenceTests` sets
+  `null` on every member that is not nullable, on both paths, with the
+  option off and on.
 - **`Unknown` is a value, not an absence.** `AnalysisMode`/`AnalysisLevel`
   (on candidates, cube analyses and rows) are required: "not recorded" is
   spelled `Unknown` by the producer. Making them nullable would give "not
@@ -370,16 +378,16 @@ what a board is compared and stored as.
 ### Data categories
 
 Every decision holds the two shared categories; each kind holds its own
-`Decision` category (see "The decision kinds"):
+`Decision` category (see "The decision kinds"). This is the map; each type's
+members and rules are on its XML doc.
 
-| Type | Held by | Fields |
+| Type | Held by | What it holds |
 |---|---|---|
-| `PositionData` | both kinds | `Mop` (a checker of each side on the board or the bar), `CubeSize` (a positive power of two, never above a money session's `CubeLimit`), `CubeOwner` (a defined owner), `Session` (a `MoneySession` or a `MatchSession`: see "Money and match: the session kinds"); derived `OnRollPipCount`, `OpponentPipCount` (the board's, by `BoardState`'s one pip rule) |
-| `MatchSession` | a match's `PositionData.Session` | `Terms` (a `MatchTerms`: `Length`, ≥ 1), `OnRollNeeds`, `OpponentNeeds` (each 1 to the length), `IsCrawford` (exactly one player 1-away when set) |
-| `MoneySession` | a money session's `PositionData.Session` | `Terms` (a `MoneyTerms`: `IsJacoby`, `IsBeaver`, `CubeLimit`, a positive power of two), `OnRollScore`, `OpponentScore` (each ≥ 0: the points each had won in the session before the game) |
-| `DescriptiveData` | both kinds | `OnRollName?`, `OpponentName?`, `Title?`, `Date?`, `Event?`, `IsStandardStart?` (none for a standalone position), `Comment?`, `Flagged` — the game, the move number and the source file are the `Id`'s (see "DecisionId"; `BgDecisionData.SourceFile` derives it), and a match's length is the match session's |
-| `CheckerPlayDecisionData` | `CheckerPlayDecision` | `Dice` (two faces, rolled order), `Plays` (never empty), `UserPlayIndex?`, `UnlistedPlayError?` (only with no `UserPlayIndex`); derived `UserPlay?`, and for a ranking `RankedBy(ranking)` — the order, the best play, each candidate's error and whether it is scored, the player's error (see "The ranking") |
-| `CubeDecisionData` | `CubeDecision` | `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), the cube equity and probability fields, and `Recorded`, the recorded cube actions as one `RecordedCubeActions` value — on the wire as `UserDoublerAction?`, `UserTakerAction?`, `UnstatedDoublerActionError?`, `UnstatedTakerActionError?` (each error only with its half's action unstated; a taker half only under a stated `Double`); derived `DepthRank`, `LosePctAfterNoDouble`, `LosePctAfterDoubleTake` (1 − each win probability), `Depth?`, `DepthAbbreviation?`, `UserDoubleError?`, `UserTakeError?`, each cube action's `ActionEquity(action)`, the best actions and their errors, and the truth among the four cube answers, `BestAnswer` (what an answer reads as and costs is the record's: see "Cube answers and their costs") |
+| `PositionData` | both kinds | the board (`Mop`), the cube and the `Session` at the decision; the pip counts, derived from the board |
+| `DescriptiveData` | both kinds | the source's descriptive facts: the names, title, date, event, standard start, comment and flag. The game, the move number and the source file are the `Id`'s, and a match's length is the session's |
+| `CheckerPlayDecisionData` | `CheckerPlayDecision` | the roll, the candidates and which the user played, or the analyser's error for a play off the list; everything best or error is a ranking's (see "The ranking") |
+| `CubeDecisionData` | `CubeDecision` | the analysis's depth facts, equities and probabilities, and `Recorded`, the recorded cube actions as one value; the best actions, their errors and the truth among the four answers are derived (see "Cube answers and their costs") |
+| `MoneySession`, `MatchSession` | `PositionData.Session` | the terms, and the game's standing from the player on roll's side (see "Money and match: the session kinds") |
 
 **No stored copy of a derivable value** (the umbrella's verdict on the
 records leg of `halheinrich/backgammon#273`). Every member the others
@@ -391,12 +399,10 @@ document still stating one reads with it ignored, even in the categories
 that refuse unknown members — the serializer knows the member and skips
 its JSON (measured on .NET 10, both paths) — and the derivation stands. A
 member retired outright is refused like any unknown member where the
-category refuses them: `CheckerPlayDecisionData`'s `BestPlayIndex` and
-`UserPlayError` (new with the decision kinds, so no document carries them
-there; nothing outside the repo reads the exported JSON, so wire changes
-need no compatibility layer — the umbrella's third-round ruling). The audit,
-member by member, and what stays stored and why, is under "Stored or
-derived" below.
+category refuses them; nothing outside the repo reads the exported JSON, so
+wire changes need no compatibility layer (the umbrella's third-round
+ruling). The audit, member by member, and what stays stored and why, is
+under "Stored or derived" below.
 
 **None recorded is `null`** (the same verdict). "None recorded" has one
 spelling, for text as for numbers: `null`. A text member states text or,
@@ -405,12 +411,12 @@ an `ArgumentException` naming the member and by a document with a
 `JsonException` (the one statement of the rule is the internal
 `StatedText`). The names, the title, the event and the comment on
 `DescriptiveData`, a candidate's and the cube analysis's depth label and
-abbreviation (derived now, `null` where no depth is recorded), and the
+abbreviation (derived, `null` where no depth is recorded), and the
 row's `Player` and `AnalysisDepth` are nullable; a
 member that is never none — the row's XGID column, the id's file name — is
-refused empty the same way (the record's XGID is derived, never stated). `DepthRank` is `int?`: `null` where the depth is not
-recorded (the mode, or an evaluation's level, `Unknown`), where the
-producer wrote the grid's floor 0. `Date` was already `DateOnly?`. The
+refused empty the same way (the record's XGID is derived, never stated).
+`DepthRank` is `int?`: `null` where the depth is not recorded (the mode, or
+an evaluation's level, `Unknown`). `Date` is `DateOnly?`. The
 analysis enums keep `Unknown`, a member the producer states.
 `IDecisionFilterData.Player` is `string?` accordingly.
 
@@ -423,8 +429,8 @@ nullable one records none. A NaN or an infinity is refused by code with an
 `ArgumentOutOfRangeException` naming the member, and by a document with a
 `JsonException` carrying it, on both paths (where the reader's options
 admit a named non-finite literal at all; by default the token itself is
-refused). The one statement of the rule is the internal `FiniteNumber`,
-which the candidate's equity rule became. Range is not checked: a
+refused). The one statement of the rule is the internal `FiniteNumber`.
+Range is not checked: a
 probability's bounds are not measured against real data. A test finds the
 stored numbers by reflection, so one added without the rule fails it.
 `DecisionRow`, a projection, carries the record's numbers and is not
@@ -491,8 +497,8 @@ asked for it exhaustively). Derived, never stored:
 | `PositionData.OnRollPipCount`, `OpponentPipCount` | `Mop`, by `BoardState`'s one pip rule |
 | `BoardPosition.OnRollBorneOffCount`, `OpponentBorneOffCount` | the position's counts: `CheckersPerSide` less the side's checkers on the points and its bar (see "BoardPosition") |
 | `BgDecisionData.SourceFile`, `DecisionRow.SourceFile` | `Id.Filename` |
-| `PlayCandidate.DepthRank`, `CubeDecisionData.DepthRank` | `AnalysisMode` × `AnalysisLevel`, by the grid the producer used (internal `DepthTaxonomy`, moved here unchanged) |
-| `PlayCandidate.Depth`, `DepthAbbreviation`, and the cube analysis's | the typed depth facts — `AnalysisMode`, `AnalysisLevel`, `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — by the producer's grammar, moved here unchanged (`DepthTaxonomy`; see "The depth as typed facts") |
+| `PlayCandidate.DepthRank`, `CubeDecisionData.DepthRank` | `AnalysisMode` × `AnalysisLevel`, by the grid the producer used (internal `DepthTaxonomy`) |
+| `PlayCandidate.Depth`, `DepthAbbreviation`, and the cube analysis's | the typed depth facts — `AnalysisMode`, `AnalysisLevel`, `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — by the producer's grammar (`DepthTaxonomy`; see "The depth as typed facts") |
 | `RankedBy(ranking)`: the order, `Best`, each `RankedPlay.Error` and `IsScored` | the candidates' equities and, under depth first, their depth ranks (see "The ranking") |
 | `RankedBy(ranking).PlayerResult` | the played candidate: scored with its error, or not scored; otherwise `Unstated` with the stored `UnlistedPlayError`, or not recorded |
 | `CubeDecisionData.ActionEquity(action)` | `NoDoubleEquity`, `DoubleTakeEquity` and the pass's normalised value +1: each cube action's equity in the doubler's perspective, doubling's the taker's best response's (see "The analysis's cube actions on CubeDecisionData"); the best actions, both halves' errors, the truth and each answer's cost read it |
@@ -503,19 +509,14 @@ asked for it exhaustively). Derived, never stored:
 | `IDecisionFilterData.Taker`, `TakerResult` (a cube record's view, and the row's columns from it) | a stated `Double`: the opponent's name (`DescriptiveData.OpponentName`), and the response scored with its `TakerActionError`, the stored unstated take error, or not recorded where the record holds neither (a double answered by resigning); `null` for a checker play and wherever no double was offered (SPEC-filtering §8) |
 | `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures matched within 9.5e-7 (273,592 candidates) and 2.4e-7 (17,158 cube decisions, each half) |
 | `BgDecisionData.Xgid` | the board, the cube and its owner, the session (its kind's facts) and a checker play's roll, by the format stated on the internal `XgidEncoder` (see "The XGID, derived") |
-| earlier: `Game`, `MoveNumber` (the `Id`), the after-boards (the play rule), `Notation` (the play), `Dice` (the roll), `MatchScore` | — |
-| gone, not derived: `IsMoneyGame` (it read money off a match length of 0; money is the session's kind now) | — |
-| gone, not stored: `CubeDecisionData.ProbOfOpponentErrorJustifyingDouble` (XG stores no such value, so the record claimed as stored a figure no source states; Hal's ruling of 2026-09-27 on `halheinrich/backgammon#273`). A document still stating it is refused, as the category refuses any member it does not have. Deriving and showing XG's "Pass Justifying Dbl" figure is separate work, `halheinrich/backgammon#288` | — |
 
 Stored, as source data:
 
 - **The cube limit, the beaver rule and a money session's scores**
   (its terms' `MoneyTerms.CubeLimit` and `IsBeaver`, and
   `MoneySession.OnRollScore` and `OpponentScore`) —
-  the three facts only the stored XGID used to carry (its fields 10, 8 and
-  6–7), typed members now, from which, with the rest of the record, the
-  XGID is derived. The unchecked partial copy the stored string was is
-  gone.
+  typed members, from which, with the rest of the record, the XGID is
+  derived (its fields 10, 8 and 6–7).
 - **The typed depth facts** — `AnalysisMode`, `AnalysisLevel`,
   `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — from which the
   label, the abbreviation and the rank are derived.
@@ -566,9 +567,7 @@ Each keeps a rule, checked order-independently like every guard here: a
 trial count is at least 1 and belongs to a rollout or a book hit; an
 edition belongs to a book hit; a raw code is stated only with the level
 `Unknown`. The internal `DepthTaxonomy` is the one home of the derivations
-and the rules; its rank grid, label wording and abbreviation grammar moved
-here unchanged from the converter (`LevelInfo`, `ResolveDepthInfo`,
-`InnerLevelToken`, `DepthAbbreviationFormat`):
+and the rules:
 
 | Facts | `Depth` | `DepthAbbreviation` |
 |---|---|---|
@@ -641,7 +640,7 @@ one. `CheckerPlayDecision.AfterBoardOfBest(ranking)` takes one;
 user's.
 
 **The filter view and the row are each built for one ranking.** A record is
-no longer itself an `IDecisionFilterData`: `BgDecisionData.ViewFor(ranking)`
+not itself an `IDecisionFilterData`: `BgDecisionData.ViewFor(ranking)`
 builds the view, whose `Ranking` states the ranking its `PlayerResult`,
 `AnalysisMode`, `AnalysisLevel` and `AfterBestBoard` are derived under
 (derived once, when the view is built). `DecisionRow.From(record, ranking)`
@@ -692,30 +691,33 @@ classification; applying the rule to a verdict is the consumer's
 
 ### Shared types
 
-| Type | Notes |
-|---|---|
-| `CubeOwner` | enum: `OnRoll`, `Opponent`, `Centered` — serializes as string |
-| `CubeAction` | enum: `NoDouble`, `Double`, `Take`, `Pass` — a player's cube response, serializes as string. Beaver/raccoon deliberately not yet members (see XML `<remarks>` on the type); enums extend without disturbing existing members. |
-| `CubeAnswer` | enum: `NoDouble`, `DoubleTake`, `DoublePass`, `NoDoublePass` — the four cube answers of SPEC-scoring §3 (amended 2026-09-30, halheinrich/backgammon#326): a submitted answer and the truth (`CubeDecisionData.BestAnswer`) alike. The fourth is named by its meaning, "don't double, they'd pass", never by its labels: it reads Too good where gammons are possible and No double / Pass where they are not (`CubeDecision.ClaimOf`). Its projections are `CubeAnswerExtensions`' `DoublerAction()`, `TakerAction()` (No double's take implied) and `CommitsToResponse()` (false for No double alone), each total over the four and refusing anything else; their public inverse, `CubeAnswerExtensions.Of(doubler, taker)`, is the one way two actions become an answer — the truth's two best actions, or a consumer's two recorded ones. It replaced the action pair `CubeDecisionPair`, retired as a second statement of the same domain. Declaration order is the offered order, §3's column order; the zero value `NoDouble` is an answer, so "no answer" is `CubeAnswer?` null. Carries the strict converter; no document embeds it, so it is not a context root. See "Cube answers and their costs". |
-| `CubeClaim` | enum: `NoDouble`, `Double`, `TooGood` — the three-way claim a cube answer reads as at a decision (SPEC-scoring §1/§3, `halheinrich/backgammon#86`; a reading since halheinrich/backgammon#326), derived once, by `CubeDecision.ClaimOf`. Deliberately *not* a fifth `CubeAction` member — "too good" is a rationale, not a board action. For the fourth answer the reading is which of its two labels applies. No action and no answer leads back to a claim on its own: the reading needs the decision. Carries the strict converter; no longer a context root (no document embeds it). |
-| `CubeAnswerCost` | `sealed class` — what a cube answer costs at a decision (`CubeDecision.CostOf`), in two parts: `DoublingPart`, `TakePart`, and `Total`, their sum. No public constructor: only the library computes one. Exact, never rounded; value equality over the two parts. See "Cube answers and their costs". |
-| `EquityDisplay` | `static class` — the one display precision of every equity figure: a loss (`FormatLoss`: four decimals, invariant, a loss that rounds to zero unsigned) and an equity with its sign (`FormatEquity`: the same digits, `+` wherever no minus shows, so `+0.0000` at zero); and the one zero rule (`CountsAsZero`: exactly when a loss shows as `0.0000`), halheinrich/backgammon#202. It was `EquityLoss`, with `Format` for `FormatLoss`, until halheinrich/backgammon#326's step 3a. See "When a loss counts as zero". |
-| `AnalysisMode` | enum: `Unknown`, `Evaluation`, `Rollout`, `BookRollout` — how an XG analysis's numbers were produced; the mode axis of the two-axis depth taxonomy, serializes as string. Always paired with `AnalysisLevel`; together the pair is the taxonomy SSOT for depth filtering, replacing the retired flat `AnalysisDepthClass` (whose single axis could not represent book entries carrying separate moves and cube rollout levels). Classification is producer-side (ConvertXgToJson_Lib stamps both axes). `Unknown = 0` deliberately — "not recorded", which a producer states; the members carrying the pair are required on the wire (see "Absence on the wire"), so JSON lacking them is refused rather than read as `Unknown`, while the retired flat class's property beside them is still ignored on read. `BookRollout` is a book hit — rollout-derived, with parameters in the book database rather than the source file; `BookRollout` + `AnalysisLevel.Unknown` is the graceful-degradation stamp (no book DB available at conversion time, or a V1-book hit recording no levels). The UI renders modes in declaration order. Every member carries a `[Description]` display label (XgFilter_Lib's `EnumLabel.ToLabel` throws without one). The rollout trial count, the book edition and an unrecognized level's raw code are typed facts beside the pair (see "The depth as typed facts"). |
-| `PlayerResultKind` | enum: `NotRecorded`, `NotScored`, `Scored`, `Unstated` — the case of a player's result (`PlayerResult.Kind`, `DecisionRow.Result`), serializes as its string token through the strict converter. `NotRecorded` is the zero value. Every member carries a `[Description]` label. See "The player's result". |
-| `PlayRanking` | enum: `Equity`, `DepthFirst` — the ranking of a checker play's candidates, the one definition of which play is best (SPEC-scoring §2a, `halheinrich/backgammon#282`); serializes as its string token through the strict converter. `Equity` is the default and the zero value. Every member carries a `[Description]` label ("Equity", "Depth first"). See "The ranking". |
-| `AnalysisLevel` | enum: `Unknown`, `Ply1`, `Ply2`, `Ply3Red`, `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`, `Ply6`, `Ply7`, `XgRollerPlusPlus` — the evaluation level; the level axis paired with `AnalysisMode`, serializes as string. For `Evaluation` it is the level of the evaluation itself; for the rollout-family modes it is the inner evaluation level — checker rows carry the inner moves level, cube rows the inner cube level (a single rollout can use different levels for the two; which one a row gets is the producer's concern, the semantics are owned here). Rollout-family modes never pair with a Roller-family level on checker rows but can on cube rows (the shipped book DB contains cube rollout levels of XG Roller). `Unknown = 0` deliberately — "not recorded", a value the producer states, never an absent member (see `AnalysisMode`). **Declaration order is contractual** (ruled 2026-08-28 on the authority of XG's own analysis-level menu, amended the same day): every member after `Unknown` ascends in rigor, and the ply and Roller families *interleave* rather than forming two blocks — `Ply3`, `XgRoller`, `Ply4`, `XgRollerPlus`, `Ply5`. Reordering, or inserting out of rigor order, is a breaking change; live consumers read the order (the diagram's level floor, the filter-panel and quiz level dropdowns). `Unknown` sits *outside* the rigor scale — not "least rigorous" but "not recorded": never excluded by a floor, never offered as a threshold; head-of-list is the zero-value requirement, not a rank. `DepthRank` (a candidate's and the cube analysis's) remains the ordering surface across the mode × level *pair*. Every member carries a `[Description]` display label. `Ply3Red` is XG's "3-ply Red" — its own member between `Ply2` and `Ply3` as of the same ruling, superseding the earlier collapse into `Ply3` as a label variant. |
-| `DecisionKind` | enum: `CheckerPlay`, `Cube` — the kind of a decision as a value (`BgDecisionData.Kind`, `DecisionRow.Kind`, `IDecisionFilterData.Kind`), serializes as its string token through the strict converter. The record's kind is its type; match on the record (`Match` / `Switch`) for exhaustiveness. |
-| `SessionKind` | enum: `Money`, `Match` — the kind of a session as a value (`Session.Kind`, `DecisionRow.SessionKind`), serializes as its string token through the strict converter. The session's kind is its type, and its terms'; match on the session (`Match` / `Switch`) for exhaustiveness. See "Money and match: the session kinds". |
-| `Seat` | enum: `Player1`, `Player2` — a header's seat (XG's bottom and top player), the side `GameStanding` states its facts by. `Session.Create` takes the seat on roll to turn a standing into a record's; no record holds a seat. Serializes as its string token through the strict converter. |
-| `DiceRoll` | `readonly record struct` — a dice roll in canonical unordered form: `High`/`Low`, each a validated face 1–6. The constructor accepts either order and canonicalizes (the XG parser stamps dice in rolled order, so both `31` and `13` reach it for a 3-1); canonicalization is single-sourced here, nowhere downstream, and record-struct equality over the canonical form makes 3-1 ≡ 1-3 automatic. `IsDouble`; `Parse`/`TryParse` of the two-digit token form (`IParsable` + `ISpanParsable`, accepting either spelling); `ToString()` → canonical high-first token (`"31"`). Ordered (`IComparable<DiceRoll>` + comparison operators via `IComparisonOperators`) ascending by `High` then `Low` — ascending canonical token. `All` is the SSOT enumeration of the 21 distinct rolls in that order (doubles included). JSON round-trips as the token via bundled `DiceRollJsonConverter`. `default` is non-meaningful (faces 0 — see Pitfalls); "no roll" is `DiceRoll?` null, per `IDecisionFilterData.Dice`. |
-| `Move` | `readonly record struct (FrPt, ToPt)`. Encodes regular / bear-off / hit moves via the sign of `ToPt` — see "Move encoding" below. |
-| `Play` | mutable `struct`, fixed 4-slot buffer of `Move`. Default value is empty (`Count == 0`). Intent-level construction via `Play.Create` — **five overloads**: four fixed-arity (`Create(m0)` … `Create(m0, m1, m2, m3)`), which construct at parity with the incremental `Add` spelling, and `Create(params ReadOnlySpan<Move>)` for moves already in a span or array (> 4 moves throws `ArgumentException`), which is also the `[CollectionBuilder]` target, so collection expressions build plays — `Play p = [new(13, 10), new(10, 8)];`, with `[]` the empty play, a forced pass. The span overload carries `[OverloadResolutionPriority(-1)]` so a literal argument list binds fixed-arity at every arity including one; see Benchmarks for what that buys. `Add`/`RemoveLast` remain the incremental build primitives for move-generation recursion; every construction path writes slots through one private seam. Read idiom is `foreach` (allocation-free pattern enumerator over a value copy; deliberately no `IEnumerable<T>` — it would box) or the indexer. **No equality** (`halheinrich/backgammon#273`, ruling A): `==`/`!=` are not defined, and `Equals`/`GetHashCode` throw `NotSupportedException` so every runtime route (comparers, hashed collections, `Distinct`, records and tuples holding a play) fails loudly. Play identity is `BoardState.IsSamePlay`, from a starting position — see "Play identity" below. `IsSameEncoding` compares exact encodings (order, hops, marks) for storage and round-trips; it is not identity. `ToNotation()` writes the play in standard notation, the one public way to spell a play (see "Play notation"); the internal `ToCanonical()` is the display form behind it. Serialized as a JSON array of `Move` via `PlayJsonConverter` (the private buffer fields are not visible to default property-based serialization); the raw move sequence round-trips exactly. |
-| `BoardPosition` | `readonly struct` — an immutable position: the 26 checker counts of a board in `BoardState`'s frame, well-formed by construction (the invariant is stated once, in the type's `<remarks>`). The one definition of "the same position": `IEquatable<T>` and `==`/`!=` over all 26 counts, both bars included, with a consistent hash that is never identity. Creating, comparing and hashing allocate nothing. `default` is the empty board, which is well-formed, so the default is meaningful (`Empty`). See "BoardPosition" below. |
-| `PlayChain` | **internal** `readonly record struct (FrPt, ToPt)` — one chain of a `CanonicalPlay`: a route from a source to a landing point, which the notation writes as one `from/to`, joining consecutive moves and eliding the touch-down points between. It stops where its moves stop or at a hit point whose mark it carries, so it is not a checker's whole trajectory: an intermediate hit splits one trajectory into two chains (`13/10*/8` is written `13/10* 10/8`). Same sign-encoding as `Move`, but may span several dice. A hit only ever sits at a chain's endpoint, and each hit point's mark on exactly one chain, its carrier (see "Canonical play form"). |
-| `CanonicalPlay` | **internal** `readonly struct` (`halheinrich/backgammon#273`: consumers spell plays with `Play.ToNotation()` and compare them by position, so the chain form can change without breaking one), fixed 4-slot buffer of `PlayChain` + `Count`, read through `Count` and the indexer. The canonical chain form of a `Play` — its display form (which chains the notation shows, where each `*` goes), not its identity: like `Play` it has no equality (`==` undefined, `Equals`/`GetHashCode` throw). `ToString()` is the play's notation, the one formatter (see "Play notation"). Only produced by the internal `Play.ToCanonical()` — no other constructor path, so every instance is guaranteed canonical. `default` is the canonical form of the empty play (meaningful). |
-| `PlayCandidate` | `Play`, `AnalysisMode`, `AnalysisLevel`, `RolloutTrials?`, `BookEdition?`, `UnrecognizedLevelCode?` (the typed depth facts), `Equity` (finite, as every stored number is), `WinPct?`, `WinGammonPct?`, `WinBgPct?`, `LoseGammonPct?`, `LoseBgPct?`, and the derived `Notation`, `Depth?`, `DepthAbbreviation?`, `DepthRank` and `LosePct?` (1 − `WinPct`). `Play` is the one stored form of the candidate — applied, matched against the candidates with `BoardState.IndexOfSamePlay`, and displayed through `Notation`, which is `Play` written by the one formatter (`CanonicalPlay.ToString()`), `[JsonIgnore]`d and never stored (`halheinrich/backgammon#273`). The stored `MoveNotation` it replaced could disagree with its play; a document still carrying it reads on both paths with the member ignored, like any retired property. A candidate's error against the best is a ranking's (`CheckerPlayDecisionData.RankedBy`): it needs the other candidates and a ranking. An error of exactly 0 is the test for "is this a best play" under that ranking, an equity tie with the best; `RankedPlays.Best` names its single best, the ranking's first. Whether a play is *correct* is the zero rule's, `EquityDisplay.CountsAsZero`, which also admits a play a hair off the best. |
-| `DecisionId` | `abstract record` + two sealed records: `XgpDecisionId(Filename)` and `XgDecisionId(Filename, Game, MoveNumber, IsCube)`. Stable, persistent identifier for a single decision within an XG-family source file. Canonical string form: `"file.xgp"` (Xgp) or `"file.xg:g{N}:m{N}:{cube\|play}"` (Xg). Implements `IParsable<DecisionId>` + `ISpanParsable<DecisionId>`. Filename invariant: `':'` is forbidden on **both** subtypes (the parse dispatcher discriminates by `':'` presence, so an unguarded Xgp filename with `':'` would lose round-trip). JSON-serialised as the canonical string via bundled `DecisionIdJsonConverter`. Set as `required` on both `BgDecisionData` and `DecisionRow`. |
-| `ProblemKey` | `sealed class` (not a record — no `with`-expression hatch) — the **content** identity of a decision problem, sibling to `DecisionId`'s file-navigation identity: `DecisionId` answers "where did this record come from", `ProblemKey` answers "which problem is this". Identity over the decomposed facts that can change the correct answer, never over the XGID string; it therefore collapses strictly more than an XGID does, by ruling. Canonical string form is a pinned wire contract with exactly one spelling per value, so ordinal string equality *is* key equality — equality, hashing, ordering and `ToString` all read it. Full surface: `IEquatable`, `IComparable`/`IComparable<ProblemKey>`, `IParsable` + `ISpanParsable`, strict (non-canonicalizing) `Parse`/`TryParse`. Two doors only — `From` producer-side and `Parse`/`TryParse` on read-back; there is no public constructor. **Every record has a key**: `From` has no failure case, since a record's rules hold every fact it reads at least as strictly as the parse door holds text. Only text reaches the no-key rung: text whose facts would force a guess is **no key** rather than a wrong one (see "ProblemKey" below). JSON round-trips as the canonical string via bundled `ProblemKeyJsonConverter`, which — unlike `DecisionIdJsonConverter` — also implements the property-name overloads, so `Dictionary<ProblemKey, …>` round-trips without consumer-side registration. |
+One line per type: what it is, and where its contract lives. The XML doc
+builds on every build, so it is the public surface's authoritative rendering;
+a quoted name is a section of this file.
+
+| Type | What it is | Contract |
+|---|---|---|
+| `CubeOwner` | who owns the cube, from the player on roll's side | its XML doc |
+| `CubeAction` | a player's cube response; beaver and raccoon deliberately not yet members | its remarks |
+| `CubeAnswer` | the four cube answers of SPEC-scoring §3: a submitted answer and the truth alike | "Cube answers and their costs" |
+| `CubeClaim` | the three-way claim an answer reads as at a decision; deliberately not a fifth `CubeAction`, since "too good" is a rationale, not a board action | its remarks |
+| `CubeAnswerCost` | what a cube answer costs at a decision, in two parts | "Cube answers and their costs" |
+| `EquityDisplay` | the one display of every equity figure, and the one zero rule | "When a loss counts as zero" |
+| `AnalysisMode` | how an analysis's numbers were produced: the mode axis of the depth taxonomy | its remarks; "The depth as typed facts" |
+| `AnalysisLevel` | the evaluation level: the level axis, paired with `AnalysisMode` | its remarks, which own the contractual order; Pitfalls |
+| `PlayerResultKind` | the case of a player's result | "The player's result" |
+| `PlayRanking` | the ranking of a checker play's candidates, the one definition of which play is best | "The ranking" |
+| `DecisionKind` | the kind of a decision as a value | "The decision kinds" |
+| `SessionKind` | the kind of a session as a value | "Money and match: the session kinds" |
+| `Seat` | a header's seat (XG's bottom and top player); no record holds one | its XML doc |
+| `DiceRoll` | a roll in canonical unordered form, canonicalized here and nowhere downstream | its remarks; Pitfalls |
+| `Move` | one checker move, `(FrPt, ToPt)`, with the kind of move in the sign of `ToPt` | "Move encoding" |
+| `Play` | a mutable fixed-buffer struct of up to four moves, with no equality | its XML doc; "Play identity", "Play notation", Benchmarks, Pitfalls |
+| `BoardPosition` | an immutable position, the one definition of "the same position" | its remarks; "BoardPosition" |
+| `PlayChain`, `CanonicalPlay` | internal: a play's display form, a play's chains and each hit mark's place | "Canonical play form" |
+| `PlayCandidate` | one analysed candidate of a checker play, one row of the analyser's move list | its XML doc; "The ranking" |
+| `DecisionId` | the file-navigation identity: where did this record come from | its XML doc; "DecisionId" |
+| `ProblemKey` | the content identity: which problem is this | its remarks; "ProblemKey" |
 
 ### Move encoding
 
@@ -738,10 +740,8 @@ which chains its notation shows and on which chain each hit mark (`*`) goes.
 It is not identity, and it has no equality; whether two plays are the same
 play is decided by position (see "Play identity" below).
 
-Collapse semantics (the XG chain-collapse rules, once encoded display-side
-in BgMoveGen's notation formatter; the rule lives here, and so, since
-`halheinrich/backgammon#273`'s notation leg, does the notation — see
-"Play notation" below):
+Collapse semantics (the XG chain-collapse rules; the notation that writes
+them is under "Play notation" below):
 
 - Consecutive single-die hops of one checker merge into a single
   `PlayChain` recording source and final landing point:
@@ -805,25 +805,18 @@ to `CanonicalPlay.ToString()`, the one formatter. Design points:
   A method, because it formats. `Play.ToString()` stays the default and is
   not the notation: a play's encoding (order, hops, marks) is more than its
   notation shows.
-- **Moved, not rewritten.** It came from BgMoveGen's `MoveNotationFormatter`
-  unchanged: `PlayNotationTests` ports every one of that
-  formatter's cases with the same inputs and expected strings, and a
-  differential run over random encodings and legal plays found no
-  difference. One simplification followed: the port combined the hit marks
-  of a `(n)` run, which the carrier rule makes dead — a hit point's mark is
-  on the first chain ending there, so a run's mark is on its first chain or
-  on none — and the formatter now reads it there. The differential run,
-  repeated, still found no difference. BgMoveGen's copy is deleted in its
-  own consumer leg.
+- **Pinned by the formatter it replaced.** `PlayNotationTests` ports every
+  case of BgMoveGen's former `MoveNotationFormatter`, with the same inputs
+  and expected strings. A `(n)` run's hit mark is read off its first chain:
+  the carrier rule puts a hit point's mark on the first chain ending there,
+  so a run's mark is on its first chain or on none.
 - **Invariant text.** Point numbers are written with the invariant culture,
   so the notation never varies with the machine's locale.
 - **Never stored.** Notation is derived wherever it is shown — a candidate's
   is `PlayCandidate.Notation`, from its `Play`. A stored copy can disagree
   with the play it describes (a converted match stored `8/3* 7/3` over a
-  play marking the hit on the 7-point checker), so no record carries one:
-  `PlayCandidate.MoveNotation` is retired from the wire, and an old document
-  carrying it reads with the member ignored. Do not add a notation member to
-  a record.
+  play marking the hit on the 7-point checker), so no record carries one. Do
+  not add a notation member to a record.
 
 ### BoardPosition
 
@@ -863,24 +856,15 @@ needs before touching it:
   searches by position. Its play generation compares no positions; it
   avoids duplicates by construction (BgMoveGen's INSTRUCTIONS.md, "One same
   position").
-- **Never an inline array** (halheinrich/backgammon#320). The counts were
-  an `[InlineArray(26)]` of `sbyte` until 2026-09-29. A probe published
-  with BgQuiz_Blazor's pinned toolchain (SDK 10.0.401, runtime 10.0.12)
-  showed a Mono AOT incompatibility on the generic by-value paths it
-  exercised over inline-array-backed structs: `First()` over dictionary
-  keys, a list and an array trapped with "function signature mismatch",
-  for this type and for inline-array structs unrelated to it, while a plain
-  struct of the same 26 bytes passed them all in the same AOT build, and
-  desktop JIT and a non-AOT WebAssembly build passed every path. No test
-  here runs AOT, so none can observe the defect;
-  `BoardPositionTests.Storage_HoldsNoInlineArray` pins the representation
-  instead — no type the position is laid out from is an inline array — and
-  `StorageWalk_FindsAnInlineArrayHeldInAFieldOfAField` pins that its walk
-  can fail. Plain words keep the storage safe code that assumes nothing
-  about layout; the probe's two other passing layouts each give one of
-  those up (a fixed-size buffer is unsafe code, and 26 fields read as one
-  span assume a contiguity the language does not promise). The full account
-  is on the `Counts` struct's comment.
+- **Never an inline array** (halheinrich/backgammon#320). A probe under
+  Mono AOT trapped on generic by-value paths over inline-array-backed
+  structs, this type's and others', while desktop JIT and a non-AOT
+  WebAssembly build passed every path. No test here runs AOT, so none can
+  observe the defect; `BoardPositionTests.Storage_HoldsNoInlineArray` pins
+  the representation instead — no type the position is laid out from is an
+  inline array — and `StorageWalk_FindsAnInlineArrayHeldInAFieldOfAField`
+  pins that its walk can fail. What was run, and why plain words over the
+  probe's other passing layouts, is on the `Counts` struct's comment.
 - **Name and placement.** It names the position of the checkers, distinct
   from `PositionData` (the record category, which adds score and cube) and
   from `BoardState` (the mutable working board), and it collides with no
@@ -899,7 +883,8 @@ needs before touching it:
 - **The starting positions are values.** `Standard`, `Nackgammon` and
   `Bg960(seed)` define the layouts once, here; `BoardState`'s factories of
   the same names build a board from them, so "is this the standard start"
-  is `position == BoardPosition.Standard`.
+  is `position == BoardPosition.Standard`. `Bg960`'s constraints (symmetry,
+  quadrant coverage, mirror conflicts, the pip floor) are on its doc comment.
 - **Read surface.** The indexer (slots 0–25), `CopyTo`, and a `ToString`
   of `slot:count` pairs for the occupied slots (`"empty"` for the empty
   board), which a test failure shows side by side. Deliberately no
@@ -934,14 +919,12 @@ needs before touching it:
 ### BoardState
 
 Mutable backgammon board: the working copy play applies to. Private
-storage for 26 counts in `BoardPosition`'s layout, read through
-`ReadOnlySpan<int> Points`, plus `int HighPointOccupied`:
-`Points[0]` = opponent bar, `Points[1..24]` = playing surface, `Points[25]` =
-on-roll bar; positive = on-roll, negative = opponent. On-roll moves
-high index → low; opponent moves low → high. Borne-off counts are not
-tracked on `BoardState` — checkers leaving the board simply disappear; each
-side's count is derived on `BoardPosition` (`OnRollBorneOffCount`,
-`OpponentBorneOffCount`), read from a board through `ToPosition()`.
+storage for 26 counts, in the layout and frame `BoardPosition`'s summary
+states, read through `ReadOnlySpan<int> Points`, plus `int
+HighPointOccupied`. Borne-off counts are not tracked on `BoardState` —
+checkers leaving the board simply disappear; each side's count is derived on
+`BoardPosition` (`OnRollBorneOffCount`, `OpponentBorneOffCount`), read from
+a board through `ToPosition()`.
 
 **Callers read it; only its own members write it**
 (halheinrich/backgammon#281). `Points` is a read-only span over the
@@ -956,10 +939,9 @@ below keeps it one.
   `Nackgammon()` and `Bg960(int? seed = null)` build from
   `BoardPosition`'s starting positions (the layouts are defined once, on
   the value); `FromMop(ReadOnlySpan<int>)` is the door from raw outside
-  counts, validated by the value's one rule, so the pseudoboards it once
-  tolerated are refused (partial boards are fine — borne-off checkers are
-  not tracked on `BoardState`; each side's count is `BoardPosition`'s).
-  `Copy()` is a deep copy; `FlippedCopy()` a deep copy
+  counts, validated by the value's one rule (partial boards are fine —
+  borne-off checkers are not tracked on `BoardState`; each side's count is
+  `BoardPosition`'s). `Copy()` is a deep copy; `FlippedCopy()` a deep copy
   re-expressed from the opponent's perspective (an involution — flipping
   twice reproduces the original). There is no public empty constructor:
   the empty board is `new BoardState(BoardPosition.Empty)`.
@@ -977,8 +959,8 @@ and the turn boundary — with `Flip()` the private mechanic behind
 - **`SetPosition(BoardPosition)`** — the whole-board reset: replaces every
   slot with the position's counts and recomputes `HighPointOccupied`,
   allocation-free. It is the door for a caller that reuses one board across
-  positions rather than building one per position (BgMoveGen's interop,
-  which used to reset its board with raw writes), and it needs no check of
+  positions rather than building one per position (BgMoveGen's interop),
+  and it needs no check of
   its own: its argument is well-formed by the value's invariant. It is also
   the one write of a whole position inside the type — the constructor,
   `Flip()`, and committing a play all go through it — and `ToPosition()` is
@@ -1006,8 +988,7 @@ and the turn boundary — with `Flip()` the private mechanic behind
 
 - **`Flip()`** — `private`. Implementation mechanic for `FlippedCopy()`.
   It states no rule of its own: it sets the board, through `SetPosition`,
-  to its position flipped by `BoardPosition.Flipped()` (point `i` ↔ point
-  `25-i`, the bars swapping, the signs inverting), which recomputes
+  to its position flipped by `BoardPosition.Flipped()`, which recomputes
   `HighPointOccupied` from scratch. Stays private: live-state flips
   happen only inside `ApplyPlay`, so callers advancing state always
   reason in on-roll POV. `FlippedCopy()` is the public flipped-*copy*
@@ -1015,18 +996,8 @@ and the turn boundary — with `Flip()` the private mechanic behind
   (e.g. cube-response evaluation) without advancing state — the
   receiver is untouched.
 
-Derived properties:
-
-- `PipCount` — on-roll's pip count: `Σ i·max(Points[i], 0) for i ∈ [1..25]`.
-  Bar (index 25) contributes 25 pips per checker.
-- `OpponentPipCount` — opponent's pip count: `Σ (25−i)·max(−Points[i], 0) for i ∈ [0..24]`.
-  Bar (index 0) contributes 25 pips per checker.
-- `IsRace` — true iff no on-roll/opponent collision is possible:
-  `max(i where Points[i] > 0) < min(i where Points[i] < 0)`. Vacuously
-  true when one side is fully borne off. Bar checkers prevent races
-  (on-roll bar at 25 → max = 25; opponent bar at 0 → min = 0).
-
-These are pure derivations from `Points`. The pip rule is stated once
+`PipCount`, `OpponentPipCount` and `IsRace` are pure derivations from
+`Points`, each formula on its doc comment. The pip rule is stated once
 (`BoardState.OnRollPips` / `OpponentPips`, internal), and
 `PositionData.OnRollPipCount` / `OpponentPipCount` read it from the
 record's board: a record's pip counts are derived, never stored, so they
@@ -1113,21 +1084,16 @@ decision per `.xgp`: the analysed checker play if there is one, otherwise the
 analysed cube. That is a producer contract `XgpDecisionId` depends on, not a
 property of the file format.
 
-Both records expose `Filename` via the abstract base; both reject `':'` in
-`Filename` with `ArgumentException` (symmetric — the parse dispatcher
-discriminates the two shapes by the presence of `':'`). Equality follows
-record-default semantics: case-sensitive on `Filename`; tuple-equal on
-the Xg form. `ToString` emits the canonical string form; `Parse` /
-`TryParse` (string and `ReadOnlySpan<char>` overloads) read it back.
+Both records reject `':'` in `Filename` with `ArgumentException`,
+symmetrically, because the parse dispatcher discriminates the two shapes by
+its presence: without the guard on `XgpDecisionId`, a filename holding one
+would parse back as a malformed `XgDecisionId`. Equality and the canonical
+forms are on the type's remarks.
 
 Stamping is producer-side — `ConvertXgToJson_Lib` sets `Id` at the four
 `Build*` sites. `Id` is `required` on both `BgDecisionData` and
 `DecisionRow`, so missing-id cases surface as compile errors at any
 construction site that omits the property.
-
-JSON shape: round-trips as the canonical string via the bundled
-`DecisionIdJsonConverter` (type-level `[JsonConverter]` attribute on
-`DecisionId`) — parallel to the `CubeOwner` / `Play` pattern in this lib.
 
 Not added to `IDecisionFilterData`: the filter passes records through
 unchanged and never needs to see the id; adding it would force every
@@ -1167,13 +1133,12 @@ Design points a maintainer needs before touching the type:
   of both kinds, swept across each rule's edges, each key reading back from
   its text and as a statistics document's key. The producer owns the
   guarantee, so a consumer holding a record relies on it and does not guard
-  against a missing key. It replaced `TryDerive`, whose `false` only the
-  empty board still reached.
+  against a missing key.
 - **The no-key rung is the parse door's.** Derivation that would guess is
   forbidden: a problem filed under a wrong key is corruption. So text whose
   facts are malformed, degenerate or inconsistent is no key — `TryParse`
   returns `false` and `Parse` throws `FormatException`. Only text reaches
-  the rung now.
+  the rung.
 - **Strict parse, deliberately unlike `DiceRoll`.** `DiceRoll` canonicalizes
   human input; `ProblemKey` is a wire format, where two spellings of one key
   would split a problem's tallies. Enforcement is structural — the parser
@@ -1185,9 +1150,7 @@ Design points a maintainer needs before touching the type:
   (unlike Crawford's `cr`), because the absent spelling was the old money
   key and admitting it would give one value two spellings — one silently
   wrong. Every money session states its rule (`MoneyTerms.IsJacoby`, a
-  required `bool`), and a match states none, so the no-key rung for a money
-  record without the fact, and the tolerated stamp on a match record, are
-  both gone with the states they handled (halheinrich/backgammon#273).
+  required `bool`), and a match states none.
 - **The text is kept; the construction is the session kinds'** (Hal,
   2026-09-26, halheinrich/backgammon#273). The grammar already writes
   money as its own production — `0a0` is the key's spelling of money, not
@@ -1221,19 +1184,16 @@ Design points a maintainer needs before touching the type:
   had a key, and its text still does not parse. The key's remarks state
   the same; `ProblemKeyTests` pins both halves.
 
-JSON shape: round-trips as the canonical string via the bundled
-`ProblemKeyJsonConverter` (type-level `[JsonConverter]` attribute on
-`ProblemKey`). Unlike `DecisionIdJsonConverter` it also implements the
-property-name overloads, because the stats document keys its per-problem
-map by `ProblemKey` and `Dictionary<ProblemKey, …>` must round-trip
-without a consumer-side key converter.
+`ProblemKeyJsonConverter` implements the property-name overloads because
+the stats document keys its per-problem map by `ProblemKey`, so
+`Dictionary<ProblemKey, …>` must round-trip without a consumer-side key
+converter.
 
 ### Played cube actions on CubeDecisionData
 
-Distinct from the analysis's action facts and the answers below, `CubeDecisionData` carries the record
-of what was *actually played* in a cube decision
-(`halheinrich/backgammon#123` documents; the fields shipped with the played-
-action record work):
+Distinct from the analysis's action facts and the answers below,
+`CubeDecisionData` carries the record of what was *actually played* in a
+cube decision:
 
 - **`UserDoublerAction`** (`CubeAction?`) — the doubler action the player
   on roll played, `NoDouble` or `Double`. Null when the played action is
@@ -1244,44 +1204,34 @@ action record work):
   this is null unless `UserDoublerAction` is `Double`.
 
 **The recorded cube actions are one value** (halheinrich/backgammon#440):
-`CubeDecisionData.Recorded`, a `RecordedCubeActions` readonly struct
-holding the two actions and the two unstated errors. The four wire members
-are get-only pass-throughs to it, with their names and wire bytes
-unchanged. Its one public constructor takes the four and refuses an action
-outside its half (`ArgumentOutOfRangeException`; the halves
-`CubeAnswerExtensions.Of` accepts), a non-finite error (the
-`FiniteNumber` rule, also an `ArgumentOutOfRangeException`; no sign rule),
-a stated action beside its own half's unstated error (`ArgumentException`)
-and **a taker half — a response or the analyser's take error — unless the
-doubler's action is `Double`** (`ArgumentException`): a take or pass
-without an offered double is invalid data (SPEC-scoring §3, 2026-10-25).
-That rule spans the halves, which init-only members set one at a time
-could not hold, hence one value. Six factories name the six valid shapes
-and build through the constructor: `None` (= `default`), `NoDouble`,
-`DoubleUnanswered` (a double answered by resigning), `DoubleAnswered(takerAction)`,
-`DoubleWithUnstatedResponse(unstatedTakerError)`,
-`UnstatedDoubler(unstatedDoublerError)`. A document reaches the value
-through the serializer's constructor, which binds the four (see "The
-decision kinds"), so it is held to the rule whatever its member order. The fields
-exist because the
-played action is source data: it cannot be recovered from an error — a
-zero error does not identify the action when the two cube equities tie.
-It is the other way round: the error of a stated action is derived from
-it (`UserDoubleError` is `DoublerActionError(UserDoublerAction)`,
-`UserTakeError` is `TakerActionError(UserTakerAction)`), never stored. The
-one cube error stored is the analyser's for a half whose action is not
-stated (`UnstatedDoublerActionError`, `UnstatedTakerActionError`), which a
-stated action refuses beside it. The actions serialize (they are wire
-fields, unlike the computed members below).
+`CubeDecisionData.Recorded`, a `RecordedCubeActions` holding the two actions
+and the two unstated errors, which the four wire members read through. One
+rule spans the halves — **a taker half, a response or the analyser's take
+error, exists only under a stated `Double`**: a take or pass without an
+offered double is invalid data (SPEC-scoring §3, 2026-10-25) — and init-only
+members set one at a time could not hold it, hence one value. The type's
+remarks state its rules and its six named shapes. A document reaches the
+value through the serializer's constructor, which binds the four (see "The
+decision kinds"), so it is held to the rule whatever its member order.
+
+The fields exist because the played action is source data: it cannot be
+recovered from an error — a zero error does not identify the action when the
+two cube equities tie. It is the other way round: the error of a stated
+action is derived from it (`UserDoubleError` is
+`DoublerActionError(UserDoublerAction)`, `UserTakeError` is
+`TakerActionError(UserTakerAction)`), never stored. The one cube error stored
+is the analyser's for a half whose action is not stated
+(`UnstatedDoublerActionError`, `UnstatedTakerActionError`), which a stated
+action refuses beside it.
 
 These are **actions, never claims**: a stamped game fact cannot carry the
 "too good" rationale, because a player can choose not to double in a
-position where he is not too good — the rationale is a property of the
+position where they are not too good — the rationale is a property of the
 analysis, not of the played move (the `halheinrich/backgammon#86` intake's
 "analysis vs. stamped action" distinction). The cube answer (`CubeAnswer`)
 and the claim it reads as (`CubeClaim`) therefore neither supersede nor
 touch this pair: answers live in the quiz and the derived truth, played
-actions in the game record. Do not infer a claim from a played action.
+actions in the game record.
 
 ### The analysis's cube actions on CubeDecisionData
 
@@ -1293,13 +1243,9 @@ cube action's equity:
   2026-09-27) — the equity of any of the four `CubeAction`s, in the player
   on roll's (the doubler's) perspective whichever half the action belongs
   to, in normalised cube-equity units (a single game at the current stake
-  is +1), like every equity on the type. `NoDouble` is `NoDoubleEquity`;
-  `Take` is `DoubleTakeEquity`; `Pass` is +1, the cash (a pass concedes one
-  game at the current stake, whatever the score or the cube); `Double` is
-  the equity of the taker's best response, `ActionEquity(BestTakerAction)` —
-  the lesser of the take's and the cash. Higher is better for the doubler
-  and worse for the taker, whose own equity is the negation. An undefined
-  action throws `ArgumentOutOfRangeException`.
+  is +1), like every equity on the type. Its doc states each action's
+  value. Higher is better for the doubler and worse for the taker, whose
+  own equity is the negation.
 
 Each half of the decision is judged on its own, with no cross-decision
 override, comparing its two actions' `ActionEquity`:
@@ -1325,41 +1271,34 @@ to, and §3's two ruled conventions (its "Two conventions" bullet) can make
 an answer's cost differ from its action's error. So a consumer showing
 each action's equity beside its error shows the analysis's own numbers,
 consistent with each other, and the quiz's answer costs are §3's, not
-these. (Until halheinrich/backgammon#326 this section said the action
-errors were "the numbers the scoring used"; the scoring now uses the §3
-costs.)
+these.
 
-**One calculation, the pass value never on its own.** The pass's value and
-the rule for doubling's equity are stated once, in `ActionEquity`: the best
-actions, both errors, the truth and each answer's cost read them through
-it. The value +1 is a private constant read
-by `ActionEquity` alone. It is not published on its own: a consumer asks
-for the pass's equity as an action's equity and never rebuilds the domain
-calculation from a normalization constant (Hal's ruling). The result is a
-method, as the two errors are, because it takes the action: one member
-covers the four actions in one perspective and one sign, where four
-properties would publish the pass's value as a member of its own. Derived
-on each call, never stored: nothing new on the wire, and the flat row gains
-no column. Each error is that gap through the private `Gap`: never
-negative, and +0 at a tie whatever the tied zeros' signs, since a stored
-`-0` less a `+0` would otherwise be `-0`, which a document writes as `-0`
-(the errors were +0 there before they read `ActionEquity`, and still are).
+**One calculation, the pass value never on its own** (Hal's ruling). The
+pass's value and the rule for doubling's equity are stated once, in
+`ActionEquity`: the best actions, both errors, the truth and each answer's
+cost read them through it. The value +1 is a private constant it alone
+reads, and it is not published on its own, because a consumer that rebuilt
+the calculation from a normalization constant would be a second source of
+it. The result is a method, as the two errors are, because it takes the
+action: one member covers the four actions in one perspective and one sign,
+where four properties would publish the pass's value as a member of its own.
+Each error is that gap through the private `Gap`: never negative, and +0 at
+a tie whatever the tied zeros' signs, since a stored `-0` less a `+0` would
+otherwise be `-0`, which a document writes as `-0`.
 `CubeDecisionDataActionEquityTests` pins each action and each tie in that
-perspective, that each error is the gap between two of its equities over
-a grid holding every tie, the `-0` tie, and that no public member names the
+perspective, that each error is the gap between two of its equities over a
+grid holding every tie, the `-0` tie, and that no public member names the
 pass.
 
-The computed members exist on the cube decision only — asking them of a
-checker play does not compile, so the `IsCube` guard they used to share
-(and its `InvalidOperationException`) is gone. The two error methods throw
+The computed members exist on the cube decision only, so asking them of a
+checker play does not compile. The two error methods throw
 `ArgumentOutOfRangeException` when the action argument is from the wrong
 half (e.g. `Take` or `Pass` passed to `DoublerActionError`); `ActionEquity`
 takes any defined action.
 
-Tie-breaking follows the renderer's existing convention so a downstream
-consumer that collapses the inline cube derivation into calls to these
-helpers preserves behaviour: `NoDouble` on the doubler-equity tie, `Pass`
-on `DoubleTakeEquity == 1`. The truth among the answers keeps both.
+Tie-breaking follows the renderer's convention: `NoDouble` on the
+doubler-equity tie, `Pass` on `DoubleTakeEquity == 1`. The truth among the
+answers keeps both.
 
 The three computed properties (`BestDoublerAction`, `BestTakerAction`,
 `BestAnswer`) carry `[JsonIgnore]`: they are a derivation, not wire.
@@ -1372,11 +1311,9 @@ because they take parameters.
 twice on 2026-10-01; Hal's rulings on halheinrich/backgammon#326): a
 `CubeAnswer`, `NoDouble`, `DoubleTake`, `DoublePass`, or the fourth,
 `NoDoublePass` — "don't double, they'd pass". Hal: "Either you double or
-you don't; either you take or you pass. That makes four not six." The
-six-value claim × response pair it replaced, `CubeClaimPair`, is retired
-with its incoherent and retired cells, so no other combination is
-representable; no compatibility type was kept. SPEC-scoring §3 is the
-source of truth for every rule below; its tables are not restated here.
+you don't; either you take or you pass. That makes four not six."
+SPEC-scoring §3 is the source of truth for every rule below; its tables are
+not restated here.
 
 ```
 CubeAnswer (enum)            NoDouble, DoubleTake, DoublePass, NoDoublePass
@@ -1394,16 +1331,13 @@ Design points a maintainer needs before touching it:
 - **An enum, like the library's other closed value sets.** `CubeAction`
   and `CubeClaim` are enums whose every door refuses an undefined value
   with `ArgumentOutOfRangeException`; `CubeAnswer` is the same, so every
-  operation taking one refuses anything but the four. The zero value,
-  `NoDouble`, is an answer, so "no answer" is `CubeAnswer?` `null`.
-  Declaration order is the offered order, §3's column order: all four
-  answers are always offered. It carries the strict string-token converter
-  like every enum, though no document embeds it (see "Source generation &
-  trimming").
-- **The fourth is named by its meaning, never by a label.** It reads Too
-  good where gammons are possible and No double / Pass where they are not;
-  either way it is the answer "don't double, they'd pass", whose two
-  projections its name spells.
+  operation taking one refuses anything but the four. Declaration order is
+  the offered order, §3's column order: all four answers are always
+  offered. It carries the strict converter like every enum, though no
+  document embeds it (see "Source generation & trimming").
+- **The fourth is named by its meaning, never by a label.** Its label
+  depends on the decision; either way it is the answer "don't double, they'd
+  pass", whose two projections its name spells.
 - **Its projections are total, and never stored beside it.**
   `CubeAnswerExtensions.DoublerAction()` is `NoDouble` for No double and
   the fourth, `Double` for the two doubling answers; `TakerAction()` is
@@ -1412,10 +1346,7 @@ Design points a maintainer needs before touching it:
   offered, so the take it implies is never charged, while the fourth
   commits to its pass under either label. It is the one statement of
   which answers a take/pass tally counts (SPEC-scoring §3's Take row and
-  lifetime take half). These replace the claim → action collapse,
-  `CubeClaimExtensions.ToCubeAction`, retired with the pair: an answer's
-  doubling action is its own projection, and nothing maps a claim to an
-  action or back.
+  lifetime take half).
 - **Two actions become an answer one way.** `CubeAnswerExtensions.Of(doubler,
   taker)` is the projections' public inverse — each pair of a doubler-half
   and a taker-half action is exactly one answer — and refuses an action
@@ -1425,11 +1356,7 @@ Design points a maintainer needs before touching it:
   `UserTakerAction`) forms the answer this way too, then reads its label
   through `ClaimOf`. A record holds a response only under a stated `Double`
   (`RecordedCubeActions`), so a recorded pair is a double with its
-  response; no record holds a no double with a pass. It replaced
-  `CubeDecisionPair`, the four-valued action pair, whose `TooGood` and
-  `IsTooGood` stated the retired rule that no double with a pass is Too
-  good: two types encoded one domain
-  (halheinrich/backgammon#326, the umbrella's review of step 1).
+  response; no record holds a no double with a pass.
 - **The truth is the same type, from the equities alone.**
   `CubeDecisionData.BestAnswer` is the answer whose projections are
   `BestDoublerAction` and `BestTakerAction`: Double / Take or Double /
@@ -1438,11 +1365,11 @@ Design points a maintainer needs before touching it:
   halves' tie-breaks stand, so at the tie of halheinrich/backgammon#293 (a
   no-double equity of exactly 1, with a pass) the truth is the fourth
   answer. It is the single representative that classification and display
-  read, and never the test of a correct answer: at an equity tie several
-  answers cost nothing, and each is correct. Whether gammons are possible
-  decides what the truth reads as and what each answer costs, never which
-  answer it is.
-- **Whether gammons are possible is the record's.**
+  read, not the test of a correct answer (see Pitfalls). Whether gammons are
+  possible decides what the truth reads as and what each answer costs, never
+  which answer it is.
+- **Whether gammons are possible is the record's** (SPEC-scoring §3,
+  amended 2026-10-01 on halheinrich/backgammon#326).
   `CubeDecision.GammonsPossible` is `false` exactly when the opponent has a
   checker borne off (`BoardPosition.OpponentBorneOffCount`), when a match's
   cube is at least the points the player on roll needs (`CubeSize` at
@@ -1452,8 +1379,6 @@ Design points a maintainer needs before touching it:
   of the cube is less than the points we need win the match." It is a fact
   of the position, the session, the score and the cube, which only the
   record sees together; the analyser's gammon chances are not part of it.
-  It replaced `CanBeTooGood`, the Too good offerability fact: all four
-  answers are always offered now.
 - **What an answer reads as: the claim, and the fourth answer's label.**
   `CubeDecision.ClaimOf(answer)` is the three-way claim of SPEC-scoring §1
   as a reading of the answer at the decision: No double reads `NoDouble`,
@@ -1462,8 +1387,7 @@ Design points a maintainer needs before touching it:
   reading is which of its two labels applies, Too good or No double /
   Pass. The labels' wording, full and short, is the label home's, in
   BackgammonDiagram_Lib, which renders the reading and re-checks no rule.
-  It is the one derivation of a claim: `BestDoublerClaim` and
-  `BestClaimPair` are gone, and the truth's claim is
+  It is the one derivation of a claim: the truth's claim is
   `ClaimOf(Decision.BestAnswer)` — Too good at the halheinrich/backgammon#293
   tie where gammons are possible, though playing on is worth only the cash.
 - **What an answer costs.** `CubeDecision.CostOf(answer)` gives a
@@ -1558,7 +1482,7 @@ value: a play's `Equity`, a cube action's `ActionEquity`.
   `+-0.0000`. A NaN or an infinity is refused, naming `equity`. It adds the
   sign rule only: the precision is the one `FormatLoss` reads, so a loss and
   the equities beside it are shown alike (halheinrich/backgammon#326, step
-  3a, which moved the diagram's own sign rule here).
+  3a).
 - **`CountsAsZero(loss)`** — exactly when `FormatLoss` shows `0.0000`: for
   a loss that is not negative, below 0.00005. It reads `FormatLoss`'s own
   text rather than a threshold of its own, so what is shown and what is
@@ -1575,11 +1499,10 @@ value: a play's `Equity`, a cube action's `ActionEquity`.
   the rule to each answer's whole cost (see "Cube answers and their
   costs"). Its policy is the rule itself, fixed: a quiz's error tolerance
   (halheinrich/backgammon#30) would widen the quiz's verdict, never the set.
-- **Applying it is the consumers'.** BgGame_Lib's leg judges every verdict
-  by it — checker plays, each part of a cube answer, each whole answer —
-  and every surface shows a cost or a loss through `FormatLoss` and an
-  equity through `FormatEquity`, keeping no format string, sign rule or
-  threshold of its own.
+- **Applying it is the consumers'.** BgGame_Lib's `Correctness` judges
+  every verdict by it — checker plays, each part of a cube answer, each
+  whole answer — and every surface shows through these two displays (see
+  Pitfalls).
 
 `EquityDisplayTests` pins the loss display, the threshold just below, at
 and just above 0.00005 through the shared formatting, and the two loss
@@ -1619,9 +1542,7 @@ Design points a maintainer needs before touching it:
   not apply to. Each kind keeps the category structure: `Decision` is its
   own category, typed per kind (`CheckerPlayDecisionData`,
   `CubeDecisionData`), beside the shared `PositionData` and
-  `DescriptiveData`. The cube category's depth members lost their `Cube`
-  prefix (`Depth`, `DepthAbbreviation`, `DepthRank`, `AnalysisMode`,
-  `AnalysisLevel`), which only disambiguated them in the retired flat type.
+  `DescriptiveData`.
 - **A closed pair, matched exhaustively.** The base's one constructor is
   `private protected`, so these two kinds are the only ones. `Match<TResult>`
   and `Switch` take one branch per kind, so a consumer's match has no silent
@@ -1644,43 +1565,18 @@ Design points a maintainer needs before touching it:
 - **A construction rule a document breaks is a `JsonException`, whatever it
   is read as** — a record as `BgDecisionData` or as its kind, or a category
   on its own — carrying the init guard's exception as its inner one; code
-  breaking the same rule gets the guard's exception itself. This closed the
-  converter's one stated limit (a kind read directly used to surface the
-  guard's `ArgumentException`). **The serializer constructors** — the
-  mechanism, and why the platform forces it, are stated once, on
-  `BgDataTypesJsonContext` ("The serializer constructors"), and each
-  constructor's doc points there. In short: each type holding its members
-  to a rule (`CheckerPlayDecision`, `CubeDecision`,
-  `CheckerPlayDecisionData`, `CubeDecisionData`, `PlayCandidate`,
-  `PositionData`, `DescriptiveData`, the two kinds each of session, terms
-  and standing) has an internal `[JsonConstructor]`
-  beside the parameterless one code uses (public, but internal for the two
-  sessions, which code outside the library builds through `Session.Create`
-  alone). It marks the instance as read, and each guarded setter rethrows
-  its `ArgumentException` through `DocumentRefusal` when the instance is
-  read. It binds one wire member because a serializer constructor must
-  bind one: a kind binds `Kind`, which the base holds to the type — a
-  session binds its `Terms`, which carry its kind — and a category binds
-  its first member for that reason only. The bound member stays required, and the absence
-  walk fails if it ever stops being so. The one exception is
-  `CubeDecisionData`, whose constructor binds the four members it
-  validates together — `UserDoublerAction`, `UserTakerAction`,
-  `UnstatedDoublerActionError`, `UnstatedTakerActionError`, each nullable,
-  an absent one binding `null` — and builds them into `Recorded`, refusing
-  a breach through `DocumentRefusal`: the rule that a taker half needs a
-  stated `Double` spans the four, so no setter run one at a time could
-  hold it in every document order (halheinrich/backgammon#440). Both read
-  paths, the generated context and reflection, construct through it.
-  Measured on .NET 10 before relying
-  on it: a generated context sets init and `required` members in an
-  object initializer *before* `IJsonOnDeserializing` runs, so a callback
-  flag cannot work, and a full-member serializer constructor would need
-  `[SetsRequiredMembers]`, which silently turns off the JSON-required
-  meaning of `required`. Accepted by the umbrella as the separate internal
-  constructor pattern, not a hatch around validation. The converter no
-  longer catches anything; it only dispatches.
-  `PlayJsonConverter` refuses a play of more than four moves itself — it
-  used to let `Play.Add`'s `InvalidOperationException` escape.
+  breaking the same rule gets the guard's exception itself. **The serializer
+  constructors** are how a type tells the two apart: each type holding its
+  members to a rule has an internal `[JsonConstructor]` beside the
+  parameterless one code uses, which marks the instance as read, and each
+  guarded setter then rethrows its `ArgumentException` through
+  `DocumentRefusal`. The mechanism, why the platform forces it (what was
+  measured, on .NET 10) and what each constructor binds are stated once, on
+  `BgDataTypesJsonContext`, and each constructor's doc points there.
+  Accepted by the umbrella as the separate internal constructor pattern,
+  not a hatch around validation. The converter only dispatches; it catches
+  nothing. `PlayJsonConverter` refuses a play of more than four moves
+  itself.
 - **The members agree by construction.** Each init setter checks its value
   against the members already set and against the kind, which the base's
   constructor fixes before any member is set, so every rule is
@@ -1690,8 +1586,6 @@ Design points a maintainer needs before touching it:
   - **Crawford** (`halheinrich/backgammon#201`): a cube decision's
     `Position` refuses a Crawford position — a `MatchSession` whose
     `IsCrawford` is set; a money session has no Crawford game to refuse.
-    With the kind fixed by the type it is one guard; the two-half
-    cross-check and `CrawfordRule` are gone.
     `ProblemKey`'s grammar still accepts a Crawford cube *key*: v3 stats
     documents written before the guard hold such keys and must keep loading
     (SPEC-stats-identity.md §1 keeps the Crawford flag in identity); the
@@ -1711,7 +1605,7 @@ Design points a maintainer needs before touching it:
   an absent one is a compile error in an initializer and a `JsonException`
   on the wire.
 - **A checker play's category is well-formed on its own.** Its roll is two
-  faces 1–6 (the `[0, 0]` a cube used to carry is refused); it has at least
+  faces 1–6; it has at least
   one candidate, each of finite equity, so every ranking has a best (see
   "The ranking"); and
   `UserPlayIndex` identifies one or is `null` — "none", never -1
@@ -1740,21 +1634,16 @@ Design points a maintainer needs before touching it:
   cube and the session together, and only a cube decision has the
   question; the truth, `BestAnswer`, stays on `CubeDecisionData`, derived
   from equities alone, and so does the cost's calculation, which the
-  record asks with its gammon fact. They replaced `CanBeTooGood`, the Too
-  good offerability fact of the 2026-09-02 amendment
-  (`halheinrich/backgammon#187`), which this point used to place.
+  record asks with its gammon fact.
 
 ### Money and match: the session kinds
 
 **Money versus match is one of two types** (halheinrich/backgammon#273,
 Hal's ruling of 2026-09-26): `MoneySession` and `MatchSession`, the two
 sealed kinds of the abstract `Session`, which a record's `PositionData`
-holds as `Session`. Each carries only its own facts. Money used to be
-spelled with match stand-ins — a match length of 0
-(`DescriptiveData.MatchLength`), away scores of 0 and a Crawford flag
-always false (`PositionData`), from which `IsMoneyGame` was derived —
-beside a Jacoby fact on the position that meant nothing in a match. None
-of them is expressible now, and `MatchContextStandInTests` pins each.
+holds as `Session`. Each carries only its own facts, so money has no match
+stand-in to spell (a length of 0, away scores of 0, a Crawford flag always
+false), and `MatchContextStandInTests` pins that none is expressible.
 
 **A session composes its terms instead of restating them** (the umbrella's
 review of halheinrich/backgammon#273, 2026-09-26). A session is its kind's
@@ -1774,9 +1663,8 @@ Design points a maintainer needs before touching it:
 - **Placement: the position, from the player on roll's side.** The session
   is the score context of the decision, beside the board and the cube, and
   on-roll-relative like them — a match's away scores are the player on
-  roll's and the opponent's. The descriptive category lost the match
-  length, which is the match's terms' fact. No record holds a seat: a
-  record is the player on roll's view, whatever seat that player sits in.
+  roll's and the opponent's. No record holds a seat: a record is the player
+  on roll's view, whatever seat that player sits in.
 - **Built by one operation: `Session.Create(terms, standing, onRoll)`.** A
   header states the terms and the game's standing seat by seat (player 1,
   player 2); the operation pairs the two through `GameSession.Create`
@@ -1832,7 +1720,7 @@ Design points a maintainer needs before touching it:
   type.
 - **A match is well-formed by construction** (`SessionRules`, internal): its
   terms' length at least 1; each away score at least 1 — a player 0-away
-  has won, and 0-away each was money's stand-in — and at most the length;
+  has won — and at most the length;
   and in the Crawford game exactly one player 1-away (the Crawford game is
   the one after a player first reaches match point, so the other is not
   1-away then, and a 1-point match has none; the corpus measured 7,855
@@ -1841,11 +1729,7 @@ Design points a maintainer needs before touching it:
   `JsonException` carrying it.
 - **Money states its rule.** `MoneyTerms.IsJacoby` is a required `bool`:
   every money session's terms state the Jacoby rule, so there is no unknown
-  rule. The in-tree producer always knows it (XG's match header). The
-  unknown-rule rungs it removed: `ProblemKey`'s no-key rung for a money
-  record without the fact, the row's bare `money` token, and the Too good
-  offerability fact's unknown-rule case (that fact is itself retired now,
-  for `CubeDecision.GammonsPossible`, which reads the rule).
+  rule. The in-tree producer always knows it (XG's match header).
 - **The facts only the XGID carried, placed by the same rule.** The beaver
   rule is money's (XG spells it in the XGID for money only), and so is the
   cube limit the record carries: XG keeps it among the match header's
@@ -1880,11 +1764,8 @@ Design points a maintainer needs before touching it:
 **The XGID is derived from the record and never stored**
 (halheinrich/backgammon#273, the match-context leg). `BgDecisionData.Xgid`
 writes eXtreme Gammon's position string from the record's own members on
-each read, through the internal `XgidEncoder`, moved here from
-`ConvertXgToJson_Lib` (whose copy goes in its own leg). The stored string
-was an unchecked partial copy of the record, carrying three facts nothing
-else held; those are the money session's terms and scores now (above), and every field is
-the record's. The format, field by field, is stated once, on
+each read, through the internal `XgidEncoder`, so every field is the
+record's and the string cannot disagree with it. The format, field by field, is stated once, on
 `XgidEncoder`'s doc comment. Design points:
 
 - **Written from the player on roll's side**, as the record is: the
@@ -1916,8 +1797,7 @@ the record's. The format, field by field, is stated once, on
   nothing encodes it. The encoder's `MatchMaxCubeField` states the constant
   where it is applied.
 - **Culture-invariant**: numbers are written invariant, so a culture's minus
-  sign (`sv-SE`'s U+2212) cannot change the opponent's `-1`. The converter's
-  copy formatted with the ambient culture.
+  sign (`sv-SE`'s U+2212) cannot change the opponent's `-1`.
 - **Off the wire.** `[JsonIgnore]`d; a document still stating one reads
   with it ignored and the derivation standing. The row carries the record's
   as its `Xgid` column (the row holds no cube column to derive it from).
@@ -1965,12 +1845,7 @@ records.
 
 They are off the record's wire. The row carries them as columns taken from
 this derivation (see "DecisionRow"). This is the substrate for
-`XgFilter_Lib`'s three-board `IPlayTypeClassifier` contract. The stored
-boards the previous shape carried were computed by the converter's own copy
-of the play rule (`AfterBoardBuilder`); the derived ones are byte-identical
-on the golden record, and whether every candidate in real XG files satisfies
-the validity invariant is measured by the converter's consumer leg, against
-XG's own after-positions.
+`XgFilter_Lib`'s three-board `IPlayTypeClassifier` contract.
 
 ### DecisionRow
 
@@ -1984,8 +1859,7 @@ ranking)` takes the checker play's error, depth, mode, level, equity and
 best after-board under that ranking (see "The ranking") and stores it as
 the required `Ranking` column; a cube row's columns do not depend on it. The after-board columns are the record's derivation, never
 computed a second way, and a row and its record cannot disagree on
-anything they share (the converter's row/record agreement test becomes
-structural).
+anything they share.
 
 **It carries the kind** (`Kind`, a required column, written first), and the
 other kind's columns are empty, never zero: a cube row's `Roll` and
@@ -2032,8 +1906,8 @@ no production reader reads rows, so no migration machinery exists.
 a match's `MatchLength`, `OnRollNeeds`, `OpponentNeeds`, `IsCrawford`, a
 money session's `IsJacoby`, `IsBeaver`, `CubeLimit`, `OnRollScore`,
 `OpponentScore` — each nullable, and the other kind's empty,
-never zero: a money row's `MatchLength` is `null`, not the 0 it used to
-be. `Session` is the columns typed as the record's kind,
+never zero: a money row's `MatchLength` is `null`. `Session` is the columns
+typed as the record's kind,
 `[JsonIgnore]`d: a row from `From` holds the record's own session, and a
 row read from JSON the session its columns state.
 
@@ -2046,11 +1920,8 @@ and the other session kind's empty, the session's own rules (it is built
 as a record's is, so a match's away score of 0 is refused as there), and
 `DecisionRules` (Crawford, the
 identifier's kind, a standalone position's start). A document breaking one
-is a `JsonException` on both paths. The init-guard sentinels the row once
-needed (`Roll`'s not-yet-stated backing field) are gone: no initializer can
-build a row outside this library, so the whole check runs once, over a
-complete row. The retired row shape (no kind, a 0 roll as the cube) is
-refused whole.
+is a `JsonException` on both paths. No initializer can build a row outside
+this library, so the whole check runs once, over a complete row.
 
 `Board` is a required `BoardPosition` in the frame of `PositionData.Mop`.
 The three boards and `AnalysisMode` / `AnalysisLevel` serialize to JSON,
@@ -2091,9 +1962,7 @@ produced.
   at least 1, and `IsCrawford`, with exactly one player 1-away when set).
 
 **Money versus match is the kind at every scope** (halheinrich/backgammon#273,
-Hal's ruling of 2026-09-26). The match length of 0, the `IsMoneyGame`
-derived from it, and the money convention of away scores 0 with
-`IsCrawfordGame` false are gone with the members that held them. The three
+Hal's ruling of 2026-09-26). The three
 scopes — a session's terms, a game's standing (seat-anchored, since both
 players roll within a game), a decision's `Session` (the terms, composed,
 and the standing from the player on roll's side) — are three closed pairs,
@@ -2226,8 +2095,8 @@ kinds"), so a test that builds one by hand restates the records'
 construction — and every consumer's tests did, each with a builder of its
 own. The producer owns that knowledge, so the producer ships the builders:
 `TestRecords`, in `BgDataTypes_Lib.TestSupport`, is the one way tests build
-records, here and in every consumer (each consumer's leg moves its tests
-onto it). This suite uses it too, so the builders are exercised against the
+records, here and in every consumer. This suite uses it too, so the builders
+are exercised against the
 real records and a change to a record's construction breaks one place.
 
 **What it holds: what consumers' tests share.** The project began as the
@@ -2298,18 +2167,12 @@ object initializer.
 
 ### Mop layout
 
-A `BoardPosition` from the on-roll player's perspective (the value's layout,
-well-formed by its invariant):
-
-- `[0]` = opponent's bar (≤ 0)
-- `[1–24]` = points 1–24
-- `[25]` = on-roll player's bar (≥ 0)
-- Positive = on-roll; negative = opponent
-
-`PositionData.Mop`, `DecisionRow.Board` and `IDecisionFilterData.Board` are
-in this frame; the after-boards hold the same layout in the next mover's
-frame (see "After-boards"). On the wire each is the 26 counts as a JSON
-number array, as before the boards were typed.
+The layout and its on-roll frame are `BoardPosition`'s, stated on the type's
+summary. `PositionData.Mop`, `DecisionRow.Board` and
+`IDecisionFilterData.Board` are in that frame; the after-boards hold the same
+layout in the next mover's frame (see "After-boards"). On the wire each is
+the 26 counts as a JSON number array. The two ways to get the frame wrong are
+under Pitfalls.
 
 ## Benchmarks
 
@@ -2364,6 +2227,12 @@ measure" is not a valid comparison on this hardware.
 
 ## Pitfalls
 
+Each entry is a mistake the type cannot refuse, or a reason the code does not
+carry. The reason behind a rule is in the section it points to; the "don't"
+is here.
+
+### Wire
+
 - **A new wire unit must be declared three times, and the test only guards
   two of them.** `BgDataTypesJsonContextTests`' completeness check derives
   the wire closure from the declared roots, so a new *property* anywhere in
@@ -2374,129 +2243,116 @@ measure" is not a valid comparison on this hardware.
   Byte-identity and converter-respect tests for the new root complete the
   gate. Keep its converter public and the context metadata-only — the
   composition rules in "Source generation & trimming".
-- **`DecisionId.Filename` must not contain `':'`.** The canonical-form
-  separator is the same character used to discriminate the two shapes at
-  parse time. The guard is **symmetric** on both subtypes — without it
-  on `XgpDecisionId`, a `.xgp` filename containing `':'` would parse back
-  as a (malformed) `XgDecisionId`. Both ctors throw `ArgumentException`;
-  `TryParse` returns false on the same input. Documented once on the
-  base; enforced by each derived ctor via a shared private-protected
-  helper.
-- **Every stored member is `required` or nullable — a record states them
-  all** (halheinrich/backgammon#222; "Absence on the wire"). Omitting a
-  required member at construction is a compile error, and a document
-  without it is a `JsonException` on both paths. Producers
-  (`ConvertXgToJson_Lib`'s `Build*` sites) state every member of the kind
-  they build; tests build through `TestRecords`. `Id` was the first such member — the
-  "producer-supplied identity" contract, no silent default IDs. Do not add
-  a member with an initializer instead: the source-generated context drops
-  initializers for absent members, which is the divergence the rule closed,
-  and `WireAbsenceTests` fails a member that is neither kind.
-- **A Crawford cube cannot be built** (`halheinrich/backgammon#201`). A
-  `CubeDecision`'s `Position` refuses a Crawford position with
-  `ArgumentException`, from an initializer in any member order; read from
-  JSON it is a `JsonException`; a row holding one is refused on
-  read. So a fixture that wants the Crawford flag builds a Crawford *play*,
-  and a test that needs a Crawford cube *key* (still in `ProblemKey`'s
-  grammar, for old stats documents) builds it from the key string, never
-  from a record. The Crawford flag is the match session's, and a Crawford
-  game has exactly one player 1-away: a fixture builds it as
-  `TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true)`,
-  and a test pinning the cube rule states such a standing, or the match
-  session's own rule refuses first.
+- **Do not add a wire member with an initializer.** The source-generated
+  context passes an absent init-only member as `default`, not as its
+  initializer, so one reopens the divergence between the two read paths
+  (see "Absence on the wire"), and `WireAbsenceTests` fails a member that is
+  neither required nor nullable. Producers (`ConvertXgToJson_Lib`'s `Build*`
+  sites) state every member of the kind they build; tests build through
+  `TestRecords`.
 - **Embed a record as `BgDecisionData`, not as its kind.** Every read
   refuses malformed input as a `JsonException` — as the base, as a kind, or
   as a category — but only the base reads either kind: a consumer's
   document embeds `BgDecisionData`, never a kind, and a collection of
   records is a consumer's document: its context declares it and chains this
   one.
-- **Every candidate of a checker play is valid from its position.** A
-  fixture that states a board and a decision states candidates valid from
-  that board — a record holding any other cannot be built (the invariant is
-  stated on `BoardState.IsSamePlay`). The builders' default candidates are
-  the opening's; on another board, state the plays, or take the builder's
-  pass.
-- **A decision position has a checker of each side.** A fixture's board
-  holds at least one checker of the player on roll and one of the opponent,
-  on a point or on the bar. The empty board and a side borne off are
-  `BoardPosition`s, but no record stands on one: `TestRecords.Position`
-  refuses them as the category does (see "Data categories"). A test that
-  needs such a board as a board builds the `BoardPosition`, or a
-  `BoardState` from it.
-- **`BgDecisionData.Id`, `Position`, `Descriptive` and each kind's
-  `Decision` reject null at init; absent is not null**
-  (`halheinrich/backgammon#221`, `halheinrich/backgammon#222`). An explicit
-  null — from an initializer or a JSON `"Position":null` — throws
-  `ArgumentNullException` naming the member (a `JsonException` carrying it
-  when read as a `BgDecisionData`); a document that omits the member is a
-  `JsonException` on both paths, refused as absent before any setter runs. No
-  record reaches `ProblemKey`'s no-key rung, a null half no more than any
-  other shape: `ProblemKey.From` has no failure case (see "ProblemKey"), so
-  a test or reader must not expect degrade-to-no-key from a record.
-- **The source-generated context passes an absent init-only member as
-  `default`, not as its initializer — which is why no member has one.** The
-  generated creator for every init-only type in the wire graph is one
-  object initializer over an argument array
-  (`ObjectWithParameterizedConstructorCreator`), and an absent member
-  arrives there as `default(T)` where the reflection path keeps an
-  initializer (measured 2026-09-14; `{"Id":"x"}` read with null halves
-  through the context). `halheinrich/backgammon#222` closed it by leaving
-  nothing to diverge on: a required member is refused absent on both paths
-  before the creator runs, and a nullable member's default is the `null`
-  both paths give. A member added with an initializer reopens it.
-- **Money is a session kind, never a 0.** A money record's position holds a
-  `MoneySession`, whose terms state its Jacoby rule and which has no
-  length, away scores or Crawford flag; a match's holds a `MatchSession`,
-  whose terms' length and whose away scores are at least 1. Do not read
-  money off a match length or away score of 0 — no surface carries one —
-  and do not look for an unknown Jacoby rule: every money session's terms
-  state it, so the old no-key rung, the bare `money` CSV token and the
-  unknown-rule Too Good case are gone. A producer building money terms
-  states `IsJacoby` because the member is required; one that cannot tell
-  the rule has no record to build.
-- **Build a session through `Session.Create`, never by orienting the
-  standing yourself.** A producer has the header's terms and the game's
-  standing by seat, and the seat on roll at each decision; the operation is
-  the one place the standing is turned to the player on roll, and the
-  kinds leave no other way in. Pass the seat of the player on roll at the
-  decision, not the seat that started the game. Code holding on-roll facts
-  already (a builder, a test) passes them as seat 1's with `Seat.Player1`,
-  which turns nothing. A caller with no decision — a game's header alone —
-  has no seat on roll to pass: it pairs the terms and the standing through
-  `GameSession.Create`, never through `Session.Create` with a seat standing
-  in for one.
-- **`DecisionRow.MatchScore` is computed, not stored.** It is spelled from
-  the row's `Session` — the session columns typed — on every access. Do not
-  try to set it.
+- **An options-level converter outranks the bundled attribute.** A consumer
+  building its own `JsonSerializerOptions` inherits every bundled converter
+  and need add nothing. A `JsonStringEnumConverter` registered there
+  *loosens* the strict enums back to accepting ordinals, and a reader that
+  accepts ordinals re-couples stored JSON to `AnalysisLevel`'s numbering,
+  where an inserted member renumbers everything after it
+  (halheinrich/backgammon#164;
+  `OptionsLevelRegistration_OutranksTypeAttribute_SoConsumersMustTightenToo`
+  pins the outranking). Do not strip `Play`'s attribute or register a
+  different converter for it: default property-based serialization only
+  sees `Count`, losing every move.
 - **`DecisionRow` carries no file format.** Extract owns its CSV
   (`CsvLayout`) since 2026-10-20 (halheinrich/backgammon#424): while the
   layout lived on the shared row, one app's columns reached the other's
   file. Do not put a file layout back on the row; its writer owns it.
+
+### Records and fixtures
+
+- **A Crawford cube cannot be built** (`halheinrich/backgammon#201`). So a
+  fixture that wants the Crawford flag builds a Crawford *play*, and a test
+  that needs a Crawford cube *key* (still in `ProblemKey`'s grammar, for old
+  stats documents) builds it from the key string, never from a record. A
+  Crawford game has exactly one player 1-away: a fixture builds it as
+  `TestRecords.MatchSession(onRollNeeds: 1, opponentNeeds: 3, isCrawford: true)`,
+  and a test pinning the cube rule states such a standing, or the match
+  session's own rule refuses first.
+- **A fixture's board and candidates are held to the record's rules.** The
+  builders' default candidates are the opening's; on another board, state
+  the plays, or take the builder's pass. The empty board and a side borne
+  off are `BoardPosition`s, but no record stands on one:
+  `TestRecords.Position` refuses them as the category does (see "Data
+  categories"). A test that needs such a board as a board builds the
+  `BoardPosition`, or a `BoardState` from it.
+- **Money is a kind, never a 0, at every scope.** A consumer matches on the
+  kind (`Session.Match`, `Terms.Match`, `Standing.Match`), never on a match
+  length or away score of 0: no surface carries one. An `IMatchInfo`
+  implementer returns `MoneyTerms` for a money session — XG's
+  unlimited-session sentinel (a length of 99999) is read at the parse
+  boundary as money, never surfaced as a `MatchTerms` length — and an
+  `IGameInfo` implementer a `MoneyStanding` for a money game. Every money
+  session's terms state the Jacoby rule, so do not look for an unknown one;
+  a producer that cannot tell the rule has no record to build.
+- **Pass `Session.Create` the seat on roll at the decision**, not the seat
+  that started the game: it is the one place the standing is turned to the
+  player on roll, and it cannot tell a wrong seat from a right one. Code
+  holding on-roll facts already (a builder, a test) passes them as seat 1's
+  with `Seat.Player1`, which turns nothing. A caller with no decision — a
+  game's header alone — has no seat on roll to pass: it pairs the terms and
+  the standing through `GameSession.Create`, never through `Session.Create`
+  with a seat standing in for one.
+- **`default` is not "none".** `default(DiceRoll)` is non-meaningful: a
+  `record struct` cannot run its face validation on `default`, so it carries
+  faces of 0. `default(CubeAnswer)` is a real answer, `NoDouble`, so an
+  unset field reads as one. "No roll" is `DiceRoll?` null and "no answer"
+  `CubeAnswer?` null, never `default`.
+
+### Boards and frames
+
 - **Mop sign convention is player-relative, not color-relative.** Positive
   always means the on-roll player, regardless of which physical color they
-  are playing. Code that forgets this will silently mirror boards.
-- **`IDecisionFilterData.Board` is in the on-roll frame.** The layout is the
-  type's now (`BoardPosition`); the frame is not, so a new implementer
-  returns the `PositionData.Mop` frame exactly — `XgFilter_Lib` filters
+  are playing. Code that forgets this will silently mirror boards. A new
+  `IDecisionFilterData` implementer returns `Board` in exactly this frame:
+  the layout is the type's, the frame is not, and `XgFilter_Lib` filters
   assume it.
 - **After-boards use flipped POV.** `AfterBoardOf` / `AfterBestBoard` / `AfterPlayerBoard` hold
   the same layout as `Board` but in the next mover's frame — the opponent is
   on roll after a play, so the decision-maker's checkers are *negative* and
   the opponent's are positive. Code that forgets this mirrors the
   after-boards silently.
-- **After-boards are derived, and `null` only where they do not exist**
-  (halheinrich/backgammon#15; the records leg of halheinrich/backgammon#273). A checker play's best
-  board under any ranking always exists; its player board is `null` exactly when the user's
-  play is not among the candidates; a cube decision has neither (`null`
-  through `IDecisionFilterData`, no member on the type). They are never on
-  a record's wire, so no producer states them; the row carries them as
-  taken from the record. The legacy `[]` is a malformed board now: the
-  shape that wrote it is refused whole.
-- **`Move.ToPt` sign-encoding.** `0` is bear off (not "stay on point 0"),
-  negative is a hit landing on `|ToPt|` (not a backward move — players
-  cannot move backward), positive is a regular move. Code that compares
-  `ToPt` numerically without understanding the encoding will silently
-  misinterpret hits and bear-offs.
+- **`ApplyPlay` flips perspective; the bare flip is private.** After
+  `ApplyPlay`, positive values represent the *next* mover's checkers, not
+  the previous on-roll's. Code that expects to inspect a state "from the
+  original mover's POV" after a turn must take a `Copy()` *before* calling
+  `ApplyPlay`. To *view* a position from the other player's frame without
+  advancing state, use `BoardPosition.Flipped()` (a value, allocation-free)
+  or `FlippedCopy()` (a board) — never re-encode negate-and-reverse in a
+  consumer; the value's `Flipped()` is the one statement of the rule.
+- **`Move.ToPt` is sign-encoded** (see "Move encoding"). `0` is bear off, not
+  "stay on point 0", and a negative is a hit landing on `|ToPt|`, not a
+  backward move. Code that compares `ToPt` numerically without understanding
+  the encoding will silently misinterpret hits and bear-offs.
+- **Bearing-off overshoot is a property of the data shape.** Bear-off
+  legal only from `HighPointOccupied` when `HighPointOccupied <= 6`
+  *and* the die exceeds `FrPt`. The `BoardState` data primitive does
+  not enforce this — `Move(FrPt, 0)` is encodable for any `FrPt` —
+  but `BgMoveGen.MoveGenerator.NextMove` does. Code that hand-builds
+  bear-off moves outside the move generator must respect the rule.
+- **`BoardState` cannot be written by callers, and must not be reopened**
+  (halheinrich/backgammon#281; `BoardStateTests.PublicSurface_HasNoWritableState`).
+  A test or consumer that wants a particular board builds it — `FromMop`
+  from counts, or `new BoardState(position)` — and changes it through the
+  apply methods. Re-exposing a writable array, or a public
+  `RecalcHighPoint`, would bring back the desynced high point and the
+  corrupt boards `ApplyPlay`'s guarantee cannot survive.
+
+### Plays
+
 - **`Play` is a mutable value type.** `Add` / `RemoveLast` mutate in place,
   but assigning a `Play` to another variable copies the buffer. Code that
   retains a reference into a `List<Play>` slot and mutates it later is
@@ -2507,113 +2363,53 @@ measure" is not a valid comparison on this hardware.
   iteration (pinned by test).
 - **`Play.Create`'s cost depends on which overload you reach.** The four
   fixed-arity overloads construct at parity with the incremental `Add`
-  spelling (0.85–0.96x measured, allocation-identical) and are what a
-  literal argument list binds to. `Create(params ReadOnlySpan<Move>)` and
-  collection expressions cost 1.3–2.1x — not because of anything inside
-  the method, but because the *caller* materialises an argument buffer
-  before the call, which no change to `Play` can remove. That is fine for
-  tests and readability sites and wrong for a move-generation inner loop:
-  in a hot path, pass the moves as separate arguments (or keep using
-  `Add`), and do not "tidy" such a site into a collection expression.
-  Numbers and the standing guard live in Benchmarks.
+  spelling and are what a literal argument list binds to.
+  `Create(params ReadOnlySpan<Move>)` and collection expressions cost more —
+  not because of anything inside the method, but because the *caller*
+  materialises an argument buffer before the call, which no change to
+  `Play` can remove. That is fine for tests and readability sites and wrong
+  for a move-generation inner loop: in a hot path, pass the moves as
+  separate arguments (or keep using `Add`), and do not "tidy" such a site
+  into a collection expression. The numbers and the standing guard are
+  under Benchmarks.
 - **The slot-write seam is private and must stay the only one.** `Add` and
   all five `Create` overloads write moves through one private `SetSlot`
   primitive, which owns both the ordinal → field mapping and the `Count`
-  maintenance that goes with it; no other member touches a slot field or
-  `Count`. It carries `[MethodImpl(AggressiveInlining)]` deliberately and
-  measurably: without it `Add` does not fold its slot switch and costs
-  **8x** (caught by the `*_Add` benchmark rows, which exist as that
-  regression guard). A future construction path adds an overload that
+  maintenance that goes with it. It carries
+  `[MethodImpl(AggressiveInlining)]` deliberately and measurably: without
+  it `Add` does not fold its slot switch, which the `*_Add` benchmark rows
+  exist to catch (`PlayConstructionBenchmarks`' summary records what an
+  early attempt cost). A future construction path adds an overload that
   calls `SetSlot` with literal indices — it does not write slots itself,
   and it does not loop over `Add`.
 - **`Play` and `CanonicalPlay` have no equality — by ruling, not
-  omission.** `==` does not compile; `Equals`, `GetHashCode`, and so any
-  comparer, hashed collection, `Distinct`, or record or tuple holding a
-  play, throw `NotSupportedException`. Compare plays with
-  `BoardState.IsSamePlay` from their starting position, find one in a list
-  with `IndexOfSamePlay`, and compare stored encodings with
-  `Play.IsSameEncoding`. Do not reintroduce a board-less comparison, a
-  notation key, or a `CanonicalPlay`-based dedupe: the display form differs
-  between encodings of one play (`halheinrich/backgammon#277`).
-- **`Play` requires its bundled `JsonConverter`.** Default property-based
-  serialization only sees `Count`, losing every move. The
-  `[JsonConverter(typeof(PlayJsonConverter))]` attribute is intrinsic to
-  the type — do not strip it, and do not register a different converter
-  for `Play` in consumer-side options without understanding the
-  consequence.
-- **`BoardState` cannot be written by callers, and must not be reopened**
-  (halheinrich/backgammon#281). `Points` is a `ReadOnlySpan<int>` and
-  `HighPointOccupied` has a private setter, pinned by
-  `BoardStateTests.PublicSurface_HasNoWritableState`. A test or consumer
-  that wants a particular board builds it — `FromMop` from counts, or
-  `new BoardState(position)` — and changes it through the apply methods;
-  it never writes counts. Re-exposing a writable array, or a public
-  `RecalcHighPoint`, would bring back the desynced high point and the
-  corrupt boards `ApplyPlay`'s guarantee cannot survive. The apply/undo
-  helpers keep the per-change maintenance, not property setters, because
-  hot-path move generation needs zero-overhead apply/undo.
-- **Bearing-off overshoot is a property of the data shape.** Bear-off
-  legal only from `HighPointOccupied` when `HighPointOccupied <= 6`
-  *and* the die exceeds `FrPt`. The `BoardState` data primitive does
-  not enforce this — `Move(FrPt, 0)` is encodable for any `FrPt` —
-  but `BgMoveGen.MoveGenerator.NextMove` does. Code that hand-builds
-  bear-off moves outside the move generator must respect the rule.
-- **`Bg960` mirror conflicts.** Point `i` and point `25 - i` can never
-  both be made (they'd collide under symmetry). `Bg960` rejects the
-  mirror partner as it picks each quadrant representative.
-- **Pip-count integer width.** Per-product max is `15 × 25 = 375`, total
-  fits comfortably in `int`. Do not narrow to `byte` / `short` if you
-  copy this logic elsewhere.
-- **`ApplyPlay` flips perspective; the bare flip is private.** After
-  `ApplyPlay`, positive values represent the *next* mover's checkers,
-  not the previous on-roll's. There is no public `Flip()` — callers
-  reasoning in on-roll POV never need to flip explicitly. Code that
-  expects to inspect a state "from the original mover's POV" after a
-  turn must take a `Copy()` *before* calling `ApplyPlay`. To *view* a
-  position from the other player's frame without advancing state, use
-  `BoardPosition.Flipped()` (a value, allocation-free) or `FlippedCopy()`
-  (a board) — never re-encode negate-and-reverse in a consumer; the
-  value's `Flipped()` is the one statement of the rule.
+  omission.** Compare plays with `BoardState.IsSamePlay` from their starting
+  position, find one in a list with `IndexOfSamePlay`, and compare stored
+  encodings with `Play.IsSameEncoding`. Do not reintroduce a board-less
+  comparison, a notation key, or a `CanonicalPlay`-based dedupe: the display
+  form differs between encodings of one play
+  (`halheinrich/backgammon#277`).
+
+### Depth and verdicts
+
 - **`AnalysisMode` and `AnalysisLevel` always travel as a pair, and
-  `Unknown`/`Unknown` is data, not an error.** Both zero values are
-  deliberate — "depth not recorded" — and a producer states them: the
-  members are required (halheinrich/backgammon#222), so JSON written before
-  the pair existed is refused rather than read as `Unknown`/`Unknown`, while
-  the retired flat `AnalysisDepthClass` beside a full pair is still an
-  unrecognized property, ignored on read. `BookRollout` +
-  `AnalysisLevel.Unknown` is additionally a live producer stamp (book hit
-  without recoverable levels), so code must not treat `AnalysisLevel.Unknown`
-  as implying `AnalysisMode.Unknown`. Declaration order is what the UI
-  renders and, for `AnalysisLevel`, is *contractual* ascending rigor (ruled
-  2026-08-28 on XG's own menu): the ply and Roller families interleave, so a
-  reorder or out-of-order insertion breaks the diagram's level floor and the
+  `Unknown`/`Unknown` is data, not an error.** `BookRollout` +
+  `AnalysisLevel.Unknown` is a live producer stamp (a book hit without
+  recoverable levels), so code must not treat `AnalysisLevel.Unknown` as
+  implying `AnalysisMode.Unknown`. `AnalysisLevel`'s declaration order is
+  contractual ascending rigor, ruled on XG's own menu, with the ply and
+  Roller families interleaved (the type's remarks own the rule): a reorder
+  or an out-of-order insertion breaks the diagram's level floor and the
   level dropdowns. `Unknown` is outside that scale — never a floor, never a
-  threshold. `DepthRank` (a candidate's and the cube analysis's) remains the ordering surface for
-  consumers comparing whole analyses across the mode × level pair. Do not
-  strip a member's `[Description]` label: downstream label readers (XgFilter_Lib's
-  `EnumLabel.ToLabel`) throw on a member without one.
-- **`IDecisionFilterData.Dice` is null for cube decisions, and never
-  malformed.** Null means "no dice apply" (a cube is offered before the roll
-  — the null-when-inapplicable convention), never "data was
-  bad": a checker play's roll is two faces 1–6 by construction
-  (`CheckerPlayDecisionData.Dice`), and a row's `Roll` is refused on read
-  unless it is two die faces. Both derivations are `[JsonIgnore]`d; the
-  stored forms (`Roll`, `Decision.Dice`, rolled order) remain the wire.
-- **`default(DiceRoll)` is non-meaningful.** A `record struct` cannot run
-  its face validation on `default`, so `default(DiceRoll)` carries faces of
-  0. "No roll" is modelled as `DiceRoll?` null, never as `default`. The
-  standard value-type caveat, shared with `Play`.
-- **A candidate's error is a ranking's, derived; `0.0` means no loss vs.
-  that ranking's best.** `RankedBy(ranking).ForCandidate(i).Error` is the
-  best's equity minus the candidate's, never negative, for a candidate the
-  ranking scores; for one it does not (under depth first: another depth,
-  higher equity) it is `null` — a play the ranking does not score has no
-  error, so there is nothing negative to sum by mistake. Identifying the
-  best uses `RankedPlays.Best`; testing membership in its equivalence class
-  uses `Error == 0.0`. Judging a play *correct* does not: that is the zero
-  rule, `EquityDisplay.CountsAsZero`, which a play a hair off the best passes
-  too. There is no ranking-free best or loss to read, and
-  none to state: a producer states equities and depths.
+  threshold. To compare whole analyses across the pair, use `DepthRank`. Do
+  not strip a member's `[Description]` label: downstream label readers
+  (XgFilter_Lib's `EnumLabel.ToLabel`) throw on a member without one.
+- **Best, equal-best and correct are three questions.** Identifying the
+  best uses `RankedPlays.Best`, under a ranking; testing membership in its
+  equivalence class uses `Error == 0.0`; judging a play *correct* is the
+  zero rule, `EquityDisplay.CountsAsZero`, which a play a hair off the best
+  passes too. A candidate's `Error` is `null` where the ranking does not
+  score it, so there is nothing negative to sum by mistake.
 - **Judge a loss zero, and show any equity figure, only through
   `EquityDisplay`.** Every verdict — a checker play, each part of a cube
   answer, each whole answer — asks `CountsAsZero`; every display of a cost
@@ -2625,66 +2421,32 @@ measure" is not a valid comparison on this hardware.
   each count as zero can add up to a cost that does not. To name the
   answers that cost nothing, read `CubeDecision.ZeroCostAnswers` rather
   than filtering the four through `CostOf` again.
-- **The cube helpers are a cube decision's only.** `ActionEquity`, the
-  two best actions, the two errors and `BestAnswer` live on
-  `CubeDecisionData`, and `GammonsPossible`, `ClaimOf`, `CostOf` and
-  `ZeroCostAnswers` on `CubeDecision`, so asking any of them of a checker
-  play does not compile;
-  the `IsCube` guard they needed is gone. Callers in mixed-decision contexts
-  match on the record (`Match` / `Switch`). The computed properties carry
-  `[JsonIgnore]`; do not strip those attributes.
-- **An action error is not an answer's cost.** `DoublerActionError` and
-  `TakerActionError` are the analysis's: what an action loses against the
-  best of its half. What an answer costs is `CubeDecision.CostOf`, per
-  SPEC-scoring §3, which adds the response the answer commits to and whose
-  two ruled conventions (its "Two conventions" bullet) can make an answer's
-  cost differ from its action's error. Do not score an answer from the
-  action errors, and do not re-spell its parts: a No double answer's implied
-  take is never charged (`CommitsToResponse`), and the conventions apply
-  only where gammons are possible.
-- **The action-error methods reject the wrong half.**
-  `DoublerActionError(CubeAction)` accepts only `Double` / `NoDouble`;
-  `TakerActionError(CubeAction)` accepts only `Take` / `Pass`. The
-  other half throws `ArgumentOutOfRangeException`. `ActionEquity` takes
-  every defined action, since each has an equity.
+
+### The cube
+
+- **An action error is not an answer's cost.** Do not score an answer from
+  `DoublerActionError` and `TakerActionError`, and do not re-spell its
+  parts: read `CubeDecision.CostOf` (the reason is under "The analysis's
+  cube actions on CubeDecisionData"). A No double answer's implied take is
+  never charged (`CommitsToResponse`), and the conventions apply only where
+  gammons are possible.
 - **Never restate a cube action's equity; read `ActionEquity`.** Its value
   for every action is the doubler's, the taker's actions included: a take
-  is `+DoubleTakeEquity` and a pass +1, not their negations, and the
-  taker's own equity is the negation. Spelling `Math.Min(DoubleTakeEquity,
-  1)` or a pass constant in a consumer creates a second source of the
-  calculation the errors, the truth and the costs derive from, and inside
-  this library the constant has one reader, `ActionEquity`.
-- **`UserDoublerAction` / `UserTakerAction`: one value, cross-half
-  consistency guarded.** They read through `CubeDecisionData.Recorded`
-  (`RecordedCubeActions`), whose constructor rejects each half's wrong
-  actions with `ArgumentOutOfRangeException` and a taker half — a response
-  or the analyser's take error — beside a doubler action that is not
-  `Double` with `ArgumentException`, from code and from a document alike
-  (halheinrich/backgammon#440; until then it was a producer contract, and
-  `(NoDouble, Take)` could be built). A test that overrides
-  `TestRecords.CubeData`'s `userDoublerAction` keeps the builder's default
-  `Take` unless it says otherwise, and is refused. Null means "not
-  recorded", not "declined": a null
+  is `+DoubleTakeEquity` and a pass +1, not their negations. Spelling
+  `Math.Min(DoubleTakeEquity, 1)` or a pass constant in a consumer creates a
+  second source of the calculation the errors, the truth and the costs
+  derive from.
+- **A null recorded action means "not recorded", not "declined".** A null
   `UserTakerAction` alongside a recorded `NoDouble` is the normal
-  undoubled-game state — no taker decision ever existed — not missing
-  data. And they are *actions, never claims* —
-  do not infer `CubeClaim` from a played action (see "Played cube actions
-  on CubeDecisionData"); the rationale is a property of the analysis.
-- **The skip-early contracts state money as a kind, never as 0s.** An
-  `IMatchInfo` implementer returns `MoneyTerms` for a money session — XG's
-  unlimited-session sentinel (a length of 99999) is read at the parse
-  boundary as money, never surfaced as a `MatchTerms` length, which refuses
-  anything below 1 anyway — and an `IGameInfo` implementer a
-  `MoneyStanding` for a money game. A consumer matches on the kind
-  (`Terms.Match`, `Standing.Match`), never on a length or away score of 0:
-  no member holds one.
-- **`default(CubeAnswer)` is an answer.** The zero value is `NoDouble`, so
-  an unset field reads as a real answer. "No answer" is `CubeAnswer?`
-  null, never `default`.
-- **The fourth answer is not Too good.** `CubeAnswer.NoDoublePass` is "don't
-  double, they'd pass"; it reads Too good only where gammons are possible.
-  Label it from `CubeDecision.ClaimOf`, never by a fixed mapping from the
-  answer, and never re-derive the choice from the board or the session.
+  undoubled-game state — no taker decision ever existed — not missing data.
+  A test that overrides `TestRecords.CubeData`'s `userDoublerAction` keeps
+  the builder's default `Take` unless it says otherwise, and is refused. And
+  they are *actions, never claims*: do not infer `CubeClaim` from a played
+  action (see "Played cube actions on CubeDecisionData").
+- **The fourth answer is not Too good.** `CubeAnswer.NoDoublePass` reads Too
+  good only where gammons are possible. Label it from
+  `CubeDecision.ClaimOf`, never by a fixed mapping from the answer, and
+  never re-derive the choice from the board or the session.
 - **Never re-derive whether gammons are possible.**
   `CubeDecision.GammonsPossible` is the one site; spelling a borne-off
   count, a cube-against-needs comparison or a Jacoby-and-centred test in a
@@ -2698,9 +2460,12 @@ measure" is not a valid comparison on this hardware.
   correctness as equality with the truth.
 - **Never map an answer to its actions, or back, by hand.** The
   projections are `CubeAnswerExtensions`' (`DoublerAction`, `TakerAction`,
-  `CommitsToResponse`); a consumer's own switch is a second statement of
-  them. No claim leads back to an action, and no action or answer to a
-  claim without the decision (`ClaimOf`).
+  `CommitsToResponse`) and `Of` their inverse; a consumer's own switch is a
+  second statement of them. No claim leads back to an action, and no action
+  or answer to a claim without the decision (`ClaimOf`).
+
+### Named collections
+
 - **A `NamedCollection` specialization is a closed pattern, and every part
   of it is load-bearing.** The shape (the saved-filter document of
   halheinrich/backgammon#190 leg (B) and the queued mix document follow it):
