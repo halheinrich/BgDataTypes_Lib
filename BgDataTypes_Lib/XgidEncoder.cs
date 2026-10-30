@@ -33,8 +33,9 @@ namespace BgDataTypes_Lib;
 /// player on roll's side, as the record is.</description></item>
 /// <item><description><b>dice</b> — a checker play's roll, high die first
 /// (<c>31</c>: <see cref="DiceRoll"/>'s canonical token, which is how XG
-/// writes it — none of the 80,497 distinct XGIDs in the local corpus is
-/// low-first — whatever order the record states them rolled in);
+/// writes it — none of the 80,497 distinct XGIDs in the local corpus,
+/// measured 2026-09-26, is low-first — whatever order the record states them
+/// rolled in);
 /// <c>00</c> for a cube decision, made before the roll.</description></item>
 /// <item><description><b>score1</b>, <b>score2</b> — the points each player
 /// has won, the player on roll's first: for a match, its length less each

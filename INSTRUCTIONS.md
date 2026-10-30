@@ -505,9 +505,9 @@ asked for it exhaustively). Derived, never stored:
 | `CubeDecisionData.BestAnswer` | the two halves' best actions: the cube answer whose projections they are (see "Cube answers and their costs") |
 | `CubeDecision.GammonsPossible` | the position's board, cube and owner and its session's kind, rules and needs (see "Cube answers and their costs") |
 | `CubeDecision.ClaimOf(answer)`, `CostOf(answer)` | the answer, `GammonsPossible`, and for the cost the equities through `ActionEquity` |
-| `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus: 16,932 of 16,959 doubler errors within 1e-5, the rest within 1e-4; all 830 taker errors equal). A take error exists only under a stated `Double`, since a taker half does (`RecordedCubeActions`) |
+| `CubeDecisionData.UserDoubleError`, `UserTakeError` | the stated action's `DoublerActionError` / `TakerActionError`; otherwise the stored unstated-action error (confirmed against the corpus, measured once in the halheinrich/backgammon#273 leg, September 2026; figures not retained). A take error exists only under a stated `Double`, since a taker half does (`RecordedCubeActions`) |
 | `IDecisionFilterData.Taker`, `TakerResult` (a cube record's view, and the row's columns from it) | a stated `Double`: the opponent's name (`DescriptiveData.OpponentName`), and the response scored with its `TakerActionError`, the stored unstated take error, or not recorded where the record holds neither (a double answered by resigning); `null` for a checker play and wherever no double was offered (SPEC-filtering §8) |
-| `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures matched within 9.5e-7 (273,592 candidates) and 2.4e-7 (17,158 cube decisions, each half) |
+| `PlayCandidate.LosePct`, `CubeDecisionData.LosePctAfterNoDouble`, `LosePctAfterDoubleTake` | `1 −` the matching win probability: every game is won or lost. XG's stored figures were copies: the measurements are on `PlayCandidate.LosePct` and `CubeDecisionData.LosePctAfterNoDouble` |
 | `BgDecisionData.Xgid` | the board, the cube and its owner, the session (its kind's facts) and a checker play's roll, by the format stated on the internal `XgidEncoder` (see "The XGID, derived") |
 
 Stored, as source data:
@@ -1723,8 +1723,9 @@ Design points a maintainer needs before touching it:
   has won — and at most the length;
   and in the Crawford game exactly one player 1-away (the Crawford game is
   the one after a player first reaches match point, so the other is not
-  1-away then, and a 1-point match has none; the corpus measured 7,855
-  Crawford XGIDs with none else). Each guard is order-independent, naming
+  1-away then, and a 1-point match has none; the corpus held no other
+  shape, measured once in the halheinrich/backgammon#273 leg, September
+  2026; figures not retained). Each guard is order-independent, naming
   the member that completed the contradiction; a document gets a
   `JsonException` carrying it.
 - **Money states its rule.** `MoneyTerms.IsJacoby` is a required `bool`:
@@ -1773,8 +1774,8 @@ record's and the string cannot disagree with it. The format, field by field, is 
   from that side, the scores the player on roll's first.
 - **The roll high die first**, whatever order the record states it rolled
   in: `CheckerPlayDecision.Dice`'s canonical token, which is how XG writes
-  it (no low-first roll among the corpus's 80,497 distinct XGIDs). A cube
-  decision's is `00`.
+  it (no low-first roll among the corpus's 80,497 distinct XGIDs, measured
+  2026-09-26). A cube decision's is `00`.
 - **The format's spellings of money are the encoder's alone.** For money it
   writes a match length of 0 and the session's scores; for a match, its
   length less each away score. Field 8 is Crawford for a match, Jacoby plus
@@ -2178,8 +2179,7 @@ under Pitfalls.
 
 `BgDataTypes_Lib.Benchmarks` is a BenchmarkDotNet harness over `Play`
 construction — the one place in this library with a hot-path performance
-contract, because BgMoveGen's generator builds a `Play` per candidate
-several million times per BgRLEngine training run.
+contract, because BgMoveGen's generator builds a `Play` per candidate.
 
 `PlayConstructionBenchmarks` groups its cases by move count (1–4), with the
 incremental `Add` spelling as each group's baseline, and covers four
@@ -2220,7 +2220,7 @@ takes minutes and asserts nothing, so it is measured on demand, never as
 part of the suite.
 
 **Numbers off this machine are contended.** eXtremeGammon rollouts routinely
-run here and inflate BenchmarkDotNet's mean by up to 1.8x. Only ever read
+run here and inflate BenchmarkDotNet's means. Only ever read
 the sibling comparison *within* one run — the grouped `Ratio` column — never
 one run's absolute means against another's. Sequential "measure, edit,
 measure" is not a valid comparison on this hardware.
