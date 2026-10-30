@@ -3,6 +3,7 @@
 > Collaboration contract: [`../AGENTS.md`](../AGENTS.md)
 > Umbrella status & dependency graph: [`../INSTRUCTIONS.md`](../INSTRUCTIONS.md)
 > Mission & principles: [`../VISION.md`](../VISION.md)
+> Open work: the [tracker](https://github.com/halheinrich/backgammon/issues), label `BgDataTypes_Lib`.
 
 ## Stack
 
@@ -22,12 +23,9 @@ Atomic by design. BgDataTypes_Lib has no subproject dependencies and must
 not gain any. The shared-data layer is the foundation other subprojects
 rest on; introducing a subproject dependency here would either create a
 circular reference or force the dependency on every consumer transitively.
-`System.Text.Json` is the only runtime dependency; the serialized types
-that need converters (`CubeOwner`, `CubeAction`, `AnalysisMode`,
-`AnalysisLevel`, `Play`, `DecisionId`, `ProblemKey`, `DiceRoll`, `BoardPosition`)
-each bundle their own `[JsonConverter]` attribute, as every enum does, and the optional
-after-boards name theirs at the property, so consumers do not have to
-register converters on their `JsonSerializerOptions`.
+`System.Text.Json` is the only runtime dependency, and consumers register
+no converter on their `JsonSerializerOptions`: each serialized type bundles
+its own (see "JSON converters and the serializer context" under Layout).
 
 ## Layout
 
@@ -100,24 +98,48 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `IGameInfo` and `IMatchInfo`, implemented by producers so filter layers
   never reference a producer's concrete types, stating money versus match
   as the kind of their `GameStanding` and `SessionTerms`.
-- **JSON converters and the serializer context** — `PlayJsonConverter`,
-  `DiceRollJsonConverter`, `DecisionIdJsonConverter`,
-  `ProblemKeyJsonConverter`, `BoardPositionJsonConverter`, and
-  `StrictJsonStringEnumConverter<TEnum>` (every enum). Each is bundled
-  onto its type by a type-level `[JsonConverter]` attribute; consumers
-  register nothing. `BgDecisionDataJsonConverter`, `SessionJsonConverter`,
-  `SessionTermsJsonConverter` and `GameStandingJsonConverter` dispatch
-  rather than write: each finds a document's kind
-  and delegates the document to that kind's generated contract. How a kind
-  is found, and a document without exactly one known kind refused, is
-  stated once, on the internal `KindDispatch`; each dispatching converter
-  supplies its mapping from kind to contract and nothing else. All are
-  public —
-  a downstream `JsonSerializerContext` whose documents embed an annotated
-  type must instantiate its converter from generated code, so an internal
-  converter fails that generator outright (SYSLIB1220).
+- **JSON converters and the serializer context** — the one list of which
+  type bundles which converter. Each is a `[JsonConverter]` attribute on the
+  type, so consumers register nothing; the attributes are the code's
+  statement, and `BgDataTypesJsonContextTests` pins them, byte identity with
+  the reflection path included. All are public: a downstream
+  `JsonSerializerContext` whose documents embed an annotated type must
+  instantiate its converter from generated code, so an internal converter
+  fails that generator outright (SYSLIB1220).
+  - *Every enum*: `StrictJsonStringEnumConverter<TEnum>`, `CubeAnswer` and
+    `CubeClaim` included though no document embeds either. A token is the
+    declared member name; a numeric ordinal is a `JsonException`; name
+    matching on read is case-insensitive, the base converter's behaviour,
+    which has no knob. The owner of the rule and its reason is the
+    converter's doc.
+  - *A token of its own*: `PlayJsonConverter` on `Play` (a JSON array of
+    `Move`), `DiceRollJsonConverter` on `DiceRoll`,
+    `DecisionIdJsonConverter` on `DecisionId`, `ProblemKeyJsonConverter` on
+    `ProblemKey` (the only one with the property-name overloads, so it also
+    works as a dictionary key), and `BoardPositionJsonConverter` on
+    `BoardPosition` (the 26 counts as a number array; a malformed board is a
+    `JsonException`; a `BoardPosition?` is `null` or that form).
+  - *Dispatching*: `BgDecisionDataJsonConverter` on `BgDecisionData`,
+    `SessionJsonConverter` on `Session`, `SessionTermsJsonConverter` on
+    `SessionTerms` and `GameStandingJsonConverter` on `GameStanding` find a
+    document's kind and delegate the document to that kind's generated
+    contract. How a kind is found, and a document without exactly one known
+    kind refused, is stated once, on the internal `KindDispatch`; each
+    supplies its mapping from kind to contract and nothing else.
+  - *Downstream*: `NamedCollectionJsonConverter<TValue, TSelf>` is abstract;
+    a specialization bundles its own closed form, in its own repo (see
+    "Named documents").
+
   `BgDataTypesJsonContext` is the source-generated context over the whole
-  wire surface — see "Source generation & trimming" below.
+  wire surface — see "Source generation & trimming" below. Round trips with
+  no options-level registration are tested in
+  `BgDecisionDataSerializationTests`, `DecisionRowSerializationTests`,
+  `DecisionKindTests`, `SessionKindTests`, `HeaderWireTests`, `DiceRollTests`,
+  `ProblemKeyTests` and `BoardWireTests`; `DocumentRefusalTests` reads every
+  rule's breach as each type that can hold it, on both paths;
+  `WireGoldenTests` pins the bytes of a full record and row of each kind,
+  beside the retired shapes it refuses; `WireAbsenceTests` walks absence
+  member by member.
 - **Named-document machinery** (halheinrich/backgammon#190) —
   `IJsonDocument<TSelf>`, the persistence-trio contract every persisted
   document type implements (fail-loud `FromJson`, always-usable
@@ -170,20 +192,8 @@ move primitives `Move` (`readonly record struct`) and `Play` (mutable
 `struct`) are value types for hot-path zero-alloc reasons inherited from
 their move-generation origins. `BoardState` is a `class` but mutable —
 the one deliberate exception (see "Mutability exception" below).
-Serialization uses `System.Text.Json` with bundled `[JsonConverter]`
-attributes: `StrictJsonStringEnumConverter<TEnum>` on `CubeOwner`,
-`CubeAction`, `AnalysisMode`, and `AnalysisLevel`, and on every other enum
-(`CubeAnswer` and `CubeClaim` too, though no document embeds either),
-`PlayJsonConverter` on `Play`,
-`DecisionIdJsonConverter` on `DecisionId`, `ProblemKeyJsonConverter` on
-`ProblemKey`, `DiceRollJsonConverter` on `DiceRoll`, and
-`BoardPositionJsonConverter` on `BoardPosition`, `DecisionKind` and
-`SessionKind` on the strict enum converter too, `BgDecisionDataJsonConverter`
-on `BgDecisionData`, `SessionJsonConverter` on `Session`,
-`SessionTermsJsonConverter` on `SessionTerms`, and
-`GameStandingJsonConverter` on `GameStanding`. Consumers do not need to register any of these converters on their
-`JsonSerializerOptions` — the attributes carry the contract on the types
-themselves.
+Serialization uses `System.Text.Json`, with each converter bundled on its
+type (see "JSON converters and the serializer context" under Layout).
 
 ### Source generation & trimming
 
@@ -624,13 +634,9 @@ asking again allocates nothing. An undefined ranking is an
 `ArgumentOutOfRangeException` at every door.
 
 **No ranking-free best.** Nothing answers "best" or "error" without a
-ranking: the equity-only `BestPlayIndex`, `BestPlay`, `EquityLoss(i)` and
-`UserPlayError` are gone (their equity-ordered values are the `Equity`
-ranking's), and a test walks the public surface for any member saying
-best, error or loss that neither takes a ranking nor belongs to a type
-built for one. `CheckerPlayDecision.AfterBoardOfBest(ranking)` takes one
-— renamed from the old `AfterBestBoard` property's name, so a stale use
-cannot bind the method group as a delegate and must fail to compile;
+ranking, and a test walks the public surface for any member saying best,
+error or loss that neither takes a ranking nor belongs to a type built for
+one. `CheckerPlayDecision.AfterBoardOfBest(ranking)` takes one;
 `AfterBoardOf(index)` gives any candidate's board, `AfterPlayerBoard` the
 user's.
 
@@ -675,12 +681,7 @@ the analyser's error for an unstated one, or not recorded), never
 was offered, otherwise the response scored, the analyser's take error, or
 `NotRecorded` for a double answered by resigning (Hal, 2026-10-26), never
 `NotScored`; `Taker` names the opponent beside it (SPEC-filtering §8,
-halheinrich/backgammon#440). The view's former fallback to the taker's
-result when the doubler's was absent is gone: no record can hold a taker
-half without a stated double, so it had nothing left to read. Which half a
-facet reads is XgFilter_Lib's. The old `RankedPlays.UserPlayError` and
-`IDecisionFilterData.FilterError` are gone, so a stale use fails to
-compile.
+halheinrich/backgammon#440). Which half a facet reads is XgFilter_Lib's.
 
 Whether a play is correct is judged by the zero rule every equity loss
 shares: its error shows as `0.0000` (`EquityDisplay.CountsAsZero`;
@@ -1029,10 +1030,7 @@ These are pure derivations from `Points`. The pip rule is stated once
 (`BoardState.OnRollPips` / `OpponentPips`, internal), and
 `PositionData.OnRollPipCount` / `OpponentPipCount` read it from the
 record's board: a record's pip counts are derived, never stored, so they
-are the board's by construction. (They used to carry the producer's stored
-values; the producer computed those from the same board, and the previous
-wire golden's stated 130 / 145 were not its own board's counts — the drift
-a stored copy allows.)
+are the board's by construction.
 
 ### Play identity
 
@@ -1368,18 +1366,6 @@ The three computed properties (`BestDoublerAction`, `BestTakerAction`,
 `ActionEquity` and the error methods are intrinsically not serialised
 because they take parameters.
 
-**No verdict lives here.** The aggregate verdict layer (`CubeVerdict`,
-removed in the cube-surface rebuild at `94e27f9`, whose design git history
-keeps) is not slated to return: halheinrich/backgammon#326 replaced it. A
-cube answer is one of four (`CubeAnswer`), what it costs is
-`CubeDecision.CostOf`, and a verdict is derived from a cost by the consumers
-(BgGame_Lib's `Correctness`) through this library's zero rule,
-`EquityDisplay.CountsAsZero` (see "Cube answers and their costs" and "When
-a loss counts as zero"). The answers whose cost counts as zero,
-`CubeDecision.ZeroCostAnswers`, are not a verdict either: a quiz's error
-tolerance (halheinrich/backgammon#30) would widen the verdict, never that
-set.
-
 ### Cube answers and their costs
 
 **A cube answer is one of four** (SPEC-scoring §3, amended 2026-09-30 and
@@ -1594,12 +1580,6 @@ value: a play's `Equity`, a cube action's `ActionEquity`.
   and every surface shows a cost or a loss through `FormatLoss` and an
   equity through `FormatEquity`, keeping no format string, sign rule or
   threshold of its own.
-- **The name.** Until halheinrich/backgammon#326's step 3a this type was
-  `EquityLoss`, with `Format` for `FormatLoss`. It was renamed once it
-  showed equities too, a job the old name did not say; the old name also
-  collided with consumer members named for a play's loss (BgGame_Lib's
-  `SubmittedPlay.EquityLoss`), inside which the bare name binds to the
-  member, not the type.
 
 `EquityDisplayTests` pins the loss display, the threshold just below, at
 and just above 0.00005 through the shared formatting, and the two loss
@@ -2076,16 +2056,15 @@ refused whole.
 The three boards and `AnalysisMode` / `AnalysisLevel` serialize to JSON,
 beside `AnalysisDepth`, the depth's label.
 
-`MatchScore` is the session as one token, which the filter grammar and
-Extract's exports consume; it spells its away scores with the invariant
-culture, whatever the ambient one.
+`MatchScore` is the session as one token — `3a5a`, `1a4aC` in the Crawford
+game, `moneyJ`, `moneyNJ` — spelled from the row's `Session` on each read,
+which the filter grammar and Extract's exports consume; it spells its away
+scores with the invariant culture, whatever the ambient one.
 
 `IsJacoby` is the money session's rule, carried as a column
-(`halheinrich/backgammon#121`). It reaches `MatchScore` the way
-`IsCrawford` does: as an in-grammar suffix on the money score. A money row is `moneyJ` or `moneyNJ`; the bare
-`money` a row whose rule was unknown once wrote is gone, since every money
-session states its rule. No column is added for it. Like `IsCrawford`, it
-also serializes to JSON.
+(`halheinrich/backgammon#121`). It reaches `MatchScore` the way `IsCrawford`
+does, as an in-grammar suffix on the money score. Like `IsCrawford`, it also
+serializes to JSON.
 
 ### Shared consumer contracts: IMatchInfo and IGameInfo
 
@@ -2331,720 +2310,6 @@ well-formed by its invariant):
 in this frame; the after-boards hold the same layout in the next mover's
 frame (see "After-boards"). On the wire each is the 26 counts as a JSON
 number array, as before the boards were typed.
-
-## Public API
-
-```csharp
-public interface IDecisionFilterData             // a view built for one ranking
-{
-    PlayRanking Ranking { get; }                  // the ranking its best and error members are derived under
-    DecisionKind Kind { get; }                    // CheckerPlay or Cube (replaces IsCube)
-    string? Player { get; }                         // null when no name was recorded
-    string? Taker { get; }                        // the opponent, where a double was offered; null otherwise or unnamed
-    Session Session { get; }                      // money (its Jacoby rule) or a match (length, away scores, Crawford)
-    int? MoveNumber { get; }                      // 1-based within the game; null for a standalone position
-    bool? IsStandardStart { get; }                // false for non-standard openings; null for a standalone position
-    AnalysisMode AnalysisMode { get; }            // cube analysis for cubes, the ranking's best play for checkers
-    AnalysisLevel AnalysisLevel { get; }          // level axis of the same analysis AnalysisMode reports
-    PlayerResult PlayerResult { get; }            // under Ranking: NotRecorded, NotScored, Scored(e), Unstated(e); a cube's doubler half alone
-    PlayerResult? TakerResult { get; }            // where a double was offered: Scored(e), Unstated(e), NotRecorded; else null
-    BoardPosition Board { get; }                  // on-roll frame, see Mop layout
-
-    // The checker play's own members: null for a cube decision.
-    DiceRoll? Dice { get; }                       // canonical roll; never null for a checker play
-    BoardPosition? AfterBestBoard { get; }        // the ranking's best; next mover's frame; never null for a checker play
-    BoardPosition? AfterPlayerBoard { get; }      // next mover's frame; null when the user's play is not a candidate
-}
-
-// Skip-early contracts (see "Shared consumer contracts" above): producers
-// implement, filter layers consume without producer-concrete types.
-public interface IMatchInfo
-{
-    string Player1 { get; }                       // bottom player in XG
-    string Player2 { get; }                       // top player in XG
-    SessionTerms Terms { get; }                   // MoneyTerms or MatchTerms
-}
-
-public interface IGameInfo
-{
-    bool IsStandardStart { get; }                 // false for saved/custom openings
-    GameStanding Standing { get; }                // MoneyStanding or MatchStanding, player 1 and 2
-}
-
-// The terms and the standing: closed pairs, matched exhaustively, values;
-// kinded wire documents, dispatched on "Kind" as a record is. The kind as
-// a value is SessionKind.
-[JsonConverter(typeof(SessionTermsJsonConverter))]
-public abstract class SessionTerms : IEquatable<SessionTerms>, IEqualityOperators<SessionTerms, SessionTerms, bool>
-{
-    [JsonInclude, JsonRequired] public SessionKind Kind { get; internal init; }  // written first; the type's
-    public abstract TResult Match<TResult>(Func<MoneyTerms, TResult> money, Func<MatchTerms, TResult> match);
-    public abstract void Switch(Action<MoneyTerms> money, Action<MatchTerms> match);
-}
-public sealed class MoneyTerms : SessionTerms { public required bool IsJacoby, IsBeaver; public required int CubeLimit; }  // limit a power of two
-public sealed class MatchTerms : SessionTerms { public required int Length; }                                 // >= 1
-
-[JsonConverter(typeof(GameStandingJsonConverter))]
-public abstract class GameStanding : IEquatable<GameStanding>, IEqualityOperators<GameStanding, GameStanding, bool>
-{
-    [JsonInclude, JsonRequired] public SessionKind Kind { get; internal init; }  // written first; the type's
-    public abstract TResult Match<TResult>(Func<MoneyStanding, TResult> money, Func<MatchStanding, TResult> match);
-    public abstract void Switch(Action<MoneyStanding> money, Action<MatchStanding> match);
-}
-public sealed class MoneyStanding : GameStanding { public required int Score1, Score2; }                        // >= 0
-public sealed class MatchStanding : GameStanding { public required int Away1, Away2; public required bool IsCrawford; }
-                                                                                   // each away >= 1; Crawford: exactly one 1-away
-
-// Wire records: every stored member is required or nullable, never
-// defaulted (halheinrich/backgammon#222; the rule on BgDataTypesJsonContext).
-// A decision is one of two types (halheinrich/backgammon#273): a closed pair.
-public enum DecisionKind { CheckerPlay, Cube }    // the kind as a value; strict string token
-
-// Money versus match is one of two types (halheinrich/backgammon#273): a
-// closed pair, dispatched on the kind its terms state, as the decision
-// kinds are on theirs.
-public enum SessionKind { Money, Match }          // the kind as a value; strict string token
-public enum Seat { Player1, Player2 }             // a header's seat; strict string token; no record holds one
-
-// A session composes its terms and states its standing from the player on
-// roll's side. Wire: {"Terms":{"Kind":…,…}, <the standing>} — the kind once.
-[JsonConverter(typeof(SessionJsonConverter))]
-public abstract class Session : IEquatable<Session>, IEqualityOperators<Session, Session, bool>
-{
-    [JsonIgnore] public SessionKind Kind { get; }  // its terms' kind; not on the session's wire
-    // The one way code outside the library builds a session, and the one
-    // orientation rule: the seat on roll's standing becomes the player on
-    // roll's. Pairs through GameSession.Create, refusing a pair exactly as
-    // that does, and only then an undefined seat.
-    public static Session Create(SessionTerms terms, GameStanding standing, Seat onRoll);
-    public abstract TResult Match<TResult>(Func<MoneySession, TResult> money, Func<MatchSession, TResult> match);
-    public abstract void Switch(Action<MoneySession> money, Action<MatchSession> match);
-    public abstract bool Equals(Session? other);  // + Equals(object), GetHashCode, ==, !=: the terms and the standing
-}
-
-public sealed class MoneySession : Session       // no public constructor or setter; unmapped members refused
-{
-    [JsonInclude, JsonRequired] public MoneyTerms Terms { get; internal init; }   // the rules and the cube limit
-    [JsonInclude, JsonRequired] public int OnRollScore { get; internal init; }    // >= 0: the session's score before the game
-    [JsonInclude, JsonRequired] public int OpponentScore { get; internal init; }  // >= 0
-}
-
-public sealed class MatchSession : Session       // no public constructor or setter; unmapped members refused
-{
-    [JsonInclude, JsonRequired] public MatchTerms Terms { get; internal init; }   // the length
-    [JsonInclude, JsonRequired] public int OnRollNeeds { get; internal init; }    // 1..Terms.Length
-    [JsonInclude, JsonRequired] public int OpponentNeeds { get; internal init; }  // 1..Terms.Length
-    [JsonInclude, JsonRequired] public bool IsCrawford { get; internal init; }    // exactly one player 1-away when set
-}
-
-// A game's session: a header's terms and a game's standing, paired with no
-// seat and claiming none — the standing stays seat-anchored. The one
-// statement of the pairing rule; Session.Create pairs through it. Not a wire
-// type: no document embeds one.
-public abstract class GameSession : IEquatable<GameSession>, IEqualityOperators<GameSession, GameSession, bool>
-{
-    public SessionKind Kind { get; }              // its terms' kind
-    // The one way code outside the library builds one. Refuses a null, terms
-    // and a standing of different kinds (ArgumentException) and an away score
-    // past the terms' length (ArgumentOutOfRangeException), each naming its
-    // parameter: "standing" for the two rules.
-    public static GameSession Create(SessionTerms terms, GameStanding standing);
-    public abstract TResult Match<TResult>(Func<MoneyGameSession, TResult> money, Func<MatchGameSession, TResult> match);
-    public abstract void Switch(Action<MoneyGameSession> money, Action<MatchGameSession> match);
-    public abstract bool Equals(GameSession? other);  // + Equals(object), GetHashCode, ==, !=: the terms and the standing
-}
-
-public sealed class MoneyGameSession : GameSession  // no public constructor or setter
-{
-    public MoneyTerms Terms { get; }              // as the header states them
-    public MoneyStanding Standing { get; }        // player 1's and player 2's scores
-}
-
-public sealed class MatchGameSession : GameSession  // no public constructor or setter
-{
-    public MatchTerms Terms { get; }              // the length
-    public MatchStanding Standing { get; }        // player 1's and player 2's away scores, each <= Terms.Length; Crawford
-}
-
-[JsonConverter(typeof(BgDecisionDataJsonConverter))]  // dispatches on "Kind"; names no member
-public abstract class BgDecisionData
-{
-    private protected BgDecisionData(DecisionKind kind);   // the two kinds' only way in
-
-    [JsonInclude, JsonRequired] public DecisionKind Kind { get; internal init; }  // written first; the type's
-    public required DecisionId      Id          { get; init; }   // refuses an XgDecisionId naming the other kind
-    public required PositionData    Position    { get; init; }   // a cube refuses a Crawford position
-    public required DescriptiveData Descriptive { get; init; }   // IsStandardStart null exactly for an XgpDecisionId
-    // Explicit null for Id, Position, Descriptive → ArgumentNullException (halheinrich/backgammon#221).
-
-    public abstract TResult Match<TResult>(Func<CheckerPlayDecision, TResult> checkerPlay,
-                                           Func<CubeDecision, TResult> cube);
-    public abstract void Switch(Action<CheckerPlayDecision> checkerPlay, Action<CubeDecision> cube);
-
-    [JsonIgnore] public int? Game { get; }        // from Id; null for a standalone position
-    [JsonIgnore] public string SourceFile { get; } // Id.Filename
-    [JsonIgnore] public string Xgid { get; }      // derived on each read (XgidEncoder); never stored
-    // The members every kind has, public and [JsonIgnore]d: Player,
-    // Session (the position's), MoveNumber, IsStandardStart, Board.
-    public IDecisionFilterData ViewFor(PlayRanking ranking);   // the filter view for one ranking
-}
-
-public sealed class CheckerPlayDecision : BgDecisionData
-{
-    public required CheckerPlayDecisionData Decision { get; init; }   // every candidate valid from Position
-    [JsonIgnore] public DiceRoll Dice { get; }                          // canonical form of Decision.Dice
-    public BoardPosition AfterBoardOf(int index);                       // derived once; next mover's frame
-    public BoardPosition AfterBoardOfBest(PlayRanking ranking);         // the ranking's best play's
-    [JsonIgnore] public BoardPosition? AfterPlayerBoard { get; }        // null when UserPlayIndex is null
-}
-
-public sealed class CubeDecision : BgDecisionData
-{
-    public required CubeDecisionData Decision { get; init; }
-
-    // The cube answers at this decision (SPEC-scoring §3, amended on
-    // halheinrich/backgammon#326); see "Cube answers and their costs".
-    [JsonIgnore] public bool GammonsPossible { get; }      // false iff the opponent has a checker borne off,
-                                                           // or a match's cube >= OnRollNeeds,
-                                                           // or money under Jacoby with the cube centred
-    public CubeClaim ClaimOf(CubeAnswer answer);           // NoDouble → NoDouble; DoubleTake, DoublePass → Double;
-                                                           // NoDoublePass → TooGood iff GammonsPossible, else NoDouble
-                                                           // (the fourth's label choice)
-    public CubeAnswerCost CostOf(CubeAnswer answer);       // exactly per §3's two tables, in two parts;
-                                                           // both refuse an undefined answer (ArgumentOutOfRangeException)
-    [JsonIgnore] public IReadOnlyList<CubeAnswer> ZeroCostAnswers { get; }
-                                                           // each answer whose CostOf(answer).Total counts as zero
-                                                           // (EquityDisplay.CountsAsZero), in the offered order; never
-                                                           // empty, always holds Decision.BestAnswer; a fixed policy no
-                                                           // quiz tolerance widens; read-only, a fresh list each read
-}
-
-public sealed class CheckerPlayDecisionData    // unmapped members refused
-{
-    public required IReadOnlyList<int> Dice { get; init; }            // two faces 1–6, rolled order; copied
-    public required IReadOnlyList<PlayCandidate> Plays { get; init; } // never empty; copied
-    public int? UserPlayIndex { get; init; }                          // a candidate, or null — never -1
-    public double? UnlistedPlayError { get; init; }                   // only with no UserPlayIndex
-    [JsonIgnore] public PlayCandidate? UserPlay { get; }
-    public RankedPlays RankedBy(PlayRanking ranking);                 // built once per ranking; see "The ranking"
-    // A document stating the retired BestPlayIndex or UserPlayError is refused.
-}
-
-public enum PlayRanking { Equity, DepthFirst }  // Equity the default; strict string token
-
-public enum PlayerResultKind { NotRecorded, NotScored, Scored, Unstated }  // NotRecorded the zero value; strict token
-
-public readonly struct PlayerResult : IEquatable<PlayerResult>   // see "The player's result"
-{
-    public PlayerResultKind Kind { get; }
-    public static PlayerResult NotRecorded { get; }           // = default
-    public static PlayerResult NotScored { get; }
-    public static PlayerResult Scored(double error);          // ArgumentOutOfRangeException: negative or not finite
-    public static PlayerResult Unstated(double error);        // the analyser's number, as stated
-    public bool TryGetError(out double error);                // true exactly for Scored and Unstated
-    public TResult Match<TResult>(Func<TResult> notRecorded, Func<TResult> notScored,
-                                  Func<double, TResult> scored, Func<double, TResult> unstated);
-}
-
-public readonly struct RecordedCubeActions : IEquatable<RecordedCubeActions>  // see "Played cube actions on CubeDecisionData"
-{
-    public RecordedCubeActions(CubeAction? doublerAction, CubeAction? takerAction,
-        double? unstatedDoublerError, double? unstatedTakerError);  // refuses: an action outside its half, a non-finite
-                                                                    // error, an action beside its half's error, a taker
-                                                                    // half unless doublerAction is Double
-    public CubeAction? DoublerAction { get; }
-    public CubeAction? TakerAction { get; }
-    public double? UnstatedDoublerError { get; }
-    public double? UnstatedTakerError { get; }
-    public static RecordedCubeActions None { get; }             // = default
-    public static RecordedCubeActions NoDouble { get; }
-    public static RecordedCubeActions DoubleUnanswered { get; } // a double answered by resigning
-    public static RecordedCubeActions DoubleAnswered(CubeAction takerAction);
-    public static RecordedCubeActions DoubleWithUnstatedResponse(double unstatedTakerError);
-    public static RecordedCubeActions UnstatedDoubler(double unstatedDoublerError);
-    // value equality, == and !=; ToString names the shape: "DoubleAnswered Take"
-}
-
-public sealed class RankedPlays : IReadOnlyList<RankedPlay>   // the ranking's order; no public constructor
-{
-    public PlayRanking Ranking { get; }
-    public RankedPlay Best { get; }                           // this[0]
-    public RankedPlay? UserPlay { get; }                      // null when the user's play is not a candidate
-    public PlayerResult PlayerResult { get; }                 // Scored(its Error), NotScored, Unstated(UnlistedPlayError), NotRecorded
-    public RankedPlay this[int position] { get; }             // ArgumentOutOfRangeException outside
-    public RankedPlay ForCandidate(int index);                // by stored index
-}
-
-public sealed class RankedPlay                                // no public constructor
-{
-    public int Index { get; }                                 // into Plays
-    public int Rank { get; }                                  // 1 for the best
-    public PlayCandidate Candidate { get; }
-    public double? Error { get; }                             // Best's equity − its own, ≥ 0; null when not scored
-    public bool IsScored { get; }                             // Error is not null; false only under DepthFirst
-}
-
-public sealed class CubeDecisionData           // unmapped members refused
-{
-    // Required: AnalysisMode, AnalysisLevel, NoDoubleEquity, DoubleTakeEquity,
-    // the cubeless equities, the ten stored probabilities (each half's total
-    // loss is derived).
-    public int? RolloutTrials { get; init; }             // the typed depth facts, each with its rule
-    public BookEdition? BookEdition { get; init; }
-    public int? UnrecognizedLevelCode { get; init; }
-    [JsonIgnore] public string? Depth { get; }           // derived from the facts: "Book V2: 12960 trials. 4-ply"
-    [JsonIgnore] public string? DepthAbbreviation { get; } //   "B4_12960"
-    [JsonIgnore] public int? DepthRank { get; }          // derived from the mode and level; null = not recorded
-
-    // Played cube actions — game facts, one validated value (see "Played
-    // cube actions on CubeDecisionData"); its four members are the wire;
-    // null = not recorded.
-    internal CubeDecisionData(CubeAction? userDoublerAction, CubeAction? userTakerAction,
-        double? unstatedDoublerActionError, double? unstatedTakerActionError);  // [JsonConstructor]: builds Recorded
-    [JsonIgnore] public RecordedCubeActions Recorded { get; init; }  // default None
-    public CubeAction? UserDoublerAction { get; }        // Recorded.DoublerAction: NoDouble/Double
-    public CubeAction? UserTakerAction   { get; }        // Recorded.TakerAction: Take/Pass; only under Double
-
-    // The user's errors: a stated action's is derived; the analyser's for an
-    // unstated action is the one stored, refused beside a stated action.
-    public double? UnstatedDoublerActionError { get; }   // Recorded.UnstatedDoublerError
-    public double? UnstatedTakerActionError { get; }     // Recorded.UnstatedTakerError; only under Double
-    [JsonIgnore] public double? UserDoubleError { get; }  // DoublerActionError(UserDoublerAction) ?? unstated
-    [JsonIgnore] public double? UserTakeError { get; }    // TakerActionError(UserTakerAction) ?? unstated
-
-    // The analysis's cube actions (computed; a cube decision's only). Each
-    // action's equity is the one calculation the rest reads. Facts of the
-    // analysis, not what an answer costs (that is CubeDecision.CostOf).
-    public double ActionEquity(CubeAction action);                // the doubler's perspective, every action:
-                                                                  // NoDouble → NoDoubleEquity, Take → DoubleTakeEquity,
-                                                                  // Pass → +1 (the cash), Double → the taker's best
-                                                                  // response's; ArgumentOutOfRangeException if undefined
-    [JsonIgnore] public CubeAction  BestDoublerAction { get; }   // Double or NoDouble
-    [JsonIgnore] public CubeAction  BestTakerAction   { get; }   // Take or Pass
-
-    // The truth among the four answers (SPEC-scoring §3, halheinrich/backgammon#326):
-    // the answer whose projections are the two best actions. From the equities alone;
-    // the representative, never the test of a correct answer.
-    [JsonIgnore] public CubeAnswer BestAnswer { get; }
-
-    public double DoublerActionError(CubeAction action);          // ActionEquity(BestDoublerAction) − ActionEquity(action);
-                                                                  // throws ArgumentOutOfRangeException on Take/Pass.
-    public double TakerActionError(CubeAction action);            // ActionEquity(action) − ActionEquity(BestTakerAction);
-                                                                  // throws ArgumentOutOfRangeException on Double/NoDouble.
-}
-
-public sealed class DecisionRow : IDecisionFilterData, IJsonOnDeserialized
-{
-    internal DecisionRow();                                   // [JsonConstructor]; no public way in
-    public static DecisionRow From(BgDecisionData record, PlayRanking ranking);  // every column from the record
-
-    public required DecisionKind Kind { get; init; }          // written first
-    public required DecisionId Id { get; init; }
-    public required PlayRanking Ranking { get; init; }        // the ranking the row was built for
-    public double? Error { get; init; }                       // the result's error; stated exactly for Scored and Unstated
-    public required PlayerResultKind Result { get; init; }    // the result's case
-    [JsonIgnore] public PlayerResult PlayerResult { get; }    // Result with Error, typed
-    public string? Taker { get; init; }                       // only beside a TakerResultKind
-    public required PlayerResultKind? TakerResultKind { get; init; }  // required AND nullable: null = no double offered
-    public double? TakerError { get; init; }                  // stated exactly for Scored and Unstated
-    [JsonIgnore] public PlayerResult? TakerResult { get; }    // TakerResultKind with TakerError, typed
-    public bool? IsStandardStart { get; init; }               // null for a standalone position
-    public int? Roll { get; init; }                           // rolled dice, e.g. 13; null for a cube
-    public required BoardPosition Board { get; init; }        // on-roll frame
-    public BoardPosition? AfterBestBoard { get; init; }       // the record's, under Ranking; null for a cube
-    public BoardPosition? AfterPlayerBoard { get; init; }     //   and when the user's play is not a candidate
-    public required SessionKind SessionKind { get; init; }    // decides which session columns are stated
-    public int? MatchLength { get; init; }                    // a match's; null for money — never 0
-    public int? OnRollNeeds { get; init; }                    //   likewise
-    public int? OpponentNeeds { get; init; }                  //   likewise
-    public bool? IsCrawford { get; init; }                    //   likewise
-    public bool? IsJacoby { get; init; }                      // money's; null for a match
-    public bool? IsBeaver { get; init; }                      //   likewise
-    public int? CubeLimit { get; init; }                      //   likewise
-    public int? OnRollScore { get; init; }                    //   likewise
-    public int? OpponentScore { get; init; }                  //   likewise
-    // Other flat columns required — see DecisionRow.cs.
-    [JsonIgnore] public Session Session { get; }              // the session columns, typed as the record's kind
-    [JsonIgnore] public int? Game { get; }                    // from Id, as MoveNumber
-    [JsonIgnore] public string SourceFile { get; }            // Id.Filename
-    [JsonIgnore] public DiceRoll? Dice { get; }               // canonical Roll
-    [JsonIgnore] public string MatchScore { get; }            // spelled from Session: "3a5a", "1a4aC", "moneyJ", "moneyNJ"
-    // Read from JSON, a row is checked whole (OnDeserialized): the kind's
-    // columns present and the other's empty, the roll two faces, a board with
-    // a checker of each side, the session kind's columns stated and the
-    // other's empty, the session's rules, and DecisionRules; a breach is a
-    // JsonException.
-}
-
-public class PositionData    { /* required init-only properties per the categories table; Mop is a BoardPosition with a checker of each side; Session a MoneySession or MatchSession */
-                               [JsonIgnore] public int OnRollPipCount { get; }    /* Mop's, by BoardState's pip rule */
-                               [JsonIgnore] public int OpponentPipCount { get; }
-                               public static bool IsDecisionPosition(BoardPosition board); /* Mop's guard, never throwing; the rule's one statement */ }
-public class DescriptiveData { /* init-only properties per the categories table; OnRollName?, OpponentName?, Title?, Date?, Event?, IsStandardStart?, Comment? */ }
-public class PlayCandidate   { /* required init-only properties per Architecture table; every stored number finite; the depth facts and five stored probabilities nullable */
-                               [JsonIgnore] public string Notation { get; }  /* Play.ToNotation(); never stored */
-                               [JsonIgnore] public string? Depth { get; }            /* from the typed depth facts; see "The depth as typed facts" */
-                               [JsonIgnore] public string? DepthAbbreviation { get; }
-                               [JsonIgnore] public int? DepthRank { get; }   /* from AnalysisMode × AnalysisLevel; null = not recorded */ }
-
-public readonly record struct Move(               // both required on the wire: an absent
-    [property: JsonRequired] int FrPt,            //   ToPt would read as 0, a bear-off
-    [property: JsonRequired] int ToPt);
-
-[CollectionBuilder(typeof(Play), nameof(Create))]
-public struct Play                                // no equality: see BoardState.IsSamePlay
-{
-    public static Play Create(Move m0);           // fixed-arity: parity with Add, no argument
-    public static Play Create(Move m0, Move m1);  // buffer. Overload resolution picks these for
-    public static Play Create(Move m0,            // any literal call site.
-                              Move m1, Move m2);
-    public static Play Create(Move m0, Move m1, Move m2, Move m3);
-
-    [OverloadResolutionPriority(-1)]
-    public static Play Create(params ReadOnlySpan<Move> moves);
-                                                  // general arity + collection-builder target
-                                                  // ([m1, m2] / [] both work); for moves already
-                                                  // in a span or array. > 4 throws
-                                                  // ArgumentException. Deprioritised so a literal
-                                                  // list binds fixed-arity — including one move.
-    public int Count { get; private set; }
-    public Move this[int index] { get; }          // readonly
-    public void Add(Move move);
-    public void RemoveLast();
-    public Play Snapshot();                       // readonly
-    public string ToNotation();                   // readonly; the notation — the one public way to spell a play
-    public bool IsSameEncoding(Play other);       // readonly; exact encodings, for storage
-    public Enumerator GetEnumerator();            // readonly; foreach pattern, allocation-free
-    public struct Enumerator { /* Current, MoveNext() */ }
-    public override bool Equals(object? obj);     // throws NotSupportedException
-    public override int GetHashCode();            // throws NotSupportedException
-}
-
-// Internal, not sketched here: CanonicalPlay, PlayChain and
-// Play.ToCanonical() — the chain form behind Play.ToNotation (see
-// "Canonical play form" and "Play notation").
-
-// An immutable position: 26 counts in BoardState's frame, well-formed by
-// construction (the invariant: the type's remarks). The one "same
-// position": equality over all 26 counts; the hash is never identity.
-// Creating, comparing and hashing allocate nothing.
-public readonly struct BoardPosition :
-    IEquatable<BoardPosition>, IEqualityOperators<BoardPosition, BoardPosition, bool>
-{
-    public const int CheckersPerSide = 15;                    // the one statement: the invariant's bound, the counts' total
-    public BoardPosition(ReadOnlySpan<int> counts);           // malformed → ArgumentException
-    public static bool TryCreate(ReadOnlySpan<int> counts, out BoardPosition position);
-    public static BoardPosition Empty { get; }                // == default; well-formed
-    public static BoardPosition Standard { get; }             // the starting layouts, defined once
-    public static BoardPosition Nackgammon { get; }
-    public static BoardPosition Bg960(int? seed = null);      // random, symmetric, no blots
-    public int this[int point] { get; }                       // slots 0–25
-    public void CopyTo(Span<int> destination);                // at least 26 elements
-    public int OnRollBorneOffCount { get; }                   // CheckersPerSide less the side's on the board and its bar:
-    public int OpponentBorneOffCount { get; }                 //   derived, never throwing; Flipped() swaps the two
-    public BoardPosition Flipped();                           // the other side's view; the one flip rule
-    public bool Equals(BoardPosition other);                  // + ==, !=, Equals(object), GetHashCode
-    public override string ToString();                        // "1:-2 6:5 …", or "empty"
-}
-
-public sealed class BoardState                    // sealed: it guards an invariant
-{
-    public ReadOnlySpan<int> Points { get; }      // read-only; layout of BoardPosition
-    public int HighPointOccupied { get; }         // 1–25, or 0 if no on-roll checkers; private setter
-
-    // Construction: a board is always a well-formed position (halheinrich/backgammon#281)
-    public BoardState(BoardPosition position);    // every other way in goes through this
-    public static BoardState Standard();          // from BoardPosition.Standard
-    public static BoardState Nackgammon();        // from BoardPosition.Nackgammon
-    public static BoardState Bg960(int? seed = null);   // from BoardPosition.Bg960
-    public static BoardState FromMop(ReadOnlySpan<int> mop);   // raw counts; malformed → ArgumentException
-    public BoardState Copy();
-    public BoardState FlippedCopy();              // copy from opponent's perspective; receiver untouched
-
-    // The whole position, out and in
-    public BoardPosition ToPosition();            // the snapshot: allocation-free; later changes do not reach it
-    public void SetPosition(BoardPosition position);   // the whole-board reset: allocation-free; recomputes
-                                                       //   HighPointOccupied; the one whole-position write
-
-    // Apply / undo (hot-path primitives)
-    public void ApplyMove(Move move);
-    public void UndoMove(Move move);
-
-    // Turn boundary (the play rule + flip, atomic)
-    public void ApplyPlay(Play play);             // invalid → ArgumentException, board untouched
-    public bool TryApplyPlay(Play play);          // invalid → false, board untouched
-
-    // Play identity, from this position (the contract: IsSamePlay's remarks)
-    public bool IsSamePlay(Play first, Play second);
-    public int IndexOfSamePlay(Play play, IReadOnlyList<Play> plays);   // -1 when none
-
-    // Derived
-    public int PipCount { get; }
-    public int OpponentPipCount { get; }
-    public bool IsRace { get; }
-}
-
-public enum CubeOwner { OnRoll, Opponent, Centered }
-
-public enum CubeAction { NoDouble, Double, Take, Pass }
-
-// The four cube answers (SPEC-scoring §3, amended 2026-09-30 on
-// halheinrich/backgammon#326): a submitted answer and the truth alike. The
-// fourth, "don't double, they'd pass", reads Too good or No double / Pass by
-// the decision (CubeDecision.ClaimOf). Declaration order is the offered
-// order. Strict converter; no document embeds it, so not a context root.
-public enum CubeAnswer { NoDouble, DoubleTake, DoublePass, NoDoublePass }
-
-// Its projections, each total over the four; ArgumentOutOfRangeException on
-// anything else. Never stored beside the answer.
-public static class CubeAnswerExtensions
-{
-    public static CubeAction DoublerAction(this CubeAnswer answer);  // NoDouble, NoDoublePass → NoDouble; else Double
-    public static CubeAction TakerAction(this CubeAnswer answer);    // NoDouble (implied), DoubleTake → Take; else Pass
-    public static bool CommitsToResponse(this CubeAnswer answer);    // false for NoDouble alone: its take is never charged
-    public static CubeAnswer Of(CubeAction doubler, CubeAction taker);  // the inverse; the one way two actions
-                                                                        // become an answer; refuses a cross-half action
-}
-
-// What an answer costs at a decision (CubeDecision.CostOf): no public
-// constructor, exact, value equality over the two parts.
-public sealed class CubeAnswerCost : IEquatable<CubeAnswerCost>, IEqualityOperators<CubeAnswerCost, CubeAnswerCost, bool>
-{
-    public double DoublingPart { get; }               // never negative
-    public double TakePart { get; }                   // never negative; 0 for NoDouble
-    public double Total { get; }                      // DoublingPart + TakePart
-}
-
-// The three-way claim an answer reads as at a decision (SPEC-scoring §1/§3):
-// derived once, by CubeDecision.ClaimOf. Not a board action. Strict
-// converter; no longer a context root (no document embeds it).
-public enum CubeClaim { NoDouble, Double, TooGood }
-
-// The one display precision of every equity figure, and the one zero rule
-// (halheinrich/backgammon#202); see "When a loss counts as zero". Was
-// EquityLoss (Format for FormatLoss) until halheinrich/backgammon#326's step 3a.
-public static class EquityDisplay
-{
-    public static string FormatLoss(double loss);     // four decimals, invariant; a loss rounding to zero shows
-                                                      // "0.0000" whatever its sign; NaN/∞ refused
-    public static string FormatEquity(double equity); // FormatLoss's digits with its sign: "+" wherever no minus
-                                                      // shows, so "+0.6004", "-0.3000", "+0.0000"; NaN/∞ refused
-    public static bool CountsAsZero(double loss);     // exactly when FormatLoss shows "0.0000": not negative, below 0.00005
-}
-
-// The two-axis depth taxonomy: mode (how the numbers were produced) ×
-// level (the evaluation level — for rollout-family modes, the inner level).
-// Unknown = 0 deliberately on both: unstamped/legacy JSON deserializes to
-// it. BookRollout + AnalysisLevel.Unknown is the graceful-degradation stamp
-// (no book DB, or a V1-book hit). The UI renders both enums in declaration
-// order. AnalysisLevel's declaration order is CONTRACTUAL — ascending rigor
-// per XG's own menu, ply and Roller families interleaved; Unknown sits
-// outside the scale. DepthRank orders the mode × level pair. Every member
-// of both carries a [Description] display label.
-public enum AnalysisMode
-{
-    Unknown, Evaluation, Rollout, BookRollout
-}
-
-public enum AnalysisLevel
-{
-    Unknown,                                  // outside the rigor scale
-    Ply1, Ply2, Ply3Red, Ply3, XgRoller, Ply4, XgRollerPlus,
-    Ply5, Ply6, Ply7, XgRollerPlusPlus        // ascending rigor; contractual
-}
-
-// Canonical unordered dice roll: the ctor accepts either order and
-// canonicalizes to High ≥ Low, each face validated 1–6
-// (ArgumentOutOfRangeException). Equality is over the canonical form
-// (3-1 ≡ 1-3); ordering is ascending High-then-Low (= ascending canonical
-// token). Parse/TryParse read the two-digit token in either spelling;
-// ToString emits it high-first ("31"). JSON round-trips as that token via
-// bundled DiceRollJsonConverter. default is non-meaningful (see Pitfalls).
-public readonly record struct DiceRoll :
-    IComparable, IComparable<DiceRoll>, IComparisonOperators<DiceRoll, DiceRoll, bool>,
-    IParsable<DiceRoll>, ISpanParsable<DiceRoll>
-{
-    public int High { get; }                      // 1–6; ≥ Low
-    public int Low { get; }                       // 1–6
-    public DiceRoll(int die1, int die2);          // either order; canonicalizes
-    public static IReadOnlyList<DiceRoll> All { get; }  // 21 distinct rolls, ascending canonical; SSOT
-    public bool IsDouble { get; }
-    public void Deconstruct(out int high, out int low);
-    public override string ToString();            // "31", "55"
-    public static DiceRoll Parse(string s, IFormatProvider? provider = null);
-    public static DiceRoll Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null);
-    public static bool TryParse(string? s, IFormatProvider? provider, out DiceRoll result);
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out DiceRoll result);
-    public int CompareTo(DiceRoll other);         // + <, <=, >, >= operators
-}
-
-public abstract record DecisionId : IParsable<DecisionId>, ISpanParsable<DecisionId>
-{
-    public abstract string Filename { get; init; }
-    public static DecisionId Parse(string s, IFormatProvider? provider = null);
-    public static DecisionId Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null);
-    public static bool TryParse(string? s, IFormatProvider? provider, out DecisionId result);
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out DecisionId result);
-}
-public sealed record XgpDecisionId(string Filename) : DecisionId;
-public sealed record XgDecisionId(
-    string Filename, int Game, int MoveNumber, bool IsCube) : DecisionId;
-
-// Content identity — "which problem is this". Sealed class, no public
-// constructor and no `with` hatch: the only two doors are From
-// (producer-side, total: every record has a key) and Parse/TryParse (wire
-// read-back, the no-key rung's only door). Canonical string form is a
-// pinned wire contract with one spelling per value, so equality, hash and
-// ordering are all ordinal over it. Parse is strict — no canonicalizing,
-// unlike DiceRoll. Grammar lives in the type's XML remarks; the identity
-// rulings live in SPEC-stats-identity.md §1/§2. JSON round-trips as the
-// canonical string via bundled ProblemKeyJsonConverter, including as a
-// dictionary key.
-public sealed class ProblemKey :
-    IEquatable<ProblemKey>, IComparable, IComparable<ProblemKey>,
-    IParsable<ProblemKey>, ISpanParsable<ProblemKey>
-{
-    public bool IsCubeDecision { get; }           // decision kind rides on the dice field
-
-    // The single derivation site in the ecosystem, reading the session by its
-    // kind. Total: a record's rules imply the text's (its board has a checker
-    // of each side), so the key parses back and there is no failure case.
-    // Throws ArgumentNullException on a null record (a caller bug).
-    public static ProblemKey From(BgDecisionData record);
-
-    public static ProblemKey Parse(string s, IFormatProvider? provider = null);
-    public static ProblemKey Parse(ReadOnlySpan<char> s, IFormatProvider? provider = null);
-    public static bool TryParse(string? s, IFormatProvider? provider, out ProblemKey result);
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out ProblemKey result);
-
-    public override string ToString();            // the canonical string
-    public bool Equals(ProblemKey? other);        // ordinal over the canonical string
-    public override bool Equals(object? obj);
-    public override int GetHashCode();
-    public static bool operator ==(ProblemKey? left, ProblemKey? right);
-    public static bool operator !=(ProblemKey? left, ProblemKey? right);
-    public int CompareTo(ProblemKey? other);      // ordinal; any key > null
-}
-
-// The persistence trio as a contract (halheinrich/backgammon#190). Implemented
-// downstream by FilterConfig and QuizMix; no implementer in this library.
-public interface IJsonDocument<TSelf> where TSelf : IJsonDocument<TSelf>
-{
-    static abstract TSelf FromJson(string json);      // ArgumentNullException / ArgumentException
-                                                      // (null token) / JsonException
-    static abstract bool TryFromJson(string? json, out TSelf document);
-                                                      // absorbs exactly those three; out is
-                                                      // always usable (the inert default)
-    string ToJson();                                  // the canonical form
-}
-
-// The two readers' shared bodies; an implementer forwards with its own
-// source-generated JsonTypeInfo<T>. The writer is the plain serializer call.
-public static class CanonicalJson
-{
-    public static T Parse<T>(string json, JsonTypeInfo<T> typeInfo)
-        where T : IJsonDocument<T>;
-    public static bool TryParse<T>(string? json, JsonTypeInfo<T> typeInfo, T fallback, out T document)
-        where T : IJsonDocument<T>;                   // fallback non-null; only JsonException absorbed
-}
-
-// The immutable named collection over any IJsonDocument payload. A sealed
-// specialization derives with itself as TSelf (see the pattern under
-// INamedCollectionSpecialization); no specialization lives in this library.
-public abstract class NamedCollection<TValue, TSelf> : IJsonDocument<TSelf>
-    where TValue : IJsonDocument<TValue>
-    where TSelf : NamedCollection<TValue, TSelf>, INamedCollectionSpecialization<TValue, TSelf>
-{
-    public const int CurrentSchemaVersion = 1;        // the envelope's; reads reject any other
-    public static TSelf Empty { get; }                // one instance per specialization
-    protected NamedCollection(Entries entries);       // the only construction path
-
-    public int Count { get; }
-    public IReadOnlyList<string> Names { get; }       // canonical (name-sorted) order
-    public bool Contains(string name);                // name rule: OrdinalIgnoreCase
-    public TValue Get(string name);                   // fresh snapshot; KeyNotFoundException on a miss
-    public bool TryGet(string name, [MaybeNullWhen(false)] out TValue value);
-    public TSelf With(string name, TValue value);     // add-or-replace; snapshots; new spelling wins;
-                                                      // blank / untrimmed name -> ArgumentException
-    public TSelf Without(string name);                // idempotent; same instance on a miss
-
-    public string ToJson();                           // the trio, resolved through
-    public static TSelf FromJson(string json);        // TSelf.CanonicalTypeInfo — never reflection
-    public static bool TryFromJson(string? json, out TSelf collection);   // Empty on failure
-
-    public sealed class Entries { /* internal ctor — built only by the base */ }
-}
-
-// The static half of a specialization; implemented explicitly.
-public interface INamedCollectionSpecialization<TValue, TSelf>
-    where TValue : IJsonDocument<TValue>
-    where TSelf : NamedCollection<TValue, TSelf>, INamedCollectionSpecialization<TValue, TSelf>
-{
-    static abstract TSelf Create(NamedCollection<TValue, TSelf>.Entries entries);
-    static abstract JsonTypeInfo<TSelf> CanonicalTypeInfo { get; }
-}
-
-// The strict envelope. Abstract: each specialization closes it as a sealed
-// public parameterless class passing its two wire names, and names that
-// closed type in its [JsonConverter].
-public abstract class NamedCollectionJsonConverter<TValue, TSelf> : JsonConverter<TSelf>
-    where TValue : IJsonDocument<TValue>
-    where TSelf : NamedCollection<TValue, TSelf>, INamedCollectionSpecialization<TValue, TSelf>
-{
-    protected NamedCollectionJsonConverter(string entriesPropertyName, string valuePropertyName);
-                                                      // non-blank, trimmed, not "schemaVersion" / "name"
-    public string EntriesPropertyName { get; }        // "filters" for the saved-filter document
-    public string ValuePropertyName { get; }          // "config" for the saved-filter document
-    public override TSelf? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options);
-    public override void Write(Utf8JsonWriter writer, TSelf value, JsonSerializerOptions options);
-}
-```
-
-Serialization contract: round-trips cleanly through `System.Text.Json` —
-no consumer-side converter registration required. `CubeOwner`, `CubeAction`,
-`AnalysisMode`, and `AnalysisLevel`, like every enum (`CubeAnswer` and
-`CubeClaim`, which no document embeds, included), bundle
-`StrictJsonStringEnumConverter<TEnum>` via attribute;
-`Play` bundles `PlayJsonConverter`; `DecisionId` bundles
-`DecisionIdJsonConverter`; `DiceRoll` bundles `DiceRollJsonConverter`;
-`ProblemKey` bundles `ProblemKeyJsonConverter` (the only one implementing
-the property-name overloads, so it also works as a dictionary key);
-`BoardPosition` bundles `BoardPositionJsonConverter` (the 26 counts as a
-number array; a malformed board is a `JsonException`; an optional board is
-a `BoardPosition?`, `null` or that form); `DecisionKind` and `SessionKind`
-bundle the strict enum converter, `BgDecisionData` bundles
-`BgDecisionDataJsonConverter` (see "The decision kinds") and `Session`
-bundles `SessionJsonConverter` (see "Money and match: the session kinds"),
-and `SessionTerms` and `GameStanding` bundle `SessionTermsJsonConverter`
-and `GameStandingJsonConverter` (see "Shared consumer contracts").
-Tested without any options-level registration in
-`BgDecisionDataSerializationTests`, `DecisionRowSerializationTests`,
-`DecisionKindTests`, `SessionKindTests`, `HeaderWireTests`, `DiceRollTests`, `ProblemKeyTests`, and
-`BoardWireTests`; `DocumentRefusalTests` reads every rule's breach as each
-type that can hold it, on both paths. The bytes of a full record and row of each kind are
-pinned by `WireGoldenTests`, beside the retired shapes it refuses; absence
-is walked member by member by `WireAbsenceTests`.
-A `NamedCollection` specialization bundles its own closed
-`NamedCollectionJsonConverter` the same way, in its own repo; this library
-ships the abstract converter and no closed one.
-
-`BgDataTypesJsonContext` is the source-generated `JsonSerializerContext`
-over this wire surface, byte-identical to the reflection path and chained
-by downstream contexts — roots, the composition rules (public converters,
-metadata-only generation), and the trim posture are in "Source generation
-& trimming" above.
-
-Every enum's token is its declared member name: a numeric ordinal is a
-`JsonException`, not a value, and name matching on read is case-insensitive,
-the base converter's behaviour, which has no knob
-(`StrictJsonStringEnumConverter<TEnum>`'s doc owns the rule).
-`AnalysisLevel`'s declaration order is contractual and its members interleave,
-so an inserted member renumbers everything after it; a reader that accepted
-ordinals would re-couple stored JSON to that numbering
-(halheinrich/backgammon#164). Consumers that build their own
-`JsonSerializerOptions` inherit this from the attribute and need add nothing —
-but an options-level `JsonStringEnumConverter` registration of their own would
-*loosen* it back, because an options converter outranks the type attribute.
 
 ## Benchmarks
 
@@ -3464,13 +2729,3 @@ measure" is not a valid comparison on this hardware.
   `Get` / `TryGet` are the only get pair: a specialization adds no
   domain-spelled forwarder (`GetConfig`) — its callers rename (ruled
   2026-09-09 on halheinrich/backgammon#190).
-
-## Subproject-internal next steps
-
-Cross-cutting work (consumer migrations, downstream refactors) is tracked in
-the umbrella `INSTRUCTIONS.md` "Next up" section and on the umbrella's
-issues (halheinrich/backgammon, labelled `BgDataTypes_Lib`), not here.
-
-None open. (The `DecisionRow` factory split closed with the records leg of
-halheinrich/backgammon#273: a row is the projection `DecisionRow.From` of a
-record, and tests build it through `TestRecords.Row`.)
