@@ -2227,9 +2227,9 @@ measure" is not a valid comparison on this hardware.
 
 ## Pitfalls
 
-Each entry is a mistake the type cannot refuse, or a reason the code does not
-carry. The reason behind a rule is in the section it points to; the "don't"
-is here.
+Each entry helps a reader avoid a mistake or make a decision; overlap with the
+code is not itself a fault. The reason behind a rule is in the section it
+points to; the "don't" is here.
 
 ### Wire
 
@@ -2354,9 +2354,9 @@ is here.
 ### Plays
 
 - **`Play` is a mutable value type.** `Add` / `RemoveLast` mutate in place,
-  but assigning a `Play` to another variable copies the buffer. Code that
-  retains a reference into a `List<Play>` slot and mutates it later is
-  modifying the local copy, not the list element. Use `Snapshot()` when
+  but assigning a `Play` to another variable copies the buffer. Reading a
+  `Play` through a `List<Play>` indexer gives a copy; modifying that copy
+  does not update the list until it is assigned back. Use `Snapshot()` when
   the intent is an explicit independent copy, and re-assign back to the
   list slot when mutation is intended. `foreach` likewise enumerates a
   value copy — a mid-loop `Add` on the source is invisible to the
@@ -2383,9 +2383,13 @@ is here.
   calls `SetSlot` with literal indices — it does not write slots itself,
   and it does not loop over `Add`.
 - **`Play` and `CanonicalPlay` have no equality — by ruling, not
-  omission.** Compare plays with `BoardState.IsSamePlay` from their starting
-  position, find one in a list with `IndexOfSamePlay`, and compare stored
-  encodings with `Play.IsSameEncoding`. Do not reintroduce a board-less
+  omission.** `Play.Equals` and `Play.GetHashCode` throw
+  `NotSupportedException`, so default equality and hash operations on a
+  `Play` — `Distinct`, `HashSet<Play>`, a `Dictionary` keyed on `Play`,
+  `List<Play>.Contains` — can throw when they invoke those methods (an empty
+  collection need not). Compare plays with `BoardState.IsSamePlay` from their
+  starting position, find one in a list with `IndexOfSamePlay`, and compare
+  stored encodings with `Play.IsSameEncoding`. Do not reintroduce a board-less
   comparison, a notation key, or a `CanonicalPlay`-based dedupe: the display
   form differs between encodings of one play
   (`halheinrich/backgammon#277`).
