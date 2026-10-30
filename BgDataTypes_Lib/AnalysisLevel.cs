@@ -49,10 +49,11 @@ namespace BgDataTypes_Lib;
 /// <see cref="AnalysisMode"/> × <see cref="AnalysisLevel"/> pair.
 /// </para>
 /// <para>
-/// <see cref="Unknown"/> is deliberately the zero value: any construction
-/// site the producer has not yet stamped, and JSON written before the
-/// two-axis pair existed, deserializes to it. It means "level not recorded",
-/// not an error — in particular
+/// <see cref="Unknown"/> is deliberately the zero value. It means "level not
+/// recorded", a value the producer states, never an absent member: the
+/// members holding it are required, so a document lacking the pair is refused
+/// rather than read as it (the wire rule on
+/// <see cref="BgDataTypesJsonContext"/>). It is not an error — in particular
 /// <see cref="AnalysisMode.BookRollout"/> + <see cref="Unknown"/> is the
 /// graceful-degradation stamp for a book hit whose levels the producer could
 /// not recover.
@@ -77,8 +78,8 @@ namespace BgDataTypes_Lib;
 [JsonConverter(typeof(StrictJsonStringEnumConverter<AnalysisLevel>))]
 public enum AnalysisLevel
 {
-    /// <summary>Level not recorded — unstamped or legacy data, an XG level
-    /// code the producer does not recognize, or a book hit whose levels the
+    /// <summary>Level not recorded, as the producer states it — an XG level
+    /// code it does not recognize, or a book hit whose levels the
     /// book database could not supply (see
     /// <see cref="AnalysisMode.BookRollout"/>). Outside the rigor scale: not
     /// a floor, not a threshold, never "least rigorous".</summary>

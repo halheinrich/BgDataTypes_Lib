@@ -133,7 +133,10 @@ public sealed class BoardState
     /// door from raw outside data, such as a count array in a test or a
     /// parser. The counts must form a well-formed position
     /// (<see cref="BoardPosition"/>'s invariant); partial boards are fine,
-    /// since borne-off checkers are not tracked. Equivalent to
+    /// since borne-off checkers are not tracked on a board: each side's count
+    /// is derived on the position (<see cref="BoardPosition.OnRollBorneOffCount"/>,
+    /// <see cref="BoardPosition.OpponentBorneOffCount"/>), read from a board
+    /// through <see cref="ToPosition"/>. Equivalent to
     /// <c>new BoardState(new BoardPosition(mop))</c>, and validated by that
     /// one rule.
     /// </summary>
@@ -677,7 +680,11 @@ public sealed class BoardState
     /// queries.
     ///
     /// Borne-off counts are not tracked on <see cref="BoardState"/> (checkers
-    /// simply leave the board), so nothing else needs swapping.
+    /// simply leave the board), so nothing else needs swapping: each side's
+    /// count is derived on the position
+    /// (<see cref="BoardPosition.OnRollBorneOffCount"/>,
+    /// <see cref="BoardPosition.OpponentBorneOffCount"/>), read from a board
+    /// through <see cref="ToPosition"/>.
     /// </summary>
     private void Flip() => SetPosition(ToPosition().Flipped());
 

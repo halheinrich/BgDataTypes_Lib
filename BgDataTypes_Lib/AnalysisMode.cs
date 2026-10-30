@@ -35,11 +35,11 @@ namespace BgDataTypes_Lib;
 /// entries whose cube rollout level is XG Roller.
 /// </para>
 /// <para>
-/// <see cref="Unknown"/> is deliberately the zero value: any construction
-/// site the producer has not yet stamped, and JSON written before the
-/// two-axis pair existed (including JSON stamped with the retired flat depth
-/// class — an unrecognized property is ignored on read), deserializes to it.
-/// It means "mode not recorded", not an error.
+/// <see cref="Unknown"/> is deliberately the zero value. It means "mode not
+/// recorded", a value the producer states, never an absent member: the
+/// members holding it are required, so a document lacking the pair is refused
+/// rather than read as it (the wire rule on
+/// <see cref="BgDataTypesJsonContext"/>). It is not an error.
 /// </para>
 /// <para>
 /// The UI renders mode choices in declaration order. Every member carries a
@@ -52,9 +52,8 @@ namespace BgDataTypes_Lib;
 [JsonConverter(typeof(StrictJsonStringEnumConverter<AnalysisMode>))]
 public enum AnalysisMode
 {
-    /// <summary>Mode not recorded — unstamped or legacy data (including JSON
-    /// stamped with the retired flat depth class), or an XG level code the
-    /// producer does not recognize.</summary>
+    /// <summary>Mode not recorded, as the producer states it — an XG level
+    /// code it does not recognize.</summary>
     [Description("Unknown")]
     Unknown = 0,
 

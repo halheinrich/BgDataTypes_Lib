@@ -484,7 +484,7 @@ asked for it exhaustively). Derived, never stored:
 | `PlayCandidate.DepthRank`, `CubeDecisionData.DepthRank` | `AnalysisMode` × `AnalysisLevel`, by the grid the producer used (internal `DepthTaxonomy`, moved here unchanged) |
 | `PlayCandidate.Depth`, `DepthAbbreviation`, and the cube analysis's | the typed depth facts — `AnalysisMode`, `AnalysisLevel`, `RolloutTrials`, `BookEdition`, `UnrecognizedLevelCode` — by the producer's grammar, moved here unchanged (`DepthTaxonomy`; see "The depth as typed facts") |
 | `RankedBy(ranking)`: the order, `Best`, each `RankedPlay.Error` and `IsScored` | the candidates' equities and, under depth first, their depth ranks (see "The ranking") |
-| `RankedBy(ranking).PlayerResult` | the played candidate: scored with its error, or not scored; otherwise unlisted with the stored `UnlistedPlayError`, or not recorded |
+| `RankedBy(ranking).PlayerResult` | the played candidate: scored with its error, or not scored; otherwise `Unstated` with the stored `UnlistedPlayError`, or not recorded |
 | `CubeDecisionData.ActionEquity(action)` | `NoDoubleEquity`, `DoubleTakeEquity` and the pass's normalised value +1: each cube action's equity in the doubler's perspective, doubling's the taker's best response's (see "The analysis's cube actions on CubeDecisionData"); the best actions, both halves' errors, the truth and each answer's cost read it |
 | `CubeDecisionData.BestAnswer` | the two halves' best actions: the cube answer whose projections they are (see "Cube answers and their costs") |
 | `CubeDecision.GammonsPossible` | the position's board, cube and owner and its session's kind, rules and needs (see "Cube answers and their costs") |
@@ -614,7 +614,7 @@ everything the ruling makes a ranking's, as a `RankedPlays`
 - `UserPlay`, and `PlayerResult`, the player's result, each case by name
   (see "The player's result"): `Scored` with the played candidate's error
   when the ranking scores it, **`NotScored`, with no error, when it does
-  not**, `Unlisted` with the stored `UnlistedPlayError` for a play outside
+  not**, `Unstated` with the stored `UnlistedPlayError` for a play outside
   the candidates (no ranking changes it), and `NotRecorded` when no play is
   recorded.
 
@@ -938,7 +938,9 @@ storage for 26 counts in `BoardPosition`'s layout, read through
 `Points[0]` = opponent bar, `Points[1..24]` = playing surface, `Points[25]` =
 on-roll bar; positive = on-roll, negative = opponent. On-roll moves
 high index → low; opponent moves low → high. Borne-off counts are not
-tracked — checkers leaving the board simply disappear.
+tracked on `BoardState` — checkers leaving the board simply disappear; each
+side's count is derived on `BoardPosition` (`OnRollBorneOffCount`,
+`OpponentBorneOffCount`), read from a board through `ToPosition()`.
 
 **Callers read it; only its own members write it**
 (halheinrich/backgammon#281). `Points` is a read-only span over the
@@ -955,7 +957,8 @@ below keeps it one.
   the value); `FromMop(ReadOnlySpan<int>)` is the door from raw outside
   counts, validated by the value's one rule, so the pseudoboards it once
   tolerated are refused (partial boards are fine — borne-off checkers are
-  not tracked). `Copy()` is a deep copy; `FlippedCopy()` a deep copy
+  not tracked on `BoardState`; each side's count is `BoardPosition`'s).
+  `Copy()` is a deep copy; `FlippedCopy()` a deep copy
   re-expressed from the opponent's perspective (an involution — flipping
   twice reproduces the original). There is no public empty constructor:
   the empty board is `new BoardState(BoardPosition.Empty)`.
@@ -2567,7 +2570,7 @@ public sealed class RankedPlays : IReadOnlyList<RankedPlay>   // the ranking's o
     public PlayRanking Ranking { get; }
     public RankedPlay Best { get; }                           // this[0]
     public RankedPlay? UserPlay { get; }                      // null when the user's play is not a candidate
-    public PlayerResult PlayerResult { get; }                 // Scored(its Error), NotScored, Unlisted(UnlistedPlayError), NotRecorded
+    public PlayerResult PlayerResult { get; }                 // Scored(its Error), NotScored, Unstated(UnlistedPlayError), NotRecorded
     public RankedPlay this[int position] { get; }             // ArgumentOutOfRangeException outside
     public RankedPlay ForCandidate(int index);                // by stored index
 }
@@ -3031,11 +3034,13 @@ by downstream contexts — roots, the composition rules (public converters,
 metadata-only generation), and the trim posture are in "Source generation
 & trimming" above.
 
-Every enum is **string-token-exact in both directions**: each writes its
-declared member names and reads only those names — a numeric ordinal is a
-`JsonException`, not a value. `AnalysisLevel`'s declaration order is contractual
-and its members interleave, so an inserted member renumbers everything after it;
-a reader that accepted ordinals would re-couple stored JSON to that numbering
+Every enum's token is its declared member name: a numeric ordinal is a
+`JsonException`, not a value, and name matching on read is case-insensitive,
+the base converter's behaviour, which has no knob
+(`StrictJsonStringEnumConverter<TEnum>`'s doc owns the rule).
+`AnalysisLevel`'s declaration order is contractual and its members interleave,
+so an inserted member renumbers everything after it; a reader that accepted
+ordinals would re-couple stored JSON to that numbering
 (halheinrich/backgammon#164). Consumers that build their own
 `JsonSerializerOptions` inherit this from the attribute and need add nothing —
 but an options-level `JsonStringEnumConverter` registration of their own would

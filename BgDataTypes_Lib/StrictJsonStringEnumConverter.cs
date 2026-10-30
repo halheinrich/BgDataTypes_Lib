@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace BgDataTypes_Lib;
 
 /// <summary>
-/// The string-token-exact enum converter: a
+/// The enum converter strict about token kind, not case: a
 /// <see cref="JsonStringEnumConverter{TEnum}"/> that rejects numeric tokens on
 /// read (and refuses to write an undefined value as a number), for
 /// attribute-form registration — where the base type's
@@ -11,8 +11,9 @@ namespace BgDataTypes_Lib;
 /// attribute can only name a converter type, not pass it constructor arguments.
 ///
 /// <para>Every enum in this library serializes as its declared member name, and
-/// the reader is the inverse of its writer: it accepts those names and nothing
-/// else. The base converter's default would also accept an integer ordinal on
+/// the reader takes member names, never numbers: a numeric ordinal is a
+/// <see cref="System.Text.Json.JsonException"/>. The base converter's default
+/// would also accept an integer ordinal on
 /// read — silently re-coupling wire and durable payloads to member declaration
 /// numbering, which <see cref="AnalysisLevel"/> in particular explicitly
 /// reserves the right to change (its order is contractual and its members

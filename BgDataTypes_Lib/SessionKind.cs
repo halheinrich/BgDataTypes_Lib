@@ -16,8 +16,8 @@ namespace BgDataTypes_Lib;
 /// kind as a <c>"Kind"</c> member, written first; a reader never infers the
 /// kind from which members happen to be present (see
 /// <see cref="SessionJsonConverter"/>). The token is the member's declared
-/// name, string-exact in both directions like every enum here
-/// (<see cref="StrictJsonStringEnumConverter{TEnum}"/>).
+/// name; the matching rule is
+/// <see cref="StrictJsonStringEnumConverter{TEnum}"/>'s.
 /// </para>
 /// <para>
 /// <b>Matching exhaustively.</b> A session's kind is its type: match on it

@@ -15,8 +15,8 @@ namespace BgDataTypes_Lib;
 /// <remarks>
 /// <see cref="NotRecorded"/> is the zero value, so a
 /// <c>default</c> <see cref="PlayerResult"/> means "no move recorded". The
-/// token is the member's declared name, string-exact in both directions
-/// (<see cref="StrictJsonStringEnumConverter{TEnum}"/>); a row states it
+/// token is the member's declared name; the matching rule is
+/// <see cref="StrictJsonStringEnumConverter{TEnum}"/>'s. A row states it
 /// (<see cref="DecisionRow.Result"/>). Every member carries a
 /// <see cref="DescriptionAttribute"/> — the UI-facing label, which belongs to
 /// the type owner.

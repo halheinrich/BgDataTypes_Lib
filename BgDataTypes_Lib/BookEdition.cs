@@ -10,8 +10,8 @@ namespace BgDataTypes_Lib;
 /// "Book".
 /// </summary>
 /// <remarks>
-/// The token is the member's declared name, string-exact in both directions
-/// like every enum here (<see cref="StrictJsonStringEnumConverter{TEnum}"/>).
+/// The token is the member's declared name; the matching rule is
+/// <see cref="StrictJsonStringEnumConverter{TEnum}"/>'s.
 /// The members a record stores are nullable: <see langword="null"/> is "no
 /// edition recorded", so this enum has no <c>Unknown</c> member.
 /// </remarks>

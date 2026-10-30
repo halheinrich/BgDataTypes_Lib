@@ -6,7 +6,7 @@ using BgDataTypes_Lib;
 namespace BgDataTypes_Lib.Tests;
 
 /// <summary>
-/// Pins the string-token-exact contract of this library's wire enums
+/// Pins the token-kind strictness of this library's wire enums
 /// (halheinrich/backgammon#164) — <see cref="DecisionKind"/>'s is pinned with
 /// the rest of the kind's wire rules, in DecisionKindTests: every reader of a stored or wire token accepts
 /// the declared member names and rejects numeric ordinals, so no payload can
@@ -47,7 +47,7 @@ public class EnumTokenStrictnessTests
     }
 
     /// <summary>
-    /// The reader is the inverse of its writer: the declared name deserializes
+    /// The reader takes names, not numbers: the declared name deserializes
     /// to its member, while the member's own ordinal — and an undefined one —
     /// are rejected with the <see cref="JsonException"/> every serialization
     /// boundary here funnels malformed payloads into.
@@ -128,6 +128,15 @@ public class EnumTokenStrictnessTests
             }
         }
     }
+
+    /// <summary>
+    /// The strictness closed here is token kind, not case: name matching on
+    /// read is case-insensitive, the base converter's behavior, as
+    /// <see cref="StrictJsonStringEnumConverter{TEnum}"/>'s documentation says.
+    /// </summary>
+    [Fact]
+    public void NameMatchingOnRead_IsCaseInsensitive() =>
+        Assert.Equal(CubeAction.Take, JsonSerializer.Deserialize<CubeAction>("\"take\""));
 
     /// <summary>
     /// The rejection through a real containing-object read, not only the bare

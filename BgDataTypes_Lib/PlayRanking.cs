@@ -37,9 +37,9 @@ namespace BgDataTypes_Lib;
 /// </para>
 /// <para>
 /// <see cref="Equity"/> is the default, and deliberately the zero value: an
-/// app without the setting uses it. The token is the member's declared name,
-/// string-exact in both directions (<see cref="StrictJsonStringEnumConverter{TEnum}"/>);
-/// a row states the ranking it was built for (<see cref="DecisionRow.Ranking"/>).
+/// app without the setting uses it. The token is the member's declared name;
+/// the matching rule is <see cref="StrictJsonStringEnumConverter{TEnum}"/>'s.
+/// A row states the ranking it was built for (<see cref="DecisionRow.Ranking"/>).
 /// Every member carries a <see cref="DescriptionAttribute"/> — the UI-facing
 /// label, which belongs to the type owner.
 /// </para>
