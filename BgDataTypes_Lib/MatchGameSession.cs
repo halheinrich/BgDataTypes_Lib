@@ -25,11 +25,14 @@ public sealed class MatchGameSession : GameSession
     /// session through, once the kinds agree: it holds the standing's away
     /// scores to the terms' length.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">An away score of <paramref name="standing"/> is above the <paramref name="terms"/>' length.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">An away score of <paramref name="standing"/> is above the <paramref name="terms"/>' length; the message states that length, so a reader sees why the standing fails.</exception>
     internal MatchGameSession(MatchTerms terms, MatchStanding standing) : base(SessionKind.Match)
     {
         if (!SessionRules.NeedsHolds(standing.Away1, terms.Length) || !SessionRules.NeedsHolds(standing.Away2, terms.Length))
-            throw new ArgumentOutOfRangeException(nameof(standing), standing, SessionRules.NeedsMessage);
+            throw new ArgumentOutOfRangeException(
+                nameof(standing),
+                standing,
+                string.Create(CultureInfo.InvariantCulture, $"{SessionRules.NeedsMessage} The match is to {terms.Length} points."));
         Terms = terms;
         Standing = standing;
     }

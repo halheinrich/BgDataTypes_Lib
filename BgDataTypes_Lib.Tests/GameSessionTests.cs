@@ -109,6 +109,15 @@ public class GameSessionTests
     }
 
     [Fact]
+    public void AnAwayScorePastTheTermsLength_IsRefused_StatingTheLength()
+    {
+        // 19-away in a 17-point match reads as an ordinary start unless the
+        // refusal says how long the match is.
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => GameSession.Create(new MatchTerms { Length = 17 }, Aways(19, 19)));
+        Assert.Contains("The match is to 17 points.", ex.Message);
+    }
+
+    [Fact]
     public void ANull_IsRefused_NamingItsParameter()
     {
         Assert.Equal("terms", Assert.Throws<ArgumentNullException>(() => GameSession.Create(null!, Scores(0, 0))).ParamName);
