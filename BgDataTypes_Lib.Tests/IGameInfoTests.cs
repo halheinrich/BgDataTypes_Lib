@@ -100,6 +100,28 @@ public class IGameInfoTests
         Assert.Equal(-3, Money(score2: -3).Score2);
     }
 
+    [Theory]
+    [InlineData("Score1")]
+    [InlineData("Score2")]
+    public void MoneyStanding_ANegativeScore_IsAcceptedFromADocument_KeepingItsSign(string member)
+    {
+        // halheinrich/backgammon#514: read as GameStanding, the type
+        // GameStandingJsonConverter dispatches, and as the kind itself.
+        var document = WirePaths.Document<GameStanding>(Money());
+        document[member] = -2;
+
+        foreach (var (_, options) in WirePaths.Both)
+        {
+            var read = Assert.IsType<MoneyStanding>(System.Text.Json.JsonSerializer.Deserialize<GameStanding>(document.ToJsonString(), options));
+            Assert.Equal(-2, member == "Score1" ? read.Score1 : read.Score2);
+            Assert.Equal(read, WirePaths.RoundTrip<GameStanding>(read, options));
+
+            var asKind = System.Text.Json.JsonSerializer.Deserialize<MoneyStanding>(document.ToJsonString(), options)!;
+            Assert.Equal(read, asKind);
+            Assert.Equal(asKind, WirePaths.RoundTrip(asKind, options));
+        }
+    }
+
     [Fact]
     public void TheKinds_ShareOnlyTheBasesMembers_AndAreAClosedPair()
     {
