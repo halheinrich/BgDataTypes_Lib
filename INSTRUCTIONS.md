@@ -1743,7 +1743,8 @@ Design points a maintainer needs before touching it:
   carry `IsBeaver` and `CubeLimit` (a positive power of two, as XG's
   default 1024), and the session its standing, `OnRollScore` and
   `OpponentScore` — the game header's scores from the player on roll's
-  side, each at least 0, the counterpart of a match's away scores. All
+  side, each any integer (a negative score is accepted, unreported), the
+  counterpart of a match's away scores. All
   required. The position holds its cube to them: `CubeSize` is a positive
   power of two, never above a money session's terms' `CubeLimit` (whichever
   of the two is set second refuses), and `CubeOwner` is a defined owner —
@@ -1958,7 +1959,7 @@ produced.
 - **`IGameInfo`** — game scope: `IsStandardStart` (false for saved/custom
   openings — the opening-move filter's input) and `Standing`, a
   `GameStanding`, player 1 and player 2: a money session's
-  `MoneyStanding` (`Score1`, `Score2`, each at least 0: the points each has
+  `MoneyStanding` (`Score1`, `Score2`, each any integer, negative included: the points each has
   won in the session) or a match's `MatchStanding` (`Away1`, `Away2`, each
   at least 1, and `IsCrawford`, with exactly one player 1-away when set).
 

@@ -23,8 +23,8 @@ namespace BgDataTypes_Lib;
 /// record derives its XGID from them (<see cref="BgDecisionData.Xgid"/>).
 /// </para>
 /// <para>
-/// <b>Well-formed by construction.</b> The terms hold their own rules; each
-/// score is at least 0. A document breaking a rule gets a
+/// <b>Well-formed by construction.</b> The terms hold their own rules; a
+/// score is any integer, negative included. A document breaking a rule gets a
 /// <see cref="System.Text.Json.JsonException"/> carrying the guard's
 /// <see cref="ArgumentException"/>, and one stating a member this kind does not
 /// have — a match's — is refused, never read with the member dropped.
@@ -35,8 +35,6 @@ public sealed class MoneySession : Session
 {
     // Null only while construction is still stating the member.
     private readonly MoneyTerms? _terms;
-    private readonly int? _onRollScore;
-    private readonly int? _opponentScore;
 
     /// <summary>The constructor <see cref="Session.Create"/> builds a money session through; its members are set by the initializer.</summary>
     internal MoneySession() : base(SessionKind.Money, read: false)
@@ -71,33 +69,16 @@ public sealed class MoneySession : Session
 
     /// <summary>
     /// The points the player on roll had won in the session before this game —
-    /// the game header's score, as XG records it; at least 0. A money
+    /// the game header's score, as XG records it; any integer, negative
+    /// included. A money
     /// session's standing, the counterpart of a match's away scores.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is negative.</exception>
     [JsonInclude, JsonRequired]
-    public int OnRollScore
-    {
-        get => _onRollScore.GetValueOrDefault();
-        internal init
-        {
-            Guard(() => CheckScore(value, nameof(OnRollScore)));
-            _onRollScore = value;
-        }
-    }
+    public int OnRollScore { get; internal init; }
 
-    /// <summary>The points the opponent had won in the session before this game; at least 0.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown on init when the value is negative.</exception>
+    /// <summary>The points the opponent had won in the session before this game; any integer, negative included.</summary>
     [JsonInclude, JsonRequired]
-    public int OpponentScore
-    {
-        get => _opponentScore.GetValueOrDefault();
-        internal init
-        {
-            Guard(() => CheckScore(value, nameof(OpponentScore)));
-            _opponentScore = value;
-        }
-    }
+    public int OpponentScore { get; internal init; }
 
     /// <inheritdoc/>
     public override bool Equals(Session? other) =>
@@ -115,12 +96,6 @@ public sealed class MoneySession : Session
     /// </summary>
     public override string ToString() =>
         string.Create(CultureInfo.InvariantCulture, $"{Terms}, {OnRollScore}-{OpponentScore}");
-
-    private static void CheckScore(int score, string member)
-    {
-        if (!SessionRules.ScoreHolds(score))
-            throw new ArgumentOutOfRangeException(member, score, SessionRules.ScoreMessage);
-    }
 
     /// <inheritdoc/>
     public override TResult Match<TResult>(Func<MoneySession, TResult> money, Func<MatchSession, TResult> match)

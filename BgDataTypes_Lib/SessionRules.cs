@@ -42,19 +42,6 @@ internal static class SessionRules
     internal static bool CubeValueHolds(int value) => value >= 1 && (value & (value - 1)) == 0;
 
     // -----------------------------------------------------------------------
-    //  A money session's scores
-    //
-    //  The points each player has won in the session before the game: never
-    //  negative.
-    // -----------------------------------------------------------------------
-
-    /// <summary>The money score rule, in the one sentence every refusal carries.</summary>
-    internal const string ScoreMessage = "A money session's score is the points a player has won in it: never negative.";
-
-    /// <summary>Whether <paramref name="score"/> is a money session's score.</summary>
-    internal static bool ScoreHolds(int score) => score >= 0;
-
-    // -----------------------------------------------------------------------
     //  A match's length and its away scores
     //
     //  A match is played to at least one point. An away score is what a

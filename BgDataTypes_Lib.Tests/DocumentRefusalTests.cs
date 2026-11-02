@@ -69,9 +69,6 @@ public class DocumentRefusalTests
         yield return ("a cube above the money session's limit, inside a record",
             TestRecords.CheckerPlay(position: TestRecords.Position(session: TestRecords.MoneySession(cubeLimit: 4))),
             d => d["Position"]!["CubeSize"] = 8, typeof(ArgumentOutOfRangeException));
-        yield return ("a money session's negative score, inside a record",
-            TestRecords.Cube(position: TestRecords.Position(session: TestRecords.MoneySession())),
-            d => d["Position"]!["Session"]!["OpponentScore"] = -2, typeof(ArgumentOutOfRangeException));
         // Added: a decision position has a checker of each side
         // (halheinrich/backgammon#273, Hal's ruling of 2026-09-27).
         yield return ("a position with the opponent borne off, inside a record", TestRecords.Cube(),
@@ -154,8 +151,6 @@ public class DocumentRefusalTests
             d => d["Session"] = null, typeof(ArgumentNullException));
         yield return ("a cube limit that is not a power of two", typeof(Session), TestRecords.MoneySession(),
             d => d["Terms"]!["CubeLimit"] = 1000, typeof(ArgumentOutOfRangeException));
-        yield return ("a negative money score, read as the kind", typeof(MoneySession), TestRecords.MoneySession(),
-            d => d["OnRollScore"] = -1, typeof(ArgumentOutOfRangeException));
         yield return ("a cube of 0", typeof(PositionData), TestRecords.Position(),
             d => d["CubeSize"] = 0, typeof(ArgumentOutOfRangeException));
         yield return ("a cube above the limit", typeof(PositionData),
@@ -183,12 +178,6 @@ public class DocumentRefusalTests
         yield return ("a Crawford standing with no player 1-away, read as the kind", typeof(MatchStanding),
             new MatchStanding { Away1 = 3, Away2 = 5, IsCrawford = false },
             d => d["IsCrawford"] = true, typeof(ArgumentException));
-        yield return ("a money standing's negative score", typeof(GameStanding),
-            new MoneyStanding { Score1 = 0, Score2 = 0 },
-            d => d["Score2"] = -1, typeof(ArgumentOutOfRangeException));
-        yield return ("a money standing's negative score, read as the kind", typeof(MoneyStanding),
-            new MoneyStanding { Score1 = 0, Score2 = 0 },
-            d => d["Score1"] = -3, typeof(ArgumentOutOfRangeException));
     }
 
     [Fact]

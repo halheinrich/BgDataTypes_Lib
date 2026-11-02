@@ -32,7 +32,7 @@ public sealed class MatchGameSession : GameSession
             throw new ArgumentOutOfRangeException(
                 nameof(standing),
                 standing,
-                string.Create(CultureInfo.InvariantCulture, $"{SessionRules.NeedsMessage} The match is to {terms.Length} points."));
+                string.Create(CultureInfo.InvariantCulture, $"{SessionRules.NeedsMessage} The match length is {terms.Length}."));
         Terms = terms;
         Standing = standing;
     }

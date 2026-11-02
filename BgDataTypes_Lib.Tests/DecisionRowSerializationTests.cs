@@ -467,7 +467,6 @@ public class DecisionRowSerializationTests
         { "match-with-beaver", "no money column" },
         { "match-with-score", "no money column" },
         { "money-bad-cube-limit", "A cube limit is a positive power of two" },
-        { "money-negative-score", "never negative" },
     };
 
     private static string Malformed(string name)
@@ -499,7 +498,6 @@ public class DecisionRowSerializationTests
             case "match-with-beaver": play["IsBeaver"] = false; return play.ToJsonString();
             case "match-with-score": play["OpponentScore"] = 0; return play.ToJsonString();
             case "money-bad-cube-limit": money["CubeLimit"] = 3; return money.ToJsonString();
-            case "money-negative-score": money["OnRollScore"] = -1; return money.ToJsonString();
             case "play-no-roll": play.Remove("Roll"); return play.ToJsonString();
             case "play-bad-roll": play["Roll"] = 70; return play.ToJsonString();
             case "play-no-afterbest": play["AfterBestBoard"] = null; return play.ToJsonString();
@@ -509,6 +507,20 @@ public class DecisionRowSerializationTests
             case "null-id": play["Id"] = null; return play.ToJsonString();
             default: throw new ArgumentOutOfRangeException(nameof(name), name, null);
         }
+    }
+
+    [Fact]
+    public void DecisionRow_Read_ANegativeMoneyScore_IsAccepted_KeepingItsSign()
+    {
+        // halheinrich/backgammon#514: money games accept a negative score.
+        var money = WirePaths.Document(PlayRow(session: Money(true)));
+        money["OnRollScore"] = -1;
+        money["OpponentScore"] = -2;
+
+        var row = RoundTrip(JsonSerializer.Deserialize<DecisionRow>(money.ToJsonString(), Options)!);
+
+        Assert.Equal(-1, row.OnRollScore);
+        Assert.Equal(-2, row.OpponentScore);
     }
 
     [Theory]

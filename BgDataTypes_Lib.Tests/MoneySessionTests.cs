@@ -94,22 +94,35 @@ public class MoneySessionTests
     [Theory]
     [InlineData("OnRollScore", "Score1")]
     [InlineData("OpponentScore", "Score2")]
-    public void ANegativeScore_IsRefused_ByTheStandingInCode_AndByTheSessionInADocument(string member, string seatMember)
+    public void ANegativeScore_IsAccepted_FromCode_AndFromADocument_KeepingItsSign(string member, string seatMember)
     {
-        // Rewritten for the composed session: code builds a session from a
-        // standing, whose own guard refuses the score (the player on roll in
-        // seat 1, so the on-roll score is player 1's); a document states the
-        // session's own members, whose guard refuses it.
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => member == "OnRollScore"
+        // halheinrich/backgammon#514, Hal's ruling: a money game accepts a
+        // negative score, unreported. Code builds a session from a standing;
+        // a document states the session's own members.
+        _ = seatMember;
+        var session = member == "OnRollScore"
             ? TestRecords.MoneySession(onRollScore: -1)
-            : TestRecords.MoneySession(opponentScore: -1));
-        Assert.Equal(seatMember, ex.ParamName);
-        Assert.Contains(SessionRules.ScoreMessage, ex.Message);
+            : TestRecords.MoneySession(opponentScore: -1);
+        Assert.Equal(-1, member == "OnRollScore" ? session.OnRollScore : session.OpponentScore);
 
         var document = WirePaths.Document<Session>(TestRecords.MoneySession());
         document[member] = -1;
-        var refusal = Assert.IsType<ArgumentOutOfRangeException>(WirePaths.AssertRefused<Session>(document.ToJsonString()).InnerException);
-        Assert.Equal(member, refusal.ParamName);
+        foreach (var (name, options) in WirePaths.Both)
+        {
+            var read = Assert.IsType<MoneySession>(System.Text.Json.JsonSerializer.Deserialize<Session>(document.ToJsonString(), options));
+            Assert.Equal(-1, member == "OnRollScore" ? read.OnRollScore : read.OpponentScore);
+            Assert.Equal(read, WirePaths.RoundTrip<Session>(read, options));
+        }
+    }
+
+    [Theory]
+    [InlineData("OnRollScore")]
+    [InlineData("OpponentScore")]
+    public void AScoreMissingFromADocument_IsStillRefused(string member)
+    {
+        var document = WirePaths.Document<Session>(TestRecords.MoneySession());
+        Assert.True(document.Remove(member));
+        WirePaths.AssertRefused<Session>(document.ToJsonString());
     }
 
     [Fact]

@@ -114,7 +114,17 @@ public class GameSessionTests
         // 19-away in a 17-point match reads as an ordinary start unless the
         // refusal says how long the match is.
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => GameSession.Create(new MatchTerms { Length = 17 }, Aways(19, 19)));
-        Assert.Contains("The match is to 17 points.", ex.Message);
+        Assert.Contains("The match length is 17.", ex.Message);
+    }
+
+    [Fact]
+    public void TheLengthStatement_ReadsAtLengthOne()
+    {
+        // A one-point match with a score of -1 is 2-away: the sentence must
+        // not say "1 points".
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => GameSession.Create(new MatchTerms { Length = 1 }, Aways(2, 1)));
+        Assert.Contains("The match length is 1.", ex.Message);
+        Assert.DoesNotContain("1 points", ex.Message);
     }
 
     [Fact]

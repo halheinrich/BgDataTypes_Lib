@@ -93,10 +93,11 @@ public class IGameInfoTests
     }
 
     [Fact]
-    public void MoneyStanding_ANegativeScore_IsRefused()
+    public void MoneyStanding_ANegativeScore_IsAccepted_KeepingItsSign()
     {
-        Assert.Equal("Score1", Assert.Throws<ArgumentOutOfRangeException>(() => Money(score1: -1)).ParamName);
-        Assert.Equal("Score2", Assert.Throws<ArgumentOutOfRangeException>(() => Money(score2: -1)).ParamName);
+        // halheinrich/backgammon#514: money games accept a negative score.
+        Assert.Equal(-1, Money(score1: -1).Score1);
+        Assert.Equal(-3, Money(score2: -3).Score2);
     }
 
     [Fact]
