@@ -74,7 +74,8 @@ and `Directory.Packages.props` (Central Package Management — no inline
   `MatchGameSession`, each composing its kind's terms and standing as the
   header states them, with `GameSession.Create`, the one operation pairing
   the terms with the game's standing, which takes no seat and through which
-  `Session.Create` pairs;
+  `Session.Create` pairs, and `GameSession.TryCreate`, which asks the same
+  rule without throwing;
   `DecisionRules`, the internal statement of the rules
   that bind a decision's members, `FiniteNumber`, the internal statement
   of the rule every stored number keeps, `DocumentRefusal`, the internal one
@@ -1698,9 +1699,34 @@ Design points a maintainer needs before touching it:
   accept exactly the same pairs and refuse the rest alike
   (`GameSessionTests` pins that over a grid crossing each edge of the rule,
   at either seat). A closed pair, a value (equality over the terms and the
-  standing), built only through `Create`. Not a wire type: no document
-  embeds it, so its wire debut belongs to the first that does; its terms
-  and its standing are the wire types a producer serializes.
+  standing), built only through `Create` and `TryCreate` (below). Not a
+  wire type: no document embeds it, so its wire debut belongs to the first
+  that does; its terms and its standing are the wire types a producer
+  serializes.
+- **A refusal names what it refuses, through either door**
+  (halheinrich/backgammon#514, Hal's ruling B of 2026-11-03). A caller that
+  reports a refused game, rather than failing on it, asks the rules without
+  throwing: `MatchStanding.TryCreate(away1, away2, isCrawford, out standing,
+  out refusal)` and `GameSession.TryCreate(terms, standing, out session,
+  out refusal)` return `false` with a null value and the refusal, or `true`
+  with the value and a null refusal; a null reference argument is still an
+  `ArgumentNullException`. The refusal is the rule's sentence and then the
+  values it refuses, on one line, the same on every runtime: an away score
+  below the floor names the player and the score ("Player 1's away score
+  is -1."); a Crawford flag at a standing without exactly one player
+  1-away names both away scores, player 1's first ("The standing is
+  3-away/5-away."); an away score past the length names the standing and
+  the length ("The standing is 19-away/19-away. The match length is
+  17."); terms and a standing of different kinds name both kinds. Each is
+  composed once, beside its rule in `SessionRules`, and the throwing
+  doors — the initializer and `Create` — carry it as their exception's
+  message, the runtime's own tail after it, their exception types,
+  `ParamName` and `ActualValue` as before. `MatchStanding.TryCreate` asks
+  player 1's away score, then player 2's, then the Crawford standing: the
+  order an initializer setting `Away1`, `Away2` and `IsCrawford` in turn
+  meets them, so that initializer's message begins with the same refusal.
+  Show a reader the refusal, not an exception's message: in a browser
+  build the runtime's tail is resource keys, not words.
 - **On the wire the kind is stated once, in the terms.** A session is
   `{"Terms":{"Kind":…,…},…}` and its oriented standing — never a `"Kind"`
   of its own beside its terms' (`Session.Kind` is `[JsonIgnore]`d and
@@ -1727,7 +1753,8 @@ Design points a maintainer needs before touching it:
   shape, measured once in the halheinrich/backgammon#273 leg, September
   2026; figures not retained). Each guard is order-independent, naming
   the member that completed the contradiction; a document gets a
-  `JsonException` carrying it.
+  `JsonException` carrying it. A game's standing refuses with the values
+  it refuses, and has a door that does not throw (above).
 - **Money states its rule.** `MoneyTerms.IsJacoby` is a required `bool`:
   every money session's terms state the Jacoby rule, so there is no unknown
   rule. The in-tree producer always knows it (XG's match header).

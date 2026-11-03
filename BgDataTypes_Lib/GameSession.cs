@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace BgDataTypes_Lib;
@@ -25,6 +27,14 @@ namespace BgDataTypes_Lib;
 /// <see cref="Session"/>: <see cref="Session.Create"/> pairs through this
 /// operation and then turns the standing to the seat on roll, so the two
 /// accept exactly the same pairs and refuse the rest alike.
+/// </para>
+/// <para>
+/// <b>Two doors to the rule.</b> <see cref="Create"/> throws on a breach;
+/// <see cref="TryCreate"/> hands back the refusal instead, for a caller that
+/// reports it (halheinrich/backgammon#514). Both carry one refusal, composed
+/// once: the rule's sentence and the values it refuses, on one line, the
+/// same on every runtime — the exception's message begins with it, the
+/// runtime's own tail after.
 /// </para>
 /// <para>
 /// <b>A closed pair.</b> The constructors are not reachable outside this
@@ -63,8 +73,9 @@ public abstract class GameSession : IEquatable<GameSession>, IEqualityOperators<
     /// and the game's <paramref name="standing"/>, held to each other — the
     /// standing is of the terms' kind, and a match standing's away scores are
     /// at most the match's length, which the standing does not know. The one
-    /// statement of that rule, and the one way code outside this library
-    /// builds a game's session; <see cref="Session.Create"/> pairs through it.
+    /// statement of that rule, and with <see cref="TryCreate"/>, which asks
+    /// it without throwing, the one way code outside this library builds a
+    /// game's session; <see cref="Session.Create"/> pairs through it.
     /// No seat is taken, and none is claimed.
     /// </summary>
     /// <param name="terms">The session's terms, as its header states them.</param>
@@ -75,20 +86,63 @@ public abstract class GameSession : IEquatable<GameSession>, IEqualityOperators<
     /// <paramref name="terms"/> and the <paramref name="standing"/> as given.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="terms"/> or <paramref name="standing"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A match <paramref name="standing"/> has an away score above the terms' length.</exception>
-    /// <exception cref="ArgumentException"><paramref name="standing"/> is not of <paramref name="terms"/>' kind.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A match <paramref name="standing"/> has an away score above the terms' length; the message begins with <see cref="TryCreate"/>'s refusal.</exception>
+    /// <exception cref="ArgumentException"><paramref name="standing"/> is not of <paramref name="terms"/>' kind; the message begins with <see cref="TryCreate"/>'s refusal.</exception>
     public static GameSession Create(SessionTerms terms, GameStanding standing)
     {
         ArgumentNullException.ThrowIfNull(terms);
         ArgumentNullException.ThrowIfNull(standing);
 
-        return (terms, standing) switch
-        {
-            (MoneyTerms money, MoneyStanding scores) => new MoneyGameSession(money, scores),
-            (MatchTerms match, MatchStanding aways) => new MatchGameSession(match, aways),
-            _ => throw new ArgumentException(SessionRules.StandingKindMessage, nameof(standing)),
-        };
+        if (SessionRules.StandingKindRefusal(terms, standing) is string refusal)
+            throw new ArgumentException(refusal, nameof(standing));
+        return Pair(terms, standing);
     }
+
+    /// <summary>
+    /// The session a game is played in, or the refusal of the pairing's rule
+    /// the <paramref name="terms"/> and the <paramref name="standing"/> break —
+    /// <see cref="Create"/>'s rules asked without throwing, for a caller that
+    /// reports a refusal rather than failing on it.
+    /// </summary>
+    /// <remarks>
+    /// The kinds are held to each other first, then a match standing's away
+    /// scores to the length. The refusal is the rule's sentence and then the
+    /// values it refuses — both kinds, or the standing and the length — on
+    /// one line, the same on every runtime; <see cref="Create"/>'s exception
+    /// message begins with it.
+    /// </remarks>
+    /// <param name="terms">The session's terms, as its header states them.</param>
+    /// <param name="standing">The game's standing, player 1's and player 2's, as its header states it.</param>
+    /// <param name="session">The session, as <see cref="Create"/> builds it, when the pair holds the rules; otherwise <see langword="null"/>.</param>
+    /// <param name="refusal">The refusal of the rule the pair breaks; <see langword="null"/> when it holds them.</param>
+    /// <returns><see langword="true"/> when the pair holds the pairing's rules.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="terms"/> or <paramref name="standing"/> is <see langword="null"/>: a caller's fault, not a refusal.</exception>
+    public static bool TryCreate(
+        SessionTerms terms,
+        GameStanding standing,
+        [NotNullWhen(true)] out GameSession? session,
+        [NotNullWhen(false)] out string? refusal)
+    {
+        ArgumentNullException.ThrowIfNull(terms);
+        ArgumentNullException.ThrowIfNull(standing);
+
+        refusal = SessionRules.StandingKindRefusal(terms, standing)
+            ?? (terms is MatchTerms match && standing is MatchStanding aways ? SessionRules.LengthBoundRefusal(match, aways) : null);
+        session = refusal is null ? Pair(terms, standing) : null;
+        return session is not null;
+    }
+
+    /// <summary>
+    /// Builds the session for terms and a standing whose kinds agree, through
+    /// the kind's constructor; the match kind's holds the away scores to the
+    /// length.
+    /// </summary>
+    private static GameSession Pair(SessionTerms terms, GameStanding standing) => (terms, standing) switch
+    {
+        (MoneyTerms money, MoneyStanding scores) => new MoneyGameSession(money, scores),
+        (MatchTerms match, MatchStanding aways) => new MatchGameSession(match, aways),
+        _ => throw new UnreachableException("The kinds agree, so the terms and the standing are one kind's."),
+    };
 
     /// <summary>
     /// The result of the branch for this session's kind — one branch per kind,

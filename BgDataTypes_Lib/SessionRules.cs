@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace BgDataTypes_Lib;
 
 /// <summary>
@@ -13,7 +15,11 @@ namespace BgDataTypes_Lib;
 /// guards, refusing a breach from code with the guard's
 /// <see cref="ArgumentException"/> and from a document with a
 /// <see cref="System.Text.Json.JsonException"/> carrying it (the wire rule on
-/// <see cref="BgDataTypesJsonContext"/>).
+/// <see cref="BgDataTypesJsonContext"/>). A game's standing and its session
+/// also have a door that does not throw — <see cref="MatchStanding.TryCreate"/>
+/// and <see cref="GameSession.TryCreate"/> — which hands back the same
+/// refusal, composed here once with the values it refuses, as the throwing
+/// door's message begins with.
 /// </summary>
 internal static class SessionRules
 {
@@ -102,4 +108,74 @@ internal static class SessionRules
 
     /// <summary>The seat rule, in the one sentence every refusal carries.</summary>
     internal const string SeatMessage = "The seat on roll is player 1 or player 2.";
+
+    /// <summary>Whether terms of kind <paramref name="terms"/> may take a standing of kind <paramref name="standing"/>.</summary>
+    internal static bool StandingKindHolds(SessionKind terms, SessionKind standing) => terms == standing;
+
+    // -----------------------------------------------------------------------
+    //  A game's standing and session, refused with the values refused
+    //
+    //  A refusal of a standing's rules, or of the pairing's, is the rule's
+    //  sentence and then the values it refuses, on one line, written the
+    //  same on every runtime (halheinrich/backgammon#514, Hal's ruling B of
+    //  2026-11-03). Each is composed here once, beside its rule, and is null
+    //  when the rule holds. Both doors carry it: MatchStanding's init guards
+    //  and GameSession.Create as their exception's message, the runtime's own
+    //  tail after it, and MatchStanding.TryCreate and GameSession.TryCreate as
+    //  their refusal, with nothing after it. An away score's guard sees one
+    //  member, so its refusal names that player alone; the Crawford standing
+    //  is checked only once both away scores are known, so its refusal names
+    //  both, player 1's first, whichever member completed it.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The refusal of <paramref name="player"/>'s away score
+    /// <paramref name="away"/> below the floor, naming the player and the
+    /// score; <see langword="null"/> when the score holds.
+    /// </summary>
+    internal static string? AwayFloorRefusal(Seat player, int away) =>
+        NeedsHolds(away, length: null)
+            ? null
+            : string.Create(CultureInfo.InvariantCulture, $"{NeedsMessage} Player {(player == Seat.Player1 ? 1 : 2)}'s away score is {away}.");
+
+    /// <summary>
+    /// The refusal of a Crawford flag of <paramref name="isCrawford"/> at
+    /// <paramref name="away1"/> and <paramref name="away2"/>, naming the
+    /// standing; <see langword="null"/> when the flag is clear or the standing
+    /// may be the Crawford game's.
+    /// </summary>
+    internal static string? CrawfordStandingRefusal(bool isCrawford, int away1, int away2) =>
+        !isCrawford || CrawfordStandingHolds(away1, away2)
+            ? null
+            : $"{CrawfordStandingMessage} The standing is {FormatAways(away1, away2)}.";
+
+    /// <summary>
+    /// The refusal of <paramref name="standing"/>'s away scores against
+    /// <paramref name="terms"/>' length, naming the standing and the length;
+    /// <see langword="null"/> when each away score is at most the length.
+    /// </summary>
+    internal static string? LengthBoundRefusal(MatchTerms terms, MatchStanding standing) =>
+        NeedsHolds(standing.Away1, terms.Length) && NeedsHolds(standing.Away2, terms.Length)
+            ? null
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{NeedsMessage} The standing is {FormatAways(standing.Away1, standing.Away2)}. The match length is {terms.Length}.");
+
+    /// <summary>
+    /// The refusal of <paramref name="terms"/> and a
+    /// <paramref name="standing"/> of different kinds, naming both kinds;
+    /// <see langword="null"/> when the kinds agree.
+    /// </summary>
+    internal static string? StandingKindRefusal(SessionTerms terms, GameStanding standing) =>
+        StandingKindHolds(terms.Kind, standing.Kind)
+            ? null
+            : $"{StandingKindMessage} The terms are {terms.Kind}; the standing is {standing.Kind}.";
+
+    /// <summary>
+    /// A match's away scores for a reader — <c>"3-away/5-away"</c>, the first
+    /// given first: the one spelling of a match standing, in a refusal and in
+    /// each match type's <c>ToString</c>.
+    /// </summary>
+    internal static string FormatAways(int first, int second) =>
+        string.Create(CultureInfo.InvariantCulture, $"{first}-away/{second}-away");
 }

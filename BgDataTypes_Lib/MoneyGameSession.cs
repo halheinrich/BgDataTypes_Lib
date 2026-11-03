@@ -15,11 +15,12 @@ namespace BgDataTypes_Lib;
 /// <b>Composed, not restated.</b> The terms and the standing are held as the
 /// header states them and hold their own rules; a money standing knows
 /// nothing of the terms, so nothing binds the two beyond their kind. Built by
-/// <see cref="GameSession.Create"/> alone.
+/// <see cref="GameSession.Create"/> and <see cref="GameSession.TryCreate"/>
+/// alone.
 /// </remarks>
 public sealed class MoneyGameSession : GameSession
 {
-    /// <summary>The constructor <see cref="GameSession.Create"/> builds a money game's session through, once the kinds agree.</summary>
+    /// <summary>The constructor <see cref="GameSession"/>'s pairing builds a money game's session through, once the kinds agree.</summary>
     internal MoneyGameSession(MoneyTerms terms, MoneyStanding standing) : base(SessionKind.Money)
     {
         Terms = terms;

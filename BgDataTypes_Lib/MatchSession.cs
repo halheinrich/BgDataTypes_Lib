@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace BgDataTypes_Lib;
@@ -160,9 +159,8 @@ public sealed class MatchSession : Session
     /// <c>", Crawford"</c> in the Crawford game — for a test failure or a
     /// log; not a wire form.
     /// </summary>
-    public override string ToString() => string.Create(
-        CultureInfo.InvariantCulture,
-        $"{Terms}, {OnRollNeeds}-away/{OpponentNeeds}-away{(IsCrawford ? ", Crawford" : "")}");
+    public override string ToString() =>
+        $"{Terms}, {SessionRules.FormatAways(OnRollNeeds, OpponentNeeds)}{(IsCrawford ? ", Crawford" : "")}";
 
     /// <inheritdoc/>
     public override TResult Match<TResult>(Func<MoneySession, TResult> money, Func<MatchSession, TResult> match)

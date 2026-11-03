@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace BgDataTypes_Lib;
 
 /// <summary>
@@ -16,23 +14,20 @@ namespace BgDataTypes_Lib;
 /// rules (the internal <see cref="SessionRules"/>); held to each other, each
 /// away score is at most the length — the rule neither states alone, since
 /// the standing knows no length. Built by <see cref="GameSession.Create"/>
-/// alone.
+/// and <see cref="GameSession.TryCreate"/> alone.
 /// </remarks>
 public sealed class MatchGameSession : GameSession
 {
     /// <summary>
-    /// The constructor <see cref="GameSession.Create"/> builds a match game's
+    /// The constructor <see cref="GameSession"/>'s pairing builds a match game's
     /// session through, once the kinds agree: it holds the standing's away
     /// scores to the terms' length.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">An away score of <paramref name="standing"/> is above the <paramref name="terms"/>' length; the message states that length, so a reader sees why the standing fails.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">An away score of <paramref name="standing"/> is above the <paramref name="terms"/>' length; the message states the standing and that length, so a reader sees why the standing fails.</exception>
     internal MatchGameSession(MatchTerms terms, MatchStanding standing) : base(SessionKind.Match)
     {
-        if (!SessionRules.NeedsHolds(standing.Away1, terms.Length) || !SessionRules.NeedsHolds(standing.Away2, terms.Length))
-            throw new ArgumentOutOfRangeException(
-                nameof(standing),
-                standing,
-                string.Create(CultureInfo.InvariantCulture, $"{SessionRules.NeedsMessage} The match length is {terms.Length}."));
+        if (SessionRules.LengthBoundRefusal(terms, standing) is string refusal)
+            throw new ArgumentOutOfRangeException(nameof(standing), standing, refusal);
         Terms = terms;
         Standing = standing;
     }
@@ -59,9 +54,8 @@ public sealed class MatchGameSession : GameSession
     /// 1's first, with <c>", Crawford"</c> in the Crawford game — for a test
     /// failure or a log; not a wire form.
     /// </summary>
-    public override string ToString() => string.Create(
-        CultureInfo.InvariantCulture,
-        $"{Terms}, {Standing.Away1}-away/{Standing.Away2}-away{(Standing.IsCrawford ? ", Crawford" : "")}");
+    public override string ToString() =>
+        $"{Terms}, {SessionRules.FormatAways(Standing.Away1, Standing.Away2)}{(Standing.IsCrawford ? ", Crawford" : "")}";
 
     /// <inheritdoc/>
     public override TResult Match<TResult>(Func<MoneyGameSession, TResult> money, Func<MatchGameSession, TResult> match)
