@@ -95,9 +95,9 @@ public class StandingRefusalTests
     // ── The Crawford standing ─────────────────────────────────────
 
     [Theory]
-    [InlineData(3, 5)]      // neither player at match point (Norberg, game 9, had no 1-away player)
+    [InlineData(3, 5)]      // neither player at match point
     [InlineData(5, 3)]
-    [InlineData(1, 1)]      // both
+    [InlineData(1, 1)]      // both (Norberg, game 9: a Crawford game at 1-away/1-away)
     public void ACrawfordGameWithoutExactlyOnePlayerAtMatchPoint_IsRefused_NamingBothAwayScores_PlayerOnesFirst(int away1, int away2)
     {
         string refusal = StandingRefusal(away1, away2, isCrawford: true);
